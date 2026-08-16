@@ -3,6 +3,7 @@ import { rawDb, withTenant } from "@/lib/db";
 import { ROLE_LABELS_AR, hasPermission, type Permission } from "@/lib/rbac";
 import { Sidebar, type NavItem } from "@/components/layout/Sidebar";
 import { Topbar } from "@/components/layout/Topbar";
+import { BottomTabBar } from "@/components/layout/BottomTabBar";
 import { ImpersonationBanner } from "@/components/layout/ImpersonationBanner";
 import { PendingReviewScreen } from "@/components/dashboard/PendingReviewScreen";
 import { AnnouncementBanner } from "@/components/dashboard/AnnouncementBanner";
@@ -95,6 +96,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const isSandbox = !(waIntegration?.status === "CONNECTED" && !waIntegration.isSandbox);
 
   const activeAnnouncement = await getApplicableAnnouncement(tenant.id);
+  const allowedNavItems = NAV_ITEMS.filter((item) => !item.requires || hasPermission(session.user.role, item.requires));
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-navy-900">
@@ -103,7 +105,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
       )}
       <div className="flex flex-1 overflow-hidden">
         <Sidebar
-          items={NAV_ITEMS.filter((item) => !item.requires || hasPermission(session.user.role, item.requires))}
+          items={allowedNavItems}
           brandName={tenant.name}
           brandColor={tenant.primaryColor}
           brandInitial={tenant.name.slice(0, 1)}
@@ -120,7 +122,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
         />
         <div className="flex flex-1 flex-col overflow-hidden">
           <Topbar userName={session.user.name ?? "مستخدم"} roleLabel={ROLE_LABELS_AR[session.user.role]} sandboxMode={isSandbox} />
-          <main className="flex-1 overflow-y-auto p-6">
+          {/* pb-24 على الموبايل فقط — يمنع BottomTabBar الثابت أسفل الشاشة من تغطية آخر المحتوى */}
+          <main className="flex-1 overflow-y-auto p-6 pb-24 lg:pb-6">
             {activeAnnouncement && (
               <div className="mb-4">
                 <AnnouncementBanner id={activeAnnouncement.id} title={activeAnnouncement.title} body={activeAnnouncement.body} />
@@ -130,6 +133,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
           </main>
         </div>
       </div>
+      <BottomTabBar items={allowedNavItems} />
     </div>
   );
 }

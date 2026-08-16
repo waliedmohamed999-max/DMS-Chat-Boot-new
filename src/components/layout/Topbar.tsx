@@ -2,24 +2,42 @@
 
 import { signOut } from "next-auth/react";
 import { useState } from "react";
+import type { NavItem } from "@/components/layout/Sidebar";
+import { MobileNavSheet } from "@/components/layout/MobileNavSheet";
 
 export function Topbar({
   userName,
   roleLabel,
   sandboxMode = true,
   onLogout,
+  mobileNavItems,
 }: {
   userName: string;
   roleLabel: string;
   sandboxMode?: boolean;
   /** يستبدل تسجيل خروج NextAuth الافتراضي — تستخدمه لوحة فريق المنصة لتصفير كوكي جلستها المستقلة فقط. */
   onLogout?: () => void | Promise<void>;
+  /** عند تمريرها: زر قائمة ☰ يظهر على الموبايل فقط، يفتح MobileNavSheet بكل عناصر التنقّل — تستخدمه
+   * لوحة مالك المنصة (بلا شريط تبويبات سفلي خاص بها، بخلاف لوحة التاجر). */
+  mobileNavItems?: NavItem[];
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   return (
+    <>
     <header className="flex h-16 items-center justify-between border-b border-white/5 bg-navy-900/80 px-6 backdrop-blur">
-      <div>
+      <div className="flex items-center gap-3">
+        {mobileNavItems && mobileNavItems.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setMobileNavOpen(true)}
+            className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 text-slate-300 lg:hidden"
+            aria-label="القائمة"
+          >
+            ☰
+          </button>
+        )}
         {sandboxMode && (
           <span className="badge bg-warning-500/10 text-warning-500 border border-warning-500/30">
             🧪 وضع تجريبي (Sandbox) — التكاملات تستخدم بيانات وهمية
@@ -51,5 +69,12 @@ export function Topbar({
         )}
       </div>
     </header>
+
+    {/* خارج <header> عمداً — نفس سبب Navbar.tsx: backdrop-blur على الأب يخلق containing block جديد
+        لأي عنصر position:fixed بداخله، فتنحشر القائمة في ارتفاع الـheader (64px) بدل تغطية الشاشة. */}
+    {mobileNavItems && mobileNavItems.length > 0 && (
+      <MobileNavSheet open={mobileNavOpen} onClose={() => setMobileNavOpen(false)} items={mobileNavItems} />
+    )}
+    </>
   );
 }

@@ -37,7 +37,7 @@ export function Sidebar({
   useEffect(() => setMounted(true), []);
 
   return (
-    <aside className="flex h-screen w-64 flex-col border-l border-white/5 bg-navy-950 px-3 py-4">
+    <aside className="hidden h-screen w-64 flex-col border-l border-white/5 bg-navy-950 px-3 py-4 lg:flex">
       <div className="mb-6 flex items-center gap-2.5 px-2">
         {mounted && logoUrl && !imgFailed ? (
           // eslint-disable-next-line @next/next/no-img-element

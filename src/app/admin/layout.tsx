@@ -33,6 +33,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           roleLabel={ROLE_LABELS_AR[session.user.role]}
           sandboxMode={false}
           onLogout={session.authSource === "platform" ? platformLogout : undefined}
+          mobileNavItems={navItems}
         />
         <main className="flex-1 overflow-y-auto p-6">{children}</main>
       </div>

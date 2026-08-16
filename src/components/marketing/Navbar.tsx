@@ -27,6 +27,7 @@ export function Navbar() {
   }, [open]);
 
   return (
+    <>
     <header className="sticky top-0 z-40 border-b border-slate-200/70 bg-white/80 backdrop-blur dark:border-white/10 dark:bg-slate-950/80">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
         <Link href="/" className="flex items-center gap-2">
@@ -75,9 +76,14 @@ export function Navbar() {
           {open ? "✕" : "☰"}
         </button>
       </div>
+    </header>
 
-      {open && (
-        <div className="fixed inset-x-0 bottom-0 top-[57px] z-50 overflow-y-auto bg-white px-4 py-6 lg:hidden dark:bg-slate-950">
+    {/* خارج <header> عمداً — الـheader عليه backdrop-blur (backdrop-filter)، وأي عنصر position:fixed
+        داخل عنصر له backdrop-filter/transform/filter يتموضع بالنسبة لذلك العنصر لا الشاشة كاملة
+        (سلوك CSS معياري وليس خللاً في المتصفح) — فكانت القائمة المنسدلة تنحشر داخل ارتفاع الـheader
+        نفسه (~65px) بدل تغطية الشاشة، وتظهر خلفية الصفحة (الـHero) من تحتها. */}
+    {open && (
+        <div className="fixed inset-x-0 bottom-0 top-[65px] z-50 overflow-y-auto bg-white px-4 py-6 lg:hidden dark:bg-slate-950">
           <nav className="mx-auto flex max-w-sm flex-col gap-1">
             {NAV_LINKS.map((link) =>
               link.href === "/affiliates" ? (
@@ -130,6 +136,6 @@ export function Navbar() {
           </nav>
         </div>
       )}
-    </header>
+    </>
   );
 }
