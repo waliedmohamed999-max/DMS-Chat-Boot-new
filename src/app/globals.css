@@ -1,0 +1,55 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    @apply scroll-smooth;
+  }
+  body {
+    @apply bg-navy-900 text-slate-100 font-arabic antialiased;
+  }
+  ::selection {
+    @apply bg-accent-500/30 text-white;
+  }
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-navy-600 rounded-full;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-navy-800 border border-white/5 rounded-xl2 shadow-card;
+  }
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-accent-500 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-accent-600 focus:outline-none focus:ring-2 focus:ring-accent-400 focus:ring-offset-2 focus:ring-offset-navy-900 disabled:opacity-50 disabled:pointer-events-none;
+  }
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg border border-white/10 bg-navy-700 px-4 py-2.5 text-sm font-semibold text-slate-100 transition hover:bg-navy-600 focus:outline-none focus:ring-2 focus:ring-accent-400;
+  }
+  .btn-danger {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-danger-500/10 px-4 py-2.5 text-sm font-semibold text-danger-500 border border-danger-500/30 transition hover:bg-danger-500/20;
+  }
+  .input-field {
+    @apply w-full rounded-lg border border-white/10 bg-navy-900 px-3.5 py-2.5 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-accent-400 focus:border-transparent;
+  }
+  .label-field {
+    @apply mb-1.5 block text-sm font-medium text-slate-300;
+  }
+  .badge {
+    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium;
+  }
+  .nav-link {
+    @apply flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-400 transition hover:bg-white/5 hover:text-slate-100;
+  }
+  .nav-link-active {
+    @apply bg-accent-500/10 text-accent-400;
+  }
+}

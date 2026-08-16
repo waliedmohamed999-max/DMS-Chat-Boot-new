@@ -1,0 +1,28 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: wa_crm_postgres
+    restart: unless-stopped
+    env_file:
+      - .env.docker
+    environment:
+      POSTGRES_USER: wa_crm
+      # POSTGRES_PASSWORD يأتي من .env.docker (غير مُتتبَّع بـ git). هذه القيمة تُستخدم فقط عند
+      # إنشاء الحاوية لأول مرة (volume فارغ). كلمة المرور الفعلية الحالية للدور تم تدويرها مباشرة
+      # عبر ALTER ROLE داخل الحاوية القائمة — إن أُعيد إنشاء الحاوية من الصفر مستقبلاً
+      # (docker-compose down -v)، حدّث .env.docker أولاً لتطابق .env قبل up.
+      POSTGRES_DB: wa_crm
+    ports:
+      - "127.0.0.1:55532:5432"
+    volumes:
+      - wa_crm_pg_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    container_name: wa_crm_redis
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:56379:6379"
+
+volumes:
+  wa_crm_pg_data:

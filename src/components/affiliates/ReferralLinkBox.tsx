@@ -1,0 +1,32 @@
+"use client";
+
+import { useState } from "react";
+
+export function ReferralLinkBox({ code }: { code: string }) {
+  const [copied, setCopied] = useState(false);
+  const [origin, setOrigin] = useState("");
+
+  // window غير متاح وقت الرسم على الخادم — يُملأ فور التركيب في المتصفح فقط (رابط للعرض/النسخ، لا قيمة وظيفية أخرى).
+  if (typeof window !== "undefined" && !origin) setOrigin(window.location.origin);
+
+  const link = `${origin || "https://app.dms.sa"}/?ref=${code}`;
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // فشل الوصول لـclipboard API (صلاحيات المتصفح) — لا داعي لكسر الواجهة، المستخدم يقدر ينسخ يدوياً
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-2 sm:flex-row">
+      <input readOnly value={link} dir="ltr" className="input-field flex-1 text-sm" onFocus={(e) => e.target.select()} />
+      <button onClick={copy} className="btn-primary whitespace-nowrap px-4 text-sm">
+        {copied ? "✓ تم النسخ" : "نسخ الرابط"}
+      </button>
+    </div>
+  );
+}

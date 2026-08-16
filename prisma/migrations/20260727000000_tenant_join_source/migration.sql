@@ -1,0 +1,6 @@
+-- CreateEnum
+CREATE TYPE "TenantJoinSource" AS ENUM ('DIRECT_REGISTER', 'PARTNER_APPLICATION', 'MANUAL_ADMIN');
+
+-- AlterTable
+ALTER TABLE "Tenant" ADD COLUMN     "joinSource" "TenantJoinSource" NOT NULL DEFAULT 'DIRECT_REGISTER';
+

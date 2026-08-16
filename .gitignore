@@ -1,0 +1,12 @@
+node_modules
+.next
+.env
+.env.local
+.env.docker
+*.log
+.DS_Store
+dist
+tsconfig.tsbuildinfo
+next-env.d.ts
+.smoke-shots
+backups/

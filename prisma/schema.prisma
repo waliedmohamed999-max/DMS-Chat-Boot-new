@@ -1,0 +1,1281 @@
+// منصة WhatsApp CRM متعددة المستأجرين
+// كل موديل يحمل تعليقاً موضحاً لدوره. الجداول المستأجرة (tenant-scoped) تحمل tenantId مفهرساً
+// وتخضع لـ Row Level Security فعلي (انظر prisma/postgres-rls.sql) + Prisma extension في src/lib/db.ts
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  // DATABASE_URL يتصل بدور app_runtime (بدون صلاحية superuser) بحيث تخضع كل استعلامات
+  // التطبيق فعلياً لـ Row Level Security. DIRECT_URL يتصل بدور superuser ويُستخدم فقط
+  // من CLI الخاص بـ `prisma migrate` (RLS لا معنى لتقييده أثناء إنشاء/تعديل الجداول نفسها).
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ========================= المستأجرون والمستخدمون =========================
+
+enum UserRole {
+  SUPER_ADMIN // مالك المنصة - صلاحية كاملة بلا استثناء، خارج نطاق أي tenant
+  PLATFORM_SUPPORT // فريق دعم فني داخلي: مراجعة موافقات + انتحال هوية للدعم، بدون حذف/فوترة
+  PLATFORM_BILLING // فريق مالي داخلي: إيرادات وفواتير فقط، بدون وصول لبيانات محادثات التجار
+  OWNER // صاحب حساب التاجر
+  ADMIN // مدير داخل حساب التاجر
+  AGENT // موظف رد بصلاحيات محدودة
+}
+
+enum TenantStatus {
+  PENDING_REVIEW // تسجيل جديد بانتظار موافقة مالك المنصة قبل أي تفعيل فعلي
+  TRIAL
+  ACTIVE
+  SUSPENDED
+  CANCELLED
+  REJECTED // رُفض طلب التسجيل (سبب الرفض في rejectionReason)
+}
+
+// مصدر انضمام التاجر للمنصة — لعرضه في صفحة تفاصيل التاجر بلوحة Super Admin (نظرة عامة على كيفية
+// وصول كل تاجر). MANUAL_ADMIN محجوز لمسار إضافة يدوية مستقبلي (لا واجهة فعلية له بعد — لا مسار
+// حالي في الكود ينشئ تينانت يدوياً من لوحة Super Admin مباشرة).
+enum TenantJoinSource {
+  DIRECT_REGISTER // تسجيل مباشر عبر نموذج /register العام
+  PARTNER_APPLICATION // عبر نظام طلبات الشركاء العام (/partners/apply) بعد اعتماد فريق المبيعات
+  MANUAL_ADMIN
+}
+
+model Tenant {
+  id              String           @id @default(cuid())
+  slug            String           @unique // يستخدم كمعرف مساحة العمل (workspace)
+  name            String
+  logoUrl         String?
+  primaryColor    String           @default("#6D5EF8") // تخصيص white-label جزئي
+  status          TenantStatus     @default(PENDING_REVIEW)
+  joinSource      TenantJoinSource @default(DIRECT_REGISTER)
+  rejectionReason String? // سبب الرفض أو "طلب معلومات إضافية" الظاهر للتاجر
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  users                  User[]
+  contacts               Contact[]
+  tags                   Tag[]
+  conversations          Conversation[]
+  messages               Message[]
+  templates              MessageTemplate[]
+  campaigns              Campaign[]
+  segments               Segment[]
+  chatbotFlows           ChatbotFlow[]
+  integrations           Integration[]
+  webhookLogs            WebhookLog[]
+  products               Product[]
+  orders                 Order[]
+  auditLogs              AuditLog[]
+  subscription           Subscription?
+  paymentMethod          PaymentMethod?
+  invoices               Invoice[]
+  approvalRequests       ApprovalRequest[]
+  merchantNotes          MerchantNote[]
+  impersonationSessions  ImpersonationSession[]
+  announcementDismissals AnnouncementDismissal[]
+  quickReplies           QuickReply[]
+  internalNotes          InternalNote[]
+  contactImportBatches   ContactImportBatch[]
+  aiAgentConfig          AiAgentConfig?
+  aiReplyLogs            AiReplyLog[]
+  referral               Referral?
+
+  @@index([status])
+}
+
+model User {
+  id           String    @id @default(cuid())
+  tenantId     String? // فارغ فقط لأدوار المنصة (SUPER_ADMIN/PLATFORM_SUPPORT/PLATFORM_BILLING)
+  tenant       Tenant?   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name         String
+  email        String    @unique
+  passwordHash String
+  role         UserRole
+  isActive     Boolean   @default(true)
+  lastLoginAt  DateTime? // لرصد مؤشرات تسرب التجار (تجار لم يسجلوا دخول منذ فترة)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  assignedConversations Conversation[]         @relation("AssignedAgent")
+  auditLogs             AuditLog[]
+  reviewedApprovals     ApprovalRequest[]      @relation("ReviewedBy")
+  merchantNotes         MerchantNote[]
+  internalNotesAuthored InternalNote[]
+  quickReplies          QuickReply[]
+  impersonationsStarted ImpersonationSession[]
+  accountSetupTokens    AccountSetupToken[]
+  contactImportBatches  ContactImportBatch[]
+  assignedLeads         ContactMessage[]
+
+  @@index([tenantId])
+}
+
+// ========================= مركز الموافقات (Super Admin) =========================
+
+enum ApprovalRequestType {
+  NEW_TENANT // تسجيل تاجر جديد
+  CUSTOM_PLAN // طلب باقة مخصصة (Enterprise) خارج الباقات القياسية
+  WHATSAPP_VERIFICATION // ربط رقم واتساب جديد يحتاج تحقق يدوي إضافي
+  MESSAGE_TEMPLATE // قالب رسالة جديد يحتاج موافقة (يحاكي مراجعة Meta الفعلية لقوالب واتساب)
+  PARTNER_APPLICATION // طلب انضمام عام من صفحة الشركاء العامة (partners/apply) — بلا تينانت حتى الموافقة
+  AFFILIATE_APPLICATION // طلب انضمام لبرنامج التسويق بالعمولة (affiliates/apply) — بلا تينانت أبداً
+}
+
+enum ApprovalRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  NEEDS_INFO // طُلبت معلومات إضافية من التاجر قبل المتابعة
+}
+
+model ApprovalRequest {
+  id               String                @id @default(cuid())
+  // فارغ فقط لطلبات PARTNER_APPLICATION قبل موافقة مالك المنصة (لا تينانت بعد) — يُملأ فور
+  // الاعتماد عند إنشاء التينانت فعلياً. بقية الأنواع تملك تينانت موجوداً مسبقاً دائماً.
+  tenantId         String?
+  tenant           Tenant?               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  type             ApprovalRequestType
+  status           ApprovalRequestStatus @default(PENDING)
+  payloadJson      Json? // تفاصيل الطلب (مثال: بيانات الباقة المخصصة المطلوبة، أو معرّف رقم واتساب)
+  // فقط لـ PARTNER_APPLICATION: بريد المتقدّم قبل وجود حساب User فعلي — يُستخدم لكشف الطلبات
+  // المكررة ولإتاحة صفحة تتبع الحالة العامة بدون تسجيل دخول (بريد + معرّف الطلب).
+  applicantEmail   String?
+  reviewerNote     String? // سبب الرفض أو نص طلب المعلومات الإضافية، يظهر للتاجر
+  reviewedByUserId String?
+  reviewedBy       User?                 @relation("ReviewedBy", fields: [reviewedByUserId], references: [id])
+  reviewedAt       DateTime?
+  createdAt        DateTime              @default(now())
+
+  @@index([tenantId, status])
+  @@index([type, status])
+  @@index([applicantEmail])
+}
+
+// ========================= رابط إعداد الحساب الآمن (شركاء + فريق المنصة الداخلي) =========================
+
+// كان اسمه PartnerSetupToken (نظام الشركاء فقط)، وأُعيدت تسميته لعمومية الاستخدام: يُستخدم الآن أيضاً
+// لدعوة فريق المنصة الداخلي (admin/team) بنفس الآلية تماماً — أي حساب يُنشأ بكلمة مرور عشوائية غير
+// قابلة للاستخدام (تاجر شريك مُعتمَد، أو عضو فريق داخلي مدعو حديثاً) لا يصبح قابلاً لتسجيل الدخول إلا
+// بعد إكمال هذا الرابط وتحديد كلمة مرور حقيقية بنفسه.
+model AccountSetupToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique // SHA-256 للرمز الخام المُرسَل في رابط البريد — لا يُخزَّن الرمز الخام أبداً
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
+// ========================= ملاحظات داخلية على التاجر (CRM لفريق المنصة) =========================
+
+model MerchantNote {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id])
+  body      String
+  createdAt DateTime @default(now())
+
+  @@index([tenantId, createdAt])
+}
+
+// ========================= انتحال الهوية لأغراض الدعم الفني (Impersonation) =========================
+
+model ImpersonationSession {
+  id           String    @id @default(cuid())
+  tenantId     String
+  tenant       Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  superAdminId String
+  superAdmin   User      @relation(fields: [superAdminId], references: [id])
+  targetUserId String // مستخدم التاجر الذي يتصفح مالك المنصة نيابة عنه (عادة OWNER)
+  tokenHash    String    @unique // SHA-256 للرمز المخزَّن في كوكي httpOnly — لا يُخزَّن الرمز الخام أبداً
+  createdAt    DateTime  @default(now())
+  expiresAt    DateTime // صلاحية قصيرة محدودة (30 دقيقة)
+  endedAt      DateTime?
+
+  @@index([tenantId])
+  @@index([tokenHash])
+}
+
+// ========================= الباقات والفوترة =========================
+
+model Plan {
+  id                  String   @id @default(cuid())
+  key                 String   @unique // starter | growth | scale
+  name                String
+  priceMonthlySar     Int
+  maxUsers            Int
+  maxWhatsappNumbers  Int
+  maxMessagesPerMonth Int
+  features            Json // مصفوفة نصوص للميزات المعروضة
+  // حدود وحدة الشات بوت لهذه الباقة، قابلة للتعديل من لوحة Super Admin دون تعديل كود.
+  // الشكل: { maxActiveFlows: number (-1 = غير محدود), allowedNodeTypes: string[],
+  //          templatesTier: "basic"|"full", analyticsTier: "basic"|"advanced"|"export",
+  //          multiLanguage: boolean }
+  // قيمة null تعني الرجوع لحدود Starter الافتراضية الأكثر تقييداً (lib/planLimits.ts).
+  chatbotLimitsJson   Json?
+  // حدود وحدة الحملات لهذه الباقة، قابلة للتعديل من لوحة Super Admin دون تعديل كود.
+  // الشكل: { maxCampaignsPerMonth: number (-1 = غير محدود), maxAudiencePerCampaign: number (-1 = غير محدود),
+  //          abTestingEnabled: boolean } — قيمة null تعني الرجوع لحدود Starter الافتراضية (lib/campaigns/limits.ts).
+  // ملاحظة: abTestingEnabled علم بيانات محجوز لترقية مستقبلية فقط (لا واجهة A/B فعلية مبنية بعد — انظر DECISIONS.md).
+  campaignLimitsJson  Json?
+  isActive            Boolean  @default(true)
+  // "الأكثر طلباً" — علم حقيقي قابل للتعديل من Super Admin (كان سابقاً استنتاجاً بصرياً بحتاً في
+  // كود الصفحة التسويقية: منتصف مصفوفة الباقات — قرار غير حقيقي، أُصلح في هذه الجولة).
+  isPopular           Boolean  @default(false)
+  // نسبة خصم الاشتراك السنوي بنقاط أساس (2000 = 20%) — قابلة للتعديل لكل باقة على حدة من Super
+  // Admin، بدل ثابت 20% مكرر في كود الواجهة الأمامية للصفحة التسويقية العامة.
+  annualDiscountBps   Int      @default(2000)
+  // مستوى الدعم المعروض في جدول مقارنة الباقات: "email" | "priority" | "dedicated"
+  supportTier         String   @default("email")
+  // باقة مخصصة (Enterprise) أُنشئت خصيصاً لتاجر بعينه عبر مركز الموافقات — لا تظهر في كتالوج
+  // الباقات القياسية المعروضة لبقية التجار.
+  isCustomForTenantId String?
+  createdAt           DateTime @default(now())
+
+  subscriptions Subscription[]
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELLED
+  // إيقاف مؤقت (بديل الإلغاء الكامل في تدفق الاحتفاظ بالعميل) — يُستأنَف تلقائياً عند انتهاء
+  // pausedUntil عبر نفس مهمة فحص انتهاء الاشتراكات الدورية (scanAndExpireSubscriptions).
+  PAUSED
+}
+
+model Subscription {
+  id                     String             @id @default(cuid())
+  tenantId               String             @unique
+  tenant                 Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  planId                 String
+  plan                   Plan               @relation(fields: [planId], references: [id])
+  status                 SubscriptionStatus @default(TRIALING)
+  currentPeriodStart     DateTime           @default(now())
+  currentPeriodEnd       DateTime
+  messagesUsedThisPeriod Int                @default(0)
+  // مجموع توكنز LLM المستهلَكة هذه الدورة عبر عقدة "الرد الذكي" — بنفس منطق messagesUsedThisPeriod
+  // تماماً (يتراكم فقط، بلا إعادة تصفير دورية بعد؛ نفس القيد الموجود أصلاً على عدّاد الرسائل).
+  aiTokensUsedThisPeriod Int                @default(0)
+  cancelAtPeriodEnd      Boolean            @default(false)
+  // سبب الإلغاء المُختار في تدفق الاحتفاظ بالعميل (بيانات عمل مفيدة لفريق المنتج، وليست ضرورية تقنياً)
+  cancelReason           String?
+  // تُضبط فقط عند status = PAUSED — تاريخ الاستئناف التلقائي (نفس فحص انتهاء الاشتراكات الدورية).
+  pausedUntil            DateTime?
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+}
+
+// بطاقة دفع محفوظة — **وضع Sandbox حالياً بالكامل** (لا مزوّد دفع حقيقي مربوط بعد، انظر
+// SECURITY_FIXES.md/LAUNCH_READINESS_REPORT.md للتفاصيل). لا يُخزَّن رقم البطاقة الكامل أبداً حتى في
+// وضع Sandbox — فقط آخر 4 أرقام للعرض + providerToken وهمي يمثّل ما سيُخزَّن من مزوّد دفع حقيقي لاحقاً
+// (Tokenization فعلي عند الربط الحقيقي، بنفس عقد الواجهة PaymentProvider الموجود أصلاً). علاقة
+// مستقلة بـTenant (وليس Subscription) — عمداً لتفادي علاقتين مختلفتين على نفس عمود tenantId.
+model PaymentMethod {
+  id            String   @id @default(cuid())
+  tenantId      String   @unique
+  tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  brand         String // Visa | Mastercard | Mada (وهمية في وضع Sandbox)
+  last4         String
+  expiryMonth   Int
+  expiryYear    Int
+  providerToken String // token وهمي حالياً — يمثّل ما سيُعيده مزوّد دفع حقيقي عبر Tokenization
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+enum InvoiceStatus {
+  PAID
+  PENDING
+  FAILED
+  REFUNDED
+  CANCELLED // أُلغي الاشتراك بينما الفاتورة لا تزال PENDING — لا تحصيل ولا استرداد لأنه لم يُدفع شيء
+  OVERDUE // PENDING تجاوزت فترة السماح دون تحصيل — تُضبَط عبر فحص دوري (scanAndExpireSubscriptions)
+}
+
+model Invoice {
+  id                   String        @id @default(cuid())
+  // رقم فاتورة تسلسلي عام عبر كل المنصة (وليس لكل مستأجر) — يعتمد تسلسل Postgres الذري نفسه
+  // (@default(autoincrement()))، فهو آمن ضد التزامن بطبيعته دون أي قفل إضافي. يُعرَض بصيغة
+  // INV-YYYY-NNNNN (السنة من createdAt وقت العرض، وليس عداداً منفصلاً يُعاد كل سنة — انظر DECISIONS.md).
+  invoiceNumber        Int           @unique @default(autoincrement())
+  tenantId             String
+  tenant               Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  // شامل الضريبة (نفس المبلغ المعروض فعلياً في صفحة الأسعار/priceMonthlySar — لا تغيير في قيمة
+  // التحصيل الفعلية). vatAmountSar هو الجزء الداخلي منه فقط للشفافية في الفاتورة، وليس مبلغاً إضافياً.
+  amountSar            Int
+  vatRateBps           Int           @default(1500) // نقاط أساس؛ تُنسَخ من PlatformSettings.vatRateBps وقت الإصدار
+  vatAmountSar         Int           @default(0) // = amountSar × vatRateBps ÷ (10000 + vatRateBps)، مُقرَّب
+  status               InvoiceStatus @default(PENDING)
+  failureReason        String? // سبب فشل الدفع، يظهر في لوحة الإيرادات لفريق المنصة
+  // مفتاح الباقة وقت إصدار الفاتورة (وليس مرجعاً حياً للباقة الحالية — قد تتغيّر لاحقاً) — يحدّد أي
+  // حساب إيراد فرعي (4.1/4.2/...) يُقيَّد له في دفتر القيود، ولعرضه في الفاتورة/PDF.
+  planKey              String?
+  // كم من قيمة هذه الفاتورة (بدون الضريبة) اعتُرِف به كإيراد محقَّق فعلياً حتى الآن — يُحدَّث تدريجياً
+  // بمهمة الاعتراف بالإيراد الدورية (revenueRecognition.ts)، يبدأ 0 ويصل حده الأقصى (amountSar - vatAmountSar).
+  recognizedRevenueSar Int           @default(0)
+  periodStart          DateTime
+  periodEnd            DateTime
+  paidAt               DateTime?
+  createdAt            DateTime      @default(now())
+
+  creditNotes CreditNote[]
+  commission  Commission?
+
+  @@index([tenantId])
+}
+
+// ========================= المحاسبة: دليل الحسابات ودفتر القيود =========================
+
+enum AccountType {
+  ASSET
+  LIABILITY
+  EQUITY
+  REVENUE
+  EXPENSE
+}
+
+// دليل حسابات مبسّط لمنصة SaaS (ليس نظام محاسبة عامة) — شجرة عبر parentId، برمز (code) ثابت
+// يُستخدَم برمجياً للإشارة لحساب بعينه (مثال: "1.1" للنقدية) دون الاعتماد على الاسم القابل للتعديل.
+model Account {
+  id              String      @id @default(cuid())
+  code            String      @unique // "1", "1.1", "4.2"...
+  name            String
+  type            AccountType
+  parentId        String?
+  parent          Account?    @relation("AccountTree", fields: [parentId], references: [id])
+  children        Account[]   @relation("AccountTree")
+  // حسابات النظام الأساسية (المذكورة في البرومنت الأصلي) محمية من الحذف — فقط الحسابات الفرعية
+  // المُضافة يدوياً (مثال: حساب إيراد باقة جديدة) قابلة للحذف إن لم تحمل أي حركة.
+  isSystemAccount Boolean     @default(false)
+  createdAt       DateTime    @default(now())
+
+  debitLines  JournalLine[] @relation("DebitAccount")
+  creditLines JournalLine[] @relation("CreditAccount")
+}
+
+// قيد محاسبي واحد — **غير قابل للحذف أو التعديل إطلاقاً بعد إنشائه** (لا mutation ولا delete في أي
+// كود بهذا المشروع) — أي تصحيح يتم حصراً عبر قيد عكسي جديد (Reversing Entry) يشير لنفس sourceId.
+model JournalEntry {
+  id          String   @id @default(cuid())
+  entryDate   DateTime @default(now())
+  description String
+  // نوع الحدث المصدر ("invoice_payment" | "revenue_recognition" | "invoice_refund") ومعرّفه —
+  // يُتيح تتبّع كل قيد لسبب إنشائه الفعلي دون تخمين من النص الوصفي وحده.
+  sourceType  String
+  sourceId    String
+  createdAt   DateTime @default(now())
+
+  lines JournalLine[]
+
+  @@index([sourceType, sourceId])
+  @@index([entryDate])
+}
+
+// سطر واحد ضمن قيد — مدين أو دائن (أحدهما 0 دائماً). مجموع debit يجب أن يساوي مجموع credit ضمن
+// نفس JournalEntry (يُفرَض في كود الإنشاء lib/accounting/postJournalEntry.ts، وليس قيد قاعدة بيانات).
+model JournalLine {
+  id              String       @id @default(cuid())
+  journalEntryId  String
+  journalEntry    JournalEntry @relation(fields: [journalEntryId], references: [id], onDelete: Cascade)
+  debitAccountId  String?
+  debitAccount    Account?     @relation("DebitAccount", fields: [debitAccountId], references: [id])
+  creditAccountId String?
+  creditAccount   Account?     @relation("CreditAccount", fields: [creditAccountId], references: [id])
+  amountSar       Int
+
+  @@index([journalEntryId])
+}
+
+// إشعار دائن — يُنشَأ عند أي استرداد، **لا يُعدَّل أو يُحذَف الفاتورة الأصلية إطلاقاً**، فقط يُشار
+// إليها. رقم تسلسلي منفصل عن ترقيم الفواتير (تسلسل مستقل، متطلب قانوني شائع لإشعارات الدائن).
+model CreditNote {
+  id               String   @id @default(cuid())
+  creditNoteNumber Int      @unique @default(autoincrement())
+  invoiceId        String
+  invoice          Invoice  @relation(fields: [invoiceId], references: [id])
+  tenantId         String
+  amountSar        Int
+  vatAmountSar     Int
+  reason           String
+  createdAt        DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([invoiceId])
+}
+
+// ========================= إعلانات المنصة (Super Admin -> التجار) =========================
+
+enum AnnouncementAudience {
+  ALL
+  SPECIFIC_PLAN
+  SPECIFIC_TENANTS
+}
+
+model PlatformAnnouncement {
+  id                    String               @id @default(cuid())
+  title                 String
+  body                  String
+  audienceType          AnnouncementAudience @default(ALL)
+  audiencePlanId        String?
+  audienceTenantIdsJson Json? // مصفوفة معرّفات تجار عند SPECIFIC_TENANTS
+  createdByUserId       String?
+  createdAt             DateTime             @default(now())
+
+  dismissals AnnouncementDismissal[]
+}
+
+model AnnouncementDismissal {
+  id             String               @id @default(cuid())
+  announcementId String
+  announcement   PlatformAnnouncement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  tenantId       String
+  tenant         Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  dismissedAt    DateTime             @default(now())
+
+  @@unique([announcementId, tenantId])
+}
+
+// ========================= CRM: جهات الاتصال =========================
+
+enum ContactStage {
+  LEAD // عميل محتمل
+  CONTACTED // تم التواصل
+  CUSTOMER // عميل
+  REPEAT // عميل متكرر
+}
+
+// مصدر إضافة جهة الاتصال للنظام — منفصل تماماً عن "المرحلة" (ContactStage) و"التاريخ" (createdAt).
+// كانت هذه الثلاثة مدموجة سابقاً بشكل مربك في وسم واحد يحمل طابعاً زمنياً خاماً (انظر DECISIONS.md).
+enum ContactSource {
+  MANUAL // أُضيفت يدوياً من النموذج
+  IMPORT // استيراد ملف Excel/CSV عام من صفحة جهات الاتصال
+  CAMPAIGN_IMPORT // استيراد ملف كجمهور حملة من معالج إنشاء الحملة
+  ZID_SYNC // مزامنة تلقائية من تكامل زد
+  SALLA_SYNC // مزامنة تلقائية من تكامل سلة
+}
+
+model Contact {
+  id               String              @id @default(cuid())
+  tenantId         String
+  tenant           Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name             String
+  phoneE164        String // رقم واتساب بصيغة دولية
+  email            String?
+  city             String?
+  stage            ContactStage        @default(LEAD)
+  source           ContactSource       @default(MANUAL)
+  notes            String?
+  externalZidId    String? // ربط مباشر بعميل زد
+  externalSallaId  String? // ربط مباشر بعميل سلة
+  // موافقة استقبال الرسائل التسويقية — تُفحص إلزامياً عند بناء أي جمهور حملة، بصرف النظر عن
+  // فلاتر الشريحة المختارة (طبقة امتثال إضافية لسياسة واتساب، وليست مجرد فلتر اختياري).
+  // Boolean? (وليس Boolean): null = "غير محدد" (لم تُطلَب الموافقة/يُعامَل بحذر كـ"غير موافق" في
+  // بناء الجمهور)، تمييزاً صريحاً عن false = "رفض الموافقة" فعلياً.
+  marketingOptIn   Boolean?            @default(true)
+  optInUpdatedAt   DateTime? // آخر مرة تغيّرت فيها حالة الموافقة يدوياً
+  // دفعة الاستيراد التي أدخلت هذه الجهة (إن وُجدت) — تتيح "استيراد ملفات" كتبويب حقيقي والتراجع
+  // (Undo) عن دفعة كاملة. onDelete: SetNull حتى لا يُحذَف التاريخ الفعلي لجهة اتصال لمجرد حذف سجل الدفعة.
+  importBatchId    String?
+  importBatch      ContactImportBatch? @relation(fields: [importBatchId], references: [id], onDelete: SetNull)
+  // الحملة التي جِيء بهذه الجهة من أجلها عبر "استيراد قائمة من Excel" في معالج إنشاء الحملة — تُملأ
+  // بأثر رجعي بعد إنشاء الحملة فعلياً (وقت الاستيراد لا توجد بعد Campaign حقيقية، انظر
+  // createCampaign في dashboard/campaigns/actions.ts).
+  sourceCampaignId String?
+  sourceCampaign   Campaign?           @relation("ContactSourceCampaign", fields: [sourceCampaignId], references: [id], onDelete: SetNull)
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  tags               ContactTag[]
+  conversations      Conversation[]
+  orders             Order[]
+  campaignRecipients CampaignRecipient[]
+
+  @@unique([tenantId, phoneE164])
+  @@index([tenantId, stage])
+  @@index([tenantId, source])
+  @@index([tenantId, sourceCampaignId])
+  @@index([tenantId, importBatchId])
+  @@index([tenantId, city])
+}
+
+model Tag {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name      String
+  color     String   @default("#6D5EF8")
+  // وسم داخلي مُولَّد آلياً لأغراض استهداف جمهور حملة مستورَدة (segmentFilter.tagIds) — لا يُعرَض
+  // أبداً في أي قائمة وسوم مرئية للمستخدم (كان هذا سبب ظهور طابع زمني خام كوسم — انظر DECISIONS.md).
+  isSystem  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  contacts ContactTag[]
+
+  @@unique([tenantId, name])
+}
+
+model ContactTag {
+  contactId String
+  contact   Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  tagId     String
+  tag       Tag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([contactId, tagId])
+}
+
+// دفعة استيراد واحدة (ملف واحد رُفع مرة واحدة) — تُتيح تبويب "استيراد ملفات" الحقيقي في واجهة جهات
+// الاتصال، ومراجعة/التراجع عن دفعة بعينها بدل معرفة "مستورَد" فقط بلا أي تفصيل عن الدفعة.
+model ContactImportBatch {
+  id              String        @id @default(cuid())
+  tenantId        String
+  tenant          Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  source          ContactSource // IMPORT أو CAMPAIGN_IMPORT فقط عملياً
+  fileName        String
+  totalRows       Int
+  importedCount   Int
+  updatedCount    Int
+  skippedCount    Int
+  errorsJson      Json?
+  // مرتبطة بحملة معينة لو كانت دفعة "استيراد جمهور حملة" (يُملأ بأثر رجعي، نفس Contact.sourceCampaignId).
+  campaignId      String?
+  campaign        Campaign?     @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  createdByUserId String
+  createdBy       User          @relation(fields: [createdByUserId], references: [id])
+  createdAt       DateTime      @default(now())
+
+  contacts Contact[]
+
+  @@index([tenantId, createdAt])
+}
+
+// ========================= المحادثات الموحدة =========================
+
+enum ConversationStatus {
+  NEW // أول رسالة من عميل جديد كلياً، لم يتم الرد عليها إطلاقاً
+  NEEDS_REPLY // آخر رسالة من العميل (جديدة أو محادثة أُعيد فتحها) بانتظار رد
+  OPEN // تم الرد فعلياً وبانتظار رسالة العميل التالية — ليست جديدة ولا تحتاج رد ولا مُغلقة يدوياً
+  RESOLVED // أُغلقت يدوياً بواسطة موظف عبر زر "تحديد كمحلولة"
+}
+
+enum ConversationControlMode {
+  BOT // الشات بوت المنشور يتحكم حالياً في الرد (لعرض ذلك بوضوح فقط — لا تنفيذ آلي فعلي مربوط بعد، انظر DECISIONS.md)
+  HUMAN // موظف بشري يتحكم — إما لم يكن هناك بوت أصلاً أو تم "الاستيلاء" من البوت يدوياً
+}
+
+model Conversation {
+  id                     String                  @id @default(cuid())
+  tenantId               String
+  tenant                 Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  contactId              String
+  contact                Contact                 @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  status                 ConversationStatus      @default(NEW)
+  controlMode            ConversationControlMode @default(HUMAN)
+  assignedAgentId        String?
+  assignedAgent          User?                   @relation("AssignedAgent", fields: [assignedAgentId], references: [id])
+  lastMessageAt          DateTime                @default(now())
+  sessionWindowExpiresAt DateTime? // نافذة الـ24 ساعة الخاصة بواتساب
+  resolvedAt             DateTime?
+  createdAt              DateTime                @default(now())
+
+  // حالة تنفيذ الشات بوت الحقيقي لهذه المحادثة تحديداً — فارغة كلها إن لم تكن جلسة بوت نشطة الآن.
+  activeFlowId      String?
+  activeFlow        ChatbotFlow? @relation(fields: [activeFlowId], references: [id], onDelete: SetNull)
+  currentNodeId     String? // العقدة التي تنتظر عندها المحادثة حالياً (رداً على "سؤال" مثلاً)
+  flowNodeEnteredAt DateTime? // وقت الوصول لهذه العقدة — تُستخدَم لاكتشاف الجلسات العالقة وتصفيرها
+
+  messages      Message[]
+  internalNotes InternalNote[]
+  aiReplyLogs   AiReplyLog[]
+
+  @@index([tenantId, status])
+  @@index([tenantId, lastMessageAt])
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  DOCUMENT
+  AUDIO
+  LOCATION
+  INTERACTIVE_REPLY // رد المستخدم على زر/قائمة تفاعلية من رسالة سابقة
+  TEMPLATE
+}
+
+enum MessageStatus {
+  PENDING // صادرة، بانتظار تأكيد وصولها لواتساب نفسه
+  SENT
+  DELIVERED
+  READ
+  FAILED
+}
+
+enum MessageSenderType {
+  CONTACT
+  AGENT
+  BOT
+  SYSTEM
+}
+
+model Message {
+  id              String            @id @default(cuid())
+  tenantId        String
+  tenant          Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  conversationId  String
+  conversation    Conversation      @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  direction       MessageDirection
+  senderType      MessageSenderType
+  type            MessageType       @default(TEXT)
+  body            String // نص الرسالة، أو caption للوسائط، أو اسم الموقع لرسائل الموقع
+  mediaUrl        String? // رابط الوسائط (sandbox: رابط تمثيلي محاكى — انظر DECISIONS.md لقرار عدم بناء تخزين وسائط حقيقي)
+  mediaMimeType   String?
+  latitude        Float?
+  longitude       Float?
+  quotedMessageId String?
+  quotedMessage   Message?          @relation("QuotedMessage", fields: [quotedMessageId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  quotedBy        Message[]         @relation("QuotedMessage")
+  templateId      String?
+  campaignId      String?
+  campaign        Campaign?         @relation(fields: [campaignId], references: [id])
+  waMessageId     String? // معرف رسالة واتساب الفعلي (sandbox أو حقيقي) — يُطابَق به تحديث الحالة الوارد من webhook
+  status          MessageStatus? // ذات معنى للرسائل الصادرة فقط (OUTBOUND) — فارغة للرسائل الواردة
+  statusUpdatedAt DateTime?
+  failureReason   String? // سبب الفشل الفعلي القادم من واتساب (رقم غير صالح، انتهاء النافذة الزمنية، الرقم محظور)
+  createdAt       DateTime          @default(now())
+
+  @@index([tenantId, conversationId])
+  @@index([waMessageId])
+}
+
+// ردود سريعة محفوظة (Canned Responses) يجهّزها التاجر مسبقاً لتسريع الرد على الأسئلة المتكررة
+model QuickReply {
+  id              String   @id @default(cuid())
+  tenantId        String
+  tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  shortcut        String // مثال: "شكر" — يُكتب بعد "/" في صندوق الرد لإدراج النص فوراً
+  body            String
+  createdByUserId String
+  createdBy       User     @relation(fields: [createdByUserId], references: [id])
+  createdAt       DateTime @default(now())
+
+  @@unique([tenantId, shortcut])
+}
+
+// ملاحظات داخلية على محادثة — منفصلة تماماً عن جدول Message عمداً بحيث يستحيل بنيوياً إرسالها
+// للعميل عبر أي مسار إرسال فعلي (وليس فقط تمييزها بصرياً في الواجهة).
+model InternalNote {
+  id             String       @id @default(cuid())
+  tenantId       String
+  tenant         Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  // authorId فارغ حصراً للملخص التلقائي الذي يكتبه "الموظف الذكي" نفسه عند التحويل لموظف بشري —
+  // لا مستخدم بشري حقيقي كتبه، فلا يصح ربطه بأي User وهمي. الواجهة تعرض "🤖 ملخص تلقائي" حين يكون فارغاً.
+  authorId       String?
+  author         User?        @relation(fields: [authorId], references: [id])
+  body           String
+  createdAt      DateTime     @default(now())
+
+  @@index([tenantId, conversationId])
+}
+
+// ========================= قوالب رسائل Meta =========================
+
+enum TemplateStatus {
+  DRAFT
+  PENDING
+  APPROVED
+  REJECTED
+  PAUSED // معتمد سابقاً لكن أُوقِف مؤقتاً بسبب انخفاض جودة الأداء (حدث Meta فعلي بعد الاعتماد)
+  DISABLED // أُوقِف نهائياً من Meta
+}
+
+model MessageTemplate {
+  id                 String         @id @default(cuid())
+  tenantId           String
+  tenant             Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name               String
+  category           String // MARKETING | UTILITY | AUTHENTICATION
+  language           String         @default("ar")
+  headerType         String? // NONE | TEXT | IMAGE | VIDEO | DOCUMENT
+  headerText         String?
+  bodyText           String
+  footerText         String?
+  buttonsJson        Json? // [{ type: "QUICK_REPLY"|"URL"|"PHONE_NUMBER", text, value? }]
+  status             TemplateStatus @default(DRAFT)
+  rejectionReason    String?
+  // معرّف القالب الفعلي على Meta بعد الإرسال الحقيقي لـ Graph API — يُستخدم لمطابقة تحديثات
+  // الحالة الواردة عبر webhook (message_template_status_update)
+  externalTemplateId String?
+  submittedAt        DateTime?
+  decidedAt          DateTime?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  campaigns Campaign[]
+
+  @@unique([tenantId, name, language])
+  @@index([externalTemplateId])
+}
+
+// ========================= الشرائح والحملات =========================
+
+model Segment {
+  id         String   @id @default(cuid())
+  tenantId   String
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name       String
+  // شكل الفلتر الفعلي موثّق في lib/campaigns/audience.ts (النوع SegmentFilter):
+  // { stage?, tagIds?: string[], activity?: {mode, days}, order?: {status, withinDays}, optInOnly? }
+  filterJson Json
+  createdAt  DateTime @default(now())
+
+  campaigns Campaign[]
+
+  @@index([tenantId])
+}
+
+enum CampaignStatus {
+  DRAFT // لمرة واحدة: أُنشئت ولم تُرسل/تُجدول بعد
+  SCHEDULED // لمرة واحدة: بانتظار موعد الإرسال (فوري أو مجدول عبر تأخير BullMQ)
+  SENDING // لمرة واحدة: قيد الإرسال الفعلي الآن
+  ACTIVE // آلية: مفعّلة ومستمرة، تستقبل مستلمين جدد كلما تحقق الحدث المُشغِّل
+  PAUSED // آلية: متوقفة مؤقتاً عن استقبال مستلمين جدد (يمكن إعادة التفعيل)
+  COMPLETED // لمرة واحدة: انتهى الإرسال لكل الجمهور
+  FAILED
+}
+
+enum CampaignType {
+  ONE_TIME
+  TRIGGERED
+}
+
+enum AudienceType {
+  ALL // كل جهات الاتصال (مع احترام marketingOptIn دائماً)
+  SEGMENT
+}
+
+enum TriggerEvent {
+  ABANDONED_CART // طلب Order بحالة ABANDONED_CART لم تُرسل له رسالة استرداد بعد
+  CUSTOMER_INACTIVE // جهة اتصال بلا أي تفاعل محادثة منذ عدد أيام محدد في triggerConfigJson.inactiveDays
+}
+
+model Campaign {
+  id                String          @id @default(cuid())
+  tenantId          String
+  tenant            Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name              String
+  type              CampaignType    @default(ONE_TIME)
+  audienceType      AudienceType    @default(SEGMENT)
+  // فارغ فقط عندما audienceType = ALL، أو للحملات الآلية التي تستهدف جمهوراً ديناميكياً بلا شريحة ثابتة
+  segmentId         String?
+  segment           Segment?        @relation(fields: [segmentId], references: [id])
+  templateId        String
+  template          MessageTemplate @relation(fields: [templateId], references: [id])
+  status            CampaignStatus  @default(DRAFT)
+  scheduledAt       DateTime?
+  // للحملات الآلية فقط: الحدث المُشغِّل وإعداداته ({ inactiveDays: number } لـ CUSTOMER_INACTIVE)
+  triggerEvent      TriggerEvent?
+  triggerConfigJson Json?
+  sentCount         Int             @default(0)
+  deliveredCount    Int             @default(0)
+  readCount         Int             @default(0)
+  repliedCount      Int             @default(0)
+  failedCount       Int             @default(0)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  messages        Message[]
+  recipients      CampaignRecipient[]
+  sourcedContacts Contact[]            @relation("ContactSourceCampaign")
+  importBatches   ContactImportBatch[]
+
+  @@index([tenantId, status])
+  @@index([tenantId, type])
+}
+
+enum RecipientStatus {
+  PENDING
+  SENT
+  DELIVERED
+  READ
+  REPLIED
+  FAILED
+}
+
+model CampaignRecipient {
+  id                   String          @id @default(cuid())
+  campaignId           String
+  campaign             Campaign        @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  contactId            String
+  contact              Contact         @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  status               RecipientStatus @default(PENDING)
+  errorMessage         String? // سبب الفشل الفعلي المعروض للتاجر (مثال: رقم غير صحيح، انتهاء صلاحية الجلسة، الرقم محظور)
+  sentAt               DateTime?
+  deliveredAt          DateTime?
+  readAt               DateTime?
+  // تتبع التحويل: هل أدت هذه الرسالة لطلب فعلي خلال نافذة زمنية بعد الإرسال (lib/campaigns/conversions.ts)
+  convertedOrderId     String?
+  convertedOrder       Order?          @relation(fields: [convertedOrderId], references: [id])
+  conversionRevenueSar Int?
+
+  @@unique([campaignId, contactId])
+  @@index([convertedOrderId])
+}
+
+// ========================= محرر الشات بوت =========================
+
+enum FlowStatus {
+  DRAFT
+  PUBLISHED
+}
+
+model ChatbotFlow {
+  id                String     @id @default(cuid())
+  tenantId          String
+  tenant            Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name              String
+  status            FlowStatus @default(DRAFT)
+  nodesJson         Json // مصفوفة عقد التدفق (بداية/رسالة/سؤال/شرط/رد ذكي/استدعاء API/تحويل لموظف/نهاية)
+  templateId        String? // القالب الذي أُنشئ منه التدفق، إن وُجد (لأغراض العرض فقط)
+  testRunCount      Int        @default(0) // عدد مرات "اختبار قبل النشر" — يُشترط >0 قبل السماح بالنشر
+  lastTestedAt      DateTime?
+  // عدد مرات مرور كل عقدة أثناء تشغيلات الاختبار الحي فقط (وليس المحادثات الحقيقية المُنفَّذة فعلياً
+  // عبر lib/chatbot/engine.ts — تلك تُحتسَب حياً عبر activeConversations أدناه بدل عدّاد مجمَّع منفصل).
+  nodeTraversalJson Json?
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+
+  activeConversations Conversation[] // محادثات حقيقية جلستها النشطة حالياً في هذا التدفق تحديداً
+
+  @@index([tenantId, status])
+}
+
+// ========================= الموظف الذكي (AI Smart Employee — رد آلي بذكاء اصطناعي حقيقي) =========================
+
+enum AiTone {
+  FORMAL // رسمية
+  FRIENDLY // ودودة
+  FUN // مرحة
+}
+
+// إعداد شخصية الموظف الذكي لكل تاجر — صف واحد لكل تينانت (مثل PlatformSettings لكن على مستوى التاجر).
+// enabled منفصل عمداً عن بوابة الباقة (allowedNodeTypes) — تفعيل الباقة يمنح *القدرة* على استخدام
+// عقدة "رد ذكي" في تدفق ما، بينما enabled هنا هو مفتاح تشغيل/إيقاف صريح يتحكم به التاجر نفسه.
+model AiAgentConfig {
+  id             String   @id @default(cuid())
+  tenantId       String   @unique
+  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  enabled        Boolean  @default(false)
+  agentName      String   @default("مساعد المتجر")
+  tone           AiTone   @default(FRIENDLY)
+  // قواعد وحدود صريحة يضيفها التاجر بنص حر (مواضيع ممنوعة، وعود لا يجب تقديمها) — تُدرَج حرفياً
+  // ضمن تعليمات النظام (System Prompt) المُرسَلة لمزوّد الذكاء الاصطناعي.
+  boundariesText String?
+  shippingPolicy String?
+  returnPolicy   String?
+  workingHours   String?
+  // أسئلة شائعة يضيفها التاجر يدوياً: [{ question: string, answer: string }]
+  faqItems       Json     @default("[]")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+enum AiReplyRating {
+  HELPFUL // مفيد — قيّمه التاجر إيجابياً أثناء المراجعة
+  INACCURATE // غير دقيق — يحتاج تحسين المعرفة الأساسية/الشخصية
+}
+
+// سجل كل رد أنتجه الموظف الذكي فعلياً — أساس شاشة "مراجعة الجودة" (بند هـ في البرومنت) وتتبّع
+// استهلاك التوكنز معاً في جدول واحد بدل جدولين منفصلين قد ينحرفان عن بعضهما.
+model AiReplyLog {
+  id               String         @id @default(cuid())
+  tenantId         String
+  tenant           Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  conversationId   String
+  conversation     Conversation   @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  userMessage      String
+  aiReply          String? // فارغ إن انتهى الأمر بتحويل فوري بلا رد فعلي (مثال: كلمة "شكوى" مكتشَفة قبل استدعاء النموذج)
+  confidenceScore  Int // 0-100 (نسبة مئوية صحيحة بدل عشري لتفادي فروقات دقة تخزين لا داعي لها)
+  handoffTriggered Boolean        @default(false)
+  handoffReason    String?
+  usedTool         String? // "get_product_price" | "get_order_status" | null
+  promptTokens     Int            @default(0)
+  completionTokens Int            @default(0)
+  totalTokens      Int            @default(0)
+  model            String
+  rating           AiReplyRating?
+  createdAt        DateTime       @default(now())
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, handoffTriggered])
+}
+
+// ========================= التكاملات (Meta / Zid / Salla) =========================
+
+enum IntegrationProvider {
+  META_WHATSAPP
+  ZID
+  SALLA
+  // قناة تجريبية غير رسمية (مسح QR شبيه بواتساب ويب عبر Baileys) — بديل مؤقت محدود المدة عن
+  // META_WHATSAPP لتجربة المنصة بلا حاجة لمراجعة/إعلانات Meta. راجع DECISIONS.md للقيود والمخاطر.
+  WHATSAPP_QR
+  // مزوّد بوابة الدفع — يُعاد استخدام WebhookLog/provider الموجود أصلاً لتسجيل أحداث webhook الدفع
+  // (نجاح/فشل/استرداد) بدل بناء جدول سجلّ منفصل، رغم أنه ليس "تكامل" بنفس معنى Zid/Salla تماماً.
+  PAYMENT_GATEWAY
+}
+
+enum IntegrationStatus {
+  DISCONNECTED
+  CONNECTED
+  NEEDS_REAUTH
+  ERROR
+}
+
+model Integration {
+  id                    String              @id @default(cuid())
+  tenantId              String
+  tenant                Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  provider              IntegrationProvider
+  status                IntegrationStatus   @default(DISCONNECTED)
+  isSandbox             Boolean             @default(true)
+  encryptedAccessToken  String?
+  encryptedRefreshToken String?
+  externalAccountId     String? // رقم واتساب أو معرف متجر زد/سلة
+  // ربط رقم واتساب جديد (META_WHATSAPP فقط) يبقى بهذه الحالة حتى يراجعه فريق المنصة يدوياً
+  // عبر مركز الموافقات (ApprovalRequest من نوع WHATSAPP_VERIFICATION) قبل التفعيل الكامل.
+  pendingVerification   Boolean             @default(false)
+  // اشتراك فعلي في أحداث Meta webhook (رسائل، حالة رسائل، حالة قوالب) — يُفعَّل تلقائياً فور
+  // نجاح الربط دون أي خطوة يدوية إضافية من التاجر (POST /{waba-id}/subscribed_apps في وضع live).
+  webhookSubscribed     Boolean             @default(false)
+  tokenExpiresAt        DateTime?
+  lastSyncedAt          DateTime?
+  lastError             String?
+  metadataJson          Json?
+  // WHATSAPP_QR فقط: حالة اعتماد Baileys كاملة (creds + مفاتيح الإشارة) مُسلسَلة JSON عبر
+  // BufferJSON.replacer الخاصة بـBaileys ثم مشفّرة بـencryptSecret — تُغني عن useMultiFileAuthState
+  // الافتراضي (يكتب على القرص المحلي، لا ينجو من إعادة نشر/تشغيل نظيف لعملية العامل).
+  encryptedSessionData  String?             @db.Text
+  // WHATSAPP_QR فقط: تُضبط عند نجاح الاتصال فعلياً (connection: "open")، تقرأها مهمة الحذف
+  // التلقائي المتكررة في worker.ts لقطع الجلسة ومسح بياناتها بعد مدة التجربة الموحّدة.
+  qrTrialExpiresAt      DateTime?
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+
+  @@unique([tenantId, provider])
+}
+
+model WebhookLog {
+  id             String              @id @default(cuid())
+  tenantId       String?
+  tenant         Tenant?             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  provider       IntegrationProvider
+  eventType      String
+  payloadJson    Json
+  signatureValid Boolean
+  processedAt    DateTime?
+  errorMessage   String?
+  createdAt      DateTime            @default(now())
+
+  @@index([tenantId, provider])
+}
+
+// ========================= كتالوج ومزامنة الطلبات =========================
+
+model Product {
+  id             String              @id @default(cuid())
+  tenantId       String
+  tenant         Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  externalSource IntegrationProvider
+  externalId     String
+  name           String
+  priceSar       Int
+  stockQty       Int                 @default(0)
+  imageUrl       String?
+  updatedAt      DateTime            @updatedAt
+
+  @@unique([tenantId, externalSource, externalId])
+}
+
+enum OrderStatus {
+  ABANDONED_CART
+  PENDING
+  PAID
+  SHIPPED
+  DELIVERED
+  CANCELLED
+}
+
+model Order {
+  id                    String              @id @default(cuid())
+  tenantId              String
+  tenant                Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  contactId             String
+  contact               Contact             @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  externalSource        IntegrationProvider
+  externalId            String
+  status                OrderStatus
+  totalSar              Int
+  recoveryMessageSentAt DateTime? // لحملات استرداد السلة المتروكة الآلية — يمنع استهداف نفس الطلب مرتين
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+
+  attributedCampaignRecipients CampaignRecipient[]
+
+  @@unique([tenantId, externalSource, externalId])
+  @@index([tenantId, status])
+}
+
+// ========================= سجل التدقيق =========================
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  tenantId   String?
+  tenant     Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id])
+  action     String // e.g. "template.reject", "user.role_change", "contact.delete"
+  targetType String
+  targetId   String?
+  metaJson   Json?
+  createdAt  DateTime @default(now())
+
+  @@index([tenantId, createdAt])
+}
+
+// ========================= إعدادات المنصة العامة (Global Settings — صف وحيد) =========================
+
+// ========================= رسائل نموذج "تواصل معنا" في الموقع التسويقي العام =========================
+
+// Lead تسويقي عام (زائر الموقع، وليس عميل تاجر) — منفصل تماماً عن Contact الخاص بكل تاجر، لأن هذا
+// يخص المنصة نفسها كمنتج، وليس عملاء أي تينانت. لا tenantId (جدول عام غير خاضع لـRLS، مثل PlatformAnnouncement).
+enum ContactMessageStatus {
+  NEW
+  FOLLOWED_UP // تم التواصل، بانتظار نتيجة
+  CONVERTED // تحوَّلت لتاجر فعلي عبر "تحويل إلى تاجر جديد"
+  CLOSED // أُغلقت بلا تحويل (لم يعد مهتماً، غير مؤهَّل، إلخ)
+}
+
+model ContactMessage {
+  id                String               @id @default(cuid())
+  name              String
+  email             String
+  phone             String
+  activityType      String
+  // نوع الاستفسار (مبيعات/دعم فني/شراكة/اقتراح/أخرى) — يُدرَج في عنوان بريد الإشعار لتسهيل
+  // التوجيه السريع لفريق الدعم المناسب دون فتح كل رسالة لمعرفة موضوعها أولاً.
+  inquiryType       String               @default("عام")
+  message           String
+  handledAt         DateTime? // يُعلَّم يدوياً من فريق المنصة بعد المتابعة الفعلية مع صاحب الرسالة — يبقى
+  // للتوافق العكسي، status أدناه هو المصدر الأدق لحالة المتابعة الآن.
+  status            ContactMessageStatus @default(NEW)
+  assignedToUserId  String?
+  assignedTo        User?                @relation(fields: [assignedToUserId], references: [id], onDelete: SetNull)
+  convertedTenantId String? // مُعبَّأ عند "تحويل إلى تاجر جديد" — مرجع فقط، بلا علاقة قسرية
+  createdAt         DateTime             @default(now())
+
+  @@index([createdAt])
+  @@index([status])
+}
+
+model PlatformSettings {
+  // صف وحيد ثابت المعرّف — لا يوجد أكثر من إعداد عام واحد للمنصة بأكملها.
+  id                     String   @id @default("singleton")
+  integrationsMode       String   @default("sandbox") // "sandbox" | "live" — يتحكم فعلياً في كل adapters التكامل
+  maintenanceMode        Boolean  @default(false)
+  maintenanceMessage     String?
+  supportEmail           String   @default("support@platform.sa")
+  supportPhone           String?
+  defaultTrialDays       Int      @default(14)
+  termsVersion           String?
+  // نسبة ضريبة القيمة المضافة الافتراضية بنقاط أساس (1500 = 15%) — المصدر المركزي الوحيد الذي يجب
+  // أن تُقرأ منه كل حسابات الضريبة في وحدة الفوترة، بدل ثابت منفصل مكرَّر في كود الفوترة.
+  vatRateBps             Int      @default(1500)
+  defaultCurrency        String   @default("SAR")
+  // إعدادات تطبيق Meta على مستوى المنصة (Embedded Signup لكل التجار) — تُفضَّل هذه القيم على متغيرات
+  // البيئة عند توفرها فعلياً (انظر lib/integrations/meta/adapter.ts)، وتبقى متغيرات البيئة احتياطاً
+  // دفاعياً فقط. السر مشفَّر بنفس آلية encryptSecret المستخدمة لتوكنات التكاملات الأخرى.
+  metaAppId              String?
+  encryptedMetaAppSecret String?
+  // اسم مزوّد البريد/SMS الفعلي المُهيَّأ — "console" يعني عدم وجود مزوّد حقيقي بعد (طباعة في سجل
+  // الخادم فقط، نفس القيد الموثَّق سابقاً في lib/email/send.ts). حقل معلوماتي/تحضيري بحت حتى يُربَط
+  // مزوّد حقيقي فعلياً — لا يُغيّر السلوك الفعلي وحده.
+  emailProviderName      String   @default("console")
+  smsProviderName        String   @default("none")
+  // بيانات "البائع" (منصة DMS نفسها) المطلوبة على كل فاتورة ضريبية متوافقة مع متطلبات هيئة الزكاة
+  // والضريبة والجمارك (ZATCA المرحلة الأولى) — رقم ضريبي مركزي واحد يظهر على كل فاتورة/رمز QR،
+  // بدل نص ثابت متكرر داخل كود توليد PDF.
+  sellerLegalName        String   @default("DMS — Digital Messaging System")
+  sellerVatNumber        String?
+  sellerAddress          String?
+  // مزوّد الذكاء الاصطناعي لعقدة "رد ذكي" (الموظف الذكي) — مفتاح واحد على مستوى المنصة لكل التجار
+  // (وليس لكل تاجر مفتاحه الخاص، قرار موثَّق في DECISIONS.md)، بنفس نمط تشفير encryptedMetaAppSecret
+  // تماماً. متغير البيئة OPENAI_API_KEY يبقى احتياطاً دفاعياً فقط إن لم يُضبَط من اللوحة بعد.
+  encryptedOpenAiApiKey  String?
+  aiModel                String   @default("gpt-4o-mini")
+  updatedAt              DateTime @updatedAt
+}
+
+// ========================= محتوى الصفحة الرئيسية للموقع التسويقي (قابل للتعديل من admin/content) =========================
+
+// صف وحيد ثابت المعرّف (نفس نمط PlatformSettings) — يتحكم فيه مالك المنصة عبر لوحة "محتوى الموقع"
+// بدل تعديل الكود مباشرة. مقصور على الصفحة الرئيسية فقط حالياً (قرار نطاق موثَّق في DECISIONS.md)؛
+// القوائم (features/stats/testimonials/clientLogos) مخزَّنة كـJson بنفس نمط Plan.features.
+model SiteContent {
+  id                  String   @id @default("singleton")
+  heroHeadline        String
+  heroSubheadline     String
+  heroCtaPrimary      String
+  heroCtaSecondary    String
+  featuresHeading     String
+  features            Json // [{ title, body }] — الأيقونات ثابتة بالكود بترتيبها الحالي، غير قابلة للتعديل هنا
+  stats               Json // [{ value, label }] — القسم بلا عنوان في التصميم الحالي
+  testimonialsHeading String
+  testimonials        Json // [{ name, role, quote }]
+  clientsHeading      String
+  clientsSubtext      String
+  clientLogos         Json // [{ name, imageUrl? }] — imageUrl فارغ = يبقى badge نصي كما في اللوحة الافتراضية
+  contactHeading      String
+  contactBody         String
+  contactCtaLabel     String
+  // توسيع الـCMS ليشمل /about و/services (بند ل في برومنت التدقيق الشامل) — نفس نمط الحقول أعلاه
+  // تماماً. أيقونات صفحة الخدمات الخمس ثابتة بالكود بترتيبها (مطابقةً لقرار features أعلاه)؛
+  // servicesItems يحمل فقط النصوص (title/body/points) بنفس الطول والترتيب لتُقرَن بالأيقونة الصحيحة.
+  aboutHeading        String   @default("من نحن")
+  aboutParagraphs     Json // string[]
+  servicesHeading     String   @default("خدماتنا")
+  servicesSubheading  String   @default("كل ما تحتاجه لإدارة تواصلك مع عملائك عبر واتساب، في منصة واحدة.")
+  servicesItems       Json // [{ title, body, points: string[] }] — 5 عناصر بنفس ترتيب الأيقونات الثابتة
+  updatedAt           DateTime @updatedAt
+}
+
+// ========================= برنامج التسويق بالعمولة (Affiliates) =========================
+// نظام منفصل تماماً عن "الشركاء" (partners/*) — ذلك نظام تجّار يقدّمون طلب انضمام لأنفسهم كعملاء.
+// هذا نظام أطراف ثالثة (منشئو محتوى/وكالات/مستشارون) يُحيلون تجّاراً آخرين مقابل عمولة متكررة فعلية
+// من كل فاتورة مدفوعة للتاجر المُحال، لمدة 12 شهراً من تاريخ التحويل. راجع DECISIONS.md للتفاصيل.
+
+enum AffiliateStatus {
+  PENDING // بانتظار مراجعة مالك المنصة (نفس نمط ApprovalRequest)
+  ACTIVE
+  SUSPENDED
+  REJECTED
+}
+
+// النسبة الفعلية تُشتق من هذا الحقل عبر lib/affiliates/tiers.ts (مصدر واحد للنسب)، وليست مكرَّرة هنا.
+enum AffiliateTier {
+  STARTER // شريك (المستوى الافتراضي) — 20%
+  GROWTH // شريك نمو — 25%
+  ELITE // شريك نخبة — 30%
+}
+
+enum CommissionStatus {
+  PENDING // الفاتورة الأصل دُفعت فعلياً، لكن لم تمرّ 30 يوماً بعد (فترة حجز Net 30)
+  APPROVED // تجاوزت فترة الحجز — جاهزة للسحب ضمن أي دفعة صرف قادمة
+  PAID // ضُمَّت فعلياً لدفعة صرف مكتملة
+  REVERSED // الفاتورة الأصل استُردَّت/أُلغيت بعد إنشاء العمولة — لا تُصرف أبداً
+}
+
+enum PayoutStatus {
+  PENDING
+  PROCESSING
+  PAID
+  FAILED
+}
+
+model Affiliate {
+  id                String          @id @default(cuid())
+  name              String
+  email             String          @unique
+  passwordHash      String
+  phone             String?
+  status            AffiliateStatus @default(PENDING)
+  tier              AffiliateTier   @default(STARTER)
+  // كود إحالة فريد يظهر في رابط الإحالة (?ref=CODE) — يُنشأ تلقائياً عند التقديم، غير قابل للتعديل
+  // لاحقاً (يكسر أي روابط منشورة فعلياً لدى المسوّق).
+  referralCode      String          @unique
+  // كيف ينوي المتقدّم الترويج للمنصة — يُملأ وقت التقديم، يساعد في المراجعة اليدوية.
+  promotionPlan     String?
+  payoutMethod      String? // وصف نصي حر لطريقة الصرف (تحويل بنكي/محفظة) — Sandbox حالياً، لا بيانات حساس حقيقية
+  payoutDetailsJson Json?
+  rejectionReason   String?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  referrals   Referral[]
+  commissions Commission[]
+  payouts     Payout[]
+
+  @@index([status])
+}
+
+model Referral {
+  id          String    @id @default(cuid())
+  affiliateId String
+  affiliate   Affiliate @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
+  // تاجر واحد يُنسَب لمسوّق واحد فقط على الإطلاق (أول لمسة تفوز) — لذلك فريد.
+  tenantId    String    @unique
+  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  // وقت أول زيارة لرابط الإحالة (ضبط كوكي dms_ref) — قد يسبق convertedAt بأيام ضمن نافذة الـ90 يوماً.
+  clickedAt   DateTime  @default(now())
+  // وقت إنشاء التينانت فعلياً (نهاية نافذة الإحالة الفعلية) — يُستخدم كنقطة بداية حساب نافذة الـ12 شهراً.
+  convertedAt DateTime  @default(now())
+  createdAt   DateTime  @default(now())
+
+  commissions Commission[]
+
+  @@index([affiliateId])
+}
+
+model Commission {
+  id          String           @id @default(cuid())
+  affiliateId String
+  affiliate   Affiliate        @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
+  referralId  String
+  referral    Referral         @relation(fields: [referralId], references: [id], onDelete: Cascade)
+  // فاتورة واحدة تُنتج عمولة واحدة كحد أقصى (idempotency طبيعي عبر قيد فريد بدل فحص برمجي فقط).
+  invoiceId   String           @unique
+  invoice     Invoice          @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  amountSar   Int // = invoice.amountSar × ratePercent ÷ 100، مُقرَّب لأقرب ريال
+  // نسبة العمولة وقت إنشائها (لقطة من مستوى المسوّق حينها) — ترقية/تخفيض مستوى المسوّق لاحقاً لا
+  // يُعيد حساب عمولات ماضية بأثر رجعي أبداً.
+  ratePercent Int
+  status      CommissionStatus @default(PENDING)
+  // = invoice.paidAt + 30 يوماً (Net 30) — لحظة تأهّل العمولة للانتقال من PENDING إلى APPROVED.
+  eligibleAt  DateTime
+  payoutId    String?
+  payout      Payout?          @relation(fields: [payoutId], references: [id])
+  createdAt   DateTime         @default(now())
+
+  @@index([affiliateId, status])
+}
+
+model Payout {
+  id          String       @id @default(cuid())
+  affiliateId String
+  affiliate   Affiliate    @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
+  amountSar   Int
+  status      PayoutStatus @default(PENDING)
+  method      String?
+  reference   String? // مرجع التحويل البنكي بعد الصرف الفعلي
+  requestedAt DateTime     @default(now())
+  paidAt      DateTime?
+
+  commissions Commission[]
+
+  @@index([affiliateId, status])
+}
