@@ -56,17 +56,18 @@ export default async function HomePage() {
           <Reveal>
             <h2 className="text-center text-2xl font-bold text-slate-900 sm:text-3xl dark:text-white">{content.featuresHeading}</h2>
           </Reveal>
-          <div className="mt-10 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="mt-10 grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-4">
             {content.features.map((f, i) => {
               const Icon = FEATURE_ICONS[i % FEATURE_ICONS.length]!;
+              const wide = i === content.features.length - 1 && content.features.length % 2 === 1;
               return (
-                <Reveal key={f.title} delay={i * 100}>
-                  <div className="h-full rounded-2xl border border-slate-200 bg-white p-6 shadow-card transition hover:-translate-y-1 hover:shadow-lg dark:border-white/10 dark:bg-slate-900">
-                    <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-wa-50 text-wa-600 dark:bg-wa-500/10 dark:text-wa-400">
-                      <Icon className="h-6 w-6" />
+                <Reveal key={f.title} delay={i * 100} className={wide ? "col-span-2" : ""}>
+                  <div className="h-full rounded-2xl border border-slate-200 bg-white p-3.5 shadow-card transition hover:-translate-y-1 hover:shadow-lg sm:p-6 dark:border-white/10 dark:bg-slate-900">
+                    <div className="mb-2.5 flex h-10 w-10 items-center justify-center rounded-xl bg-wa-50 text-wa-600 sm:mb-3 sm:h-12 sm:w-12 dark:bg-wa-500/10 dark:text-wa-400">
+                      <Icon className="h-5 w-5 sm:h-6 sm:w-6" />
                     </div>
-                    <h3 className="mb-1.5 font-semibold text-slate-900 dark:text-white">{f.title}</h3>
-                    <p className="text-sm text-slate-500 dark:text-slate-400">{f.body}</p>
+                    <h3 className="mb-1 text-sm font-semibold text-slate-900 sm:mb-1.5 sm:text-base dark:text-white">{f.title}</h3>
+                    <p className="text-xs text-slate-500 sm:text-sm dark:text-slate-400">{f.body}</p>
                   </div>
                 </Reveal>
               );
@@ -101,13 +102,13 @@ export default async function HomePage() {
           <Reveal>
             <h2 className="text-center text-2xl font-bold text-slate-900 sm:text-3xl dark:text-white">{content.testimonialsHeading}</h2>
           </Reveal>
-          <div className="mt-10 grid grid-cols-1 gap-5 sm:grid-cols-3">
+          <div className="mt-10 grid grid-cols-3 gap-2.5 sm:gap-5">
             {content.testimonials.map((t, i) => (
               <Reveal key={t.name} delay={i * 100}>
-                <div className="h-full rounded-2xl border border-slate-200 bg-white p-6 shadow-card dark:border-white/10 dark:bg-slate-900">
-                  <p className="mb-4 text-sm leading-relaxed text-slate-600 dark:text-slate-300">"{t.quote}"</p>
-                  <p className="text-sm font-semibold text-slate-900 dark:text-white">{t.name}</p>
-                  <p className="text-xs text-slate-400">{t.role}</p>
+                <div className="h-full rounded-2xl border border-slate-200 bg-white p-3 shadow-card sm:p-6 dark:border-white/10 dark:bg-slate-900">
+                  <p className="mb-2.5 text-[11px] leading-relaxed text-slate-600 sm:mb-4 sm:text-sm dark:text-slate-300">"{t.quote}"</p>
+                  <p className="text-xs font-semibold text-slate-900 sm:text-sm dark:text-white">{t.name}</p>
+                  <p className="text-[10px] text-slate-400 sm:text-xs">{t.role}</p>
                 </div>
               </Reveal>
             ))}

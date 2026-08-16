@@ -4,10 +4,13 @@
 
 @layer base {
   html {
-    @apply scroll-smooth;
+    @apply scroll-smooth overflow-x-hidden;
   }
   body {
-    @apply bg-navy-900 text-slate-100 font-arabic antialiased;
+    /* overflow-x-hidden دفاعي: أي تجاوز أفقي ولو بكسر واحد (من فروقات رسم خط عربي على أجهزة حقيقية
+       لا تظهر في محاكاة headless) كان يكشف خلفية body الداكنة (bg-navy-900) خلف صفحات التسويق
+       البيضاء كشريط أسود ثابت على حافة الشاشة يتحرك مع التمرير — اكتُشف فعلياً على جوال حقيقي. */
+    @apply bg-navy-900 text-slate-100 font-arabic antialiased overflow-x-hidden;
   }
   ::selection {
     @apply bg-accent-500/30 text-white;
