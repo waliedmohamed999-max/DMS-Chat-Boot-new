@@ -5,12 +5,21 @@ declare global {
   var __prisma: PrismaClient | undefined;
 }
 
+// Prisma يتحقق من صيغة DATABASE_URL/directUrl فوراً وقت إنشاء PrismaClient (وليس عند أول استعلام)
+// — لو متغيّر البيئة غائب تماماً (مثال: نشر على Vercel قبل ضبط متغيّرات البيئة)، `new PrismaClient()`
+// نفسها ترمي استثناءً فوراً. بما أن هذا الملف يُستورَد في كل مسار API تقريباً، كان هذا يكسر خطوة
+// "جمع بيانات الصفحة" في `next build` بالكامل لأي مسار — فشل بناء شامل بدل فشل تشغيلي محدود لصفحات
+// تحتاج قاعدة بيانات فعلاً. القيمة الاحتياطية هنا صالحة الصيغة فقط (لن تتصل أبداً)، فتسمح بنجاح
+// البناء دائماً؛ الاتصال الفعلي وقت التشغيل يبقى يعتمد على القيمة الحقيقية إن كانت مضبوطة صحيحاً.
+const FALLBACK_DB_URL = "postgresql://placeholder:placeholder@localhost:5432/placeholder?schema=public";
+
 // نستخدم عميل Prisma "خام" هنا فقط لتنفيذ withTenant وsuperAdminDb.
 // أي كود عمل (business logic) يجب أن يستدعي withTenant() وليس هذا العميل مباشرة،
 // إلا داخل lib/tenant/scoped-*.ts نفسها.
 export const rawDb: PrismaClient =
   global.__prisma ??
   new PrismaClient({
+    datasources: { db: { url: process.env.DATABASE_URL || FALLBACK_DB_URL } },
     log: process.env.NODE_ENV === "development" ? ["warn", "error"] : ["error"],
   });
 
@@ -63,7 +72,7 @@ declare global {
 export const superAdminDb: PrismaClient =
   global.__prismaSuperAdmin ??
   new PrismaClient({
-    datasources: { db: { url: process.env.SUPER_ADMIN_DATABASE_URL } },
+    datasources: { db: { url: process.env.SUPER_ADMIN_DATABASE_URL || FALLBACK_DB_URL } },
     log: process.env.NODE_ENV === "development" ? ["warn", "error"] : ["error"],
   });
 
