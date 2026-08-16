@@ -18,7 +18,7 @@ export default async function PartnersApplyPage() {
         { icon: "📝", text: "طلب انضمام بسيط بخطوات واضحة" },
         { icon: "⏱️", text: "مراجعة سريعة من فريقنا" },
         { icon: "🧩", text: "باقات حقيقية تناسب حجم نشاطك" },
-        { icon: "🔐", text: "رابط آمن لإعداد حسابك بعد الموافقة" },
+        { icon: "🔐", text: "حدّد كلمة مرور حسابك مباشرة، وسجّل الدخول فور الموافقة" },
       ]}
     >
       <div className="mx-auto flex w-full max-w-lg flex-col items-center">

@@ -2,6 +2,7 @@
 
 import { headers } from "next/headers";
 import { z } from "zod";
+import bcrypt from "bcryptjs";
 import { superAdminDb, rawDb } from "@/lib/db";
 import { checkTenantRateLimit } from "@/lib/rateLimit";
 import { sendEmail } from "@/lib/email/send";
@@ -15,6 +16,7 @@ const applySchema = z.object({
   email: z.string().email("بريد إلكتروني غير صالح"),
   phone: z.string().min(8, "رقم هاتف غير صالح"),
   city: z.string().min(2, "المدينة مطلوبة"),
+  password: z.string().min(8, "كلمة المرور يجب أن تكون 8 أحرف على الأقل"),
   planKey: z.string().min(1, "اختر باقة"),
   termsAccepted: z.string().optional(),
   formRenderedAt: z.string().optional(),
@@ -87,6 +89,12 @@ export async function submitPartnerApplication(formData: FormData): Promise<Subm
   // إطلاقاً) — يُخزَّن في payloadJson ليُستخدَم عند إنشاء التينانت الفعلي في approvePartnerApplication.
   const referralAffiliateId = await resolveReferralAffiliateId();
 
+  // كلمة المرور تُجزَّأ (bcrypt) فوراً هنا ولا تُخزَّن أبداً بنصها الخام في أي مكان (لا في payloadJson
+  // ولا في سجل التدقيق ولا في بريد التأكيد) — نفس معيار تخزين User.passwordHash نفسه. يُستخدَم الهاش
+  // مباشرة كـpasswordHash الحقيقي للحساب عند إنشائه فعلياً في approvePartnerApplication، بدل كلمة
+  // مرور عشوائية غير قابلة للاستخدام ورابط إعداد حساب منفصل بالبريد (كان يتطلب خطوة إضافية للتاجر).
+  const passwordHash = await bcrypt.hash(data.password, 10);
+
   const request = await superAdminDb.approvalRequest.create({
     data: {
       type: "PARTNER_APPLICATION",
@@ -98,6 +106,7 @@ export async function submitPartnerApplication(formData: FormData): Promise<Subm
         ownerName: data.ownerName,
         phone: data.phone,
         city: data.city,
+        passwordHash,
         requestedPlanKey: plan.key,
         requestedPlanName: plan.name,
         termsAcceptedAt: new Date().toISOString(),

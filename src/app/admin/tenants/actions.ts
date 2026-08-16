@@ -185,6 +185,33 @@ export async function toggleMerchantUserActive(tenantId: string, userId: string,
   revalidatePath(`/admin/tenants/${tenantId}`);
 }
 
+/**
+ * تغيير كلمة مرور مستخدم تاجر مباشرة من لوحة مالك المنصة — للحالات اللي التاجر ما يقدرش يوصل
+ * لحسابه (نسي كلمة المرور، ما استلمش/ضاع رابط إعداد الحساب الأول). صلاحية مقصورة على SUPER_ADMIN
+ * فقط (نفس تقييد platform.merchants.impersonate) لأنها أخطر من الانتحال المؤقت: تغيير دائم لبيانات
+ * الدخول الفعلية يبقى بعد انتهاء أي جلسة، بعكس جلسة الانتحال المؤقتة (30 دقيقة) المُنهية تلقائياً.
+ * لا تُسجَّل كلمة المرور الجديدة نفسها في سجل التدقيق — فقط حدث التغيير ومنفّذه.
+ */
+export async function resetMerchantPassword(tenantId: string, userId: string, newPassword: string) {
+  const session = await requireSuperAdminSession();
+  requirePermission(session.user.role, "platform.merchants.reset_password");
+
+  if (newPassword.length < 8) throw new Error("كلمة المرور يجب أن تكون 8 أحرف على الأقل");
+
+  const user = await superAdminDb.user.findUniqueOrThrow({ where: { id: userId, tenantId } });
+  const passwordHash = await bcrypt.hash(newPassword, 10);
+  await superAdminDb.user.update({ where: { id: userId }, data: { passwordHash } });
+
+  await superAdminDb.auditLog.create({
+    data: {
+      userId: session.user.id, action: "platform.merchant_password_reset",
+      targetType: "User", targetId: userId, metaJson: { tenantId, targetEmail: user.email },
+    },
+  });
+
+  revalidatePath(`/admin/tenants/${tenantId}`);
+}
+
 export async function addMerchantNote(tenantId: string, formData: FormData) {
   const session = await requireSuperAdminSession();
   requirePermission(session.user.role, "platform.merchants.notes");

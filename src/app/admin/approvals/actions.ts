@@ -9,7 +9,12 @@ import { superAdminDb } from "@/lib/db";
 import { slugify } from "@/lib/slug";
 import { getPlatformSettings } from "@/lib/platformSettings";
 import { sendEmail } from "@/lib/email/send";
-import { partnerApplicationApprovedEmail, partnerApplicationRejectedEmail, partnerApplicationNeedsInfoEmail } from "@/lib/email/partnerTemplates";
+import {
+  partnerApplicationApprovedEmail,
+  partnerApplicationApprovedReadyEmail,
+  partnerApplicationRejectedEmail,
+  partnerApplicationNeedsInfoEmail,
+} from "@/lib/email/partnerTemplates";
 import { getVatRateBps, computeVatAmount } from "@/lib/billing/vat";
 import { postInvoicePaymentEntry } from "@/lib/accounting/postings";
 
@@ -26,6 +31,10 @@ type PartnerApplicationPayload = {
   requestedPlanKey: string;
   requestedPlanName: string;
   termsAcceptedAt: string;
+  // هاش كلمة المرور التي حدَّدها المتقدّم بنفسه وقت التقديم (partners/apply) — إن وُجد، يُستخدَم
+  // مباشرة كـpasswordHash الحقيقي هنا بدل كلمة مرور عشوائية + رابط إعداد بالبريد. طلبات قديمة قُدِّمت
+  // قبل إضافة هذا الحقل لن تحمله — يبقى المسار الاحتياطي (رابط الإعداد) يعمل لها كما كان.
+  passwordHash?: string;
   // مسوّق الإحالة (إن وُجد) — قُرئ من كوكي المتقدّم وقت التقديم نفسه (partners/apply/actions.ts)،
   // وليس الآن (متصفح مالك المنصة لا يحمل كوكي إحالة المتقدّم إطلاقاً).
   referralAffiliateId?: string;
@@ -54,6 +63,10 @@ export async function approvePartnerApplication(requestId: string) {
   const slugTaken = await superAdminDb.tenant.findUnique({ where: { slug } });
   if (slugTaken) slug = `${slug}-${Math.random().toString(36).slice(2, 6)}`;
 
+  // طلبات حديثة تحمل كلمة مرور حدَّدها المتقدّم بنفسه وقت التقديم — تُستخدَم مباشرة، فلا حاجة لرابط
+  // إعداد حساب بالبريد. طلبات قديمة (قبل إضافة هذا الحقل) بلا passwordHash تبقى على المسار الاحتياطي
+  // الأصلي: كلمة مرور عشوائية غير قابلة للاستخدام + رابط إعداد آمن (صلاحية 7 أيام).
+  const hasOwnPassword = Boolean(payload.passwordHash);
   const rawSetupToken = crypto.randomBytes(32).toString("hex");
   const setupTokenHash = crypto.createHash("sha256").update(rawSetupToken).digest("hex");
   const setupExpiresAt = new Date(Date.now() + 7 * 24 * 3600 * 1000);
@@ -65,11 +78,9 @@ export async function approvePartnerApplication(requestId: string) {
       await tx.referral.create({ data: { affiliateId: payload.referralAffiliateId, tenantId: tenant.id } });
     }
 
-    // كلمة مرور عشوائية غير قابلة للاستخدام أبداً ولا تُبلَّغ لأحد — الحساب لا يصبح قابلاً لتسجيل
-    // الدخول إلا بعد إكمال المتقدّم لرابط إعداد الحساب (partners/setup/[token]) وتحديد كلمة مرور حقيقية.
-    const placeholderHash = await bcrypt.hash(crypto.randomBytes(32).toString("hex"), 10);
+    const passwordHash = hasOwnPassword ? payload.passwordHash! : await bcrypt.hash(crypto.randomBytes(32).toString("hex"), 10);
     const owner = await tx.user.create({
-      data: { tenantId: tenant.id, name: payload.ownerName, email: request.applicantEmail!.toLowerCase(), passwordHash: placeholderHash, role: "OWNER" },
+      data: { tenantId: tenant.id, name: payload.ownerName, email: request.applicantEmail!.toLowerCase(), passwordHash, role: "OWNER" },
     });
 
     await tx.subscription.create({
@@ -83,7 +94,9 @@ export async function approvePartnerApplication(requestId: string) {
       await tx.integration.create({ data: { tenantId: tenant.id, provider, status: "DISCONNECTED", isSandbox: true } });
     }
 
-    await tx.accountSetupToken.create({ data: { userId: owner.id, tokenHash: setupTokenHash, expiresAt: setupExpiresAt } });
+    if (!hasOwnPassword) {
+      await tx.accountSetupToken.create({ data: { userId: owner.id, tokenHash: setupTokenHash, expiresAt: setupExpiresAt } });
+    }
 
     await tx.approvalRequest.update({
       where: { id: requestId },
@@ -100,7 +113,11 @@ export async function approvePartnerApplication(requestId: string) {
     },
   });
 
-  await sendEmail(partnerApplicationApprovedEmail({ to: request.applicantEmail, ownerName: payload.ownerName, setupToken: rawSetupToken }));
+  if (hasOwnPassword) {
+    await sendEmail(partnerApplicationApprovedReadyEmail({ to: request.applicantEmail, ownerName: payload.ownerName }));
+  } else {
+    await sendEmail(partnerApplicationApprovedEmail({ to: request.applicantEmail, ownerName: payload.ownerName, setupToken: rawSetupToken }));
+  }
 
   revalidatePath("/admin/approvals");
   revalidatePath("/admin/tenants");

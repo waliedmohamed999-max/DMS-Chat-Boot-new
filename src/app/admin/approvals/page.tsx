@@ -19,16 +19,22 @@ export default async function ApprovalsCenterPage() {
     orderBy: { createdAt: "asc" },
   });
 
-  const serialized = requests.map((r) => ({
-    id: r.id,
-    type: r.type as "NEW_TENANT" | "CUSTOM_PLAN" | "WHATSAPP_VERIFICATION" | "MESSAGE_TEMPLATE" | "PARTNER_APPLICATION",
-    status: r.status as "PENDING" | "NEEDS_INFO",
-    payloadJson: r.payloadJson,
-    applicantEmail: r.applicantEmail,
-    reviewerNote: r.reviewerNote,
-    createdAt: r.createdAt.toISOString(),
-    tenant: r.tenant,
-  }));
+  const serialized = requests.map((r) => {
+    // passwordHash (طلبات PARTNER_APPLICATION الحديثة) لا يُعرَض أبداً في الواجهة — يُنزَع هنا قبل
+    // إرسال الـpayload للعميل، دفاع إضافي رخيص رغم أن bcrypt hash نفسه غير قابل للعكس أصلاً.
+    const payload = r.payloadJson as Record<string, unknown> | null;
+    const { passwordHash: _passwordHash, ...safePayload } = payload ?? {};
+    return {
+      id: r.id,
+      type: r.type as "NEW_TENANT" | "CUSTOM_PLAN" | "WHATSAPP_VERIFICATION" | "MESSAGE_TEMPLATE" | "PARTNER_APPLICATION",
+      status: r.status as "PENDING" | "NEEDS_INFO",
+      payloadJson: safePayload,
+      applicantEmail: r.applicantEmail,
+      reviewerNote: r.reviewerNote,
+      createdAt: r.createdAt.toISOString(),
+      tenant: r.tenant,
+    };
+  });
 
   return (
     <div className="space-y-6">

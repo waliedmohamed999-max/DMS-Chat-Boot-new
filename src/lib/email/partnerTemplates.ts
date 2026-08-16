@@ -31,6 +31,17 @@ export function partnerApplicationApprovedEmail(input: { to: string; ownerName: 
   };
 }
 
+/** لطلبات حدَّد فيها المتقدّم كلمة مرور بنفسه وقت التقديم — لا رابط إعداد، الحساب جاهز للدخول فوراً. */
+export function partnerApplicationApprovedReadyEmail(input: { to: string; ownerName: string }): EmailInput {
+  const loginUrl = `${baseUrl()}/login`;
+  return {
+    to: input.to,
+    subject: "تم قبول طلب انضمامك! يمكنك تسجيل الدخول الآن",
+    text: `مرحباً ${input.ownerName}،\n\nأخبار رائعة — تم قبول طلب انضمامك لمنصة DMS!\n\nحسابك جاهز الآن، سجّل الدخول بالبريد الإلكتروني وكلمة المرور اللتين حدَّدتهما عند التقديم:\n${loginUrl}`,
+    html: `<p>مرحباً ${escapeHtml(input.ownerName)}،</p><p>أخبار رائعة — تم قبول طلب انضمامك لمنصة DMS!</p><p>حسابك جاهز الآن، سجّل الدخول بالبريد الإلكتروني وكلمة المرور اللتين حدَّدتهما عند التقديم:</p><p><a href="${loginUrl}">${loginUrl}</a></p>`,
+  };
+}
+
 export function partnerApplicationRejectedEmail(input: { to: string; ownerName: string; reason: string }): EmailInput {
   return {
     to: input.to,

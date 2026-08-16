@@ -27,6 +27,7 @@ export type Permission =
   | "platform.merchants.change_plan"
   | "platform.merchants.impersonate"
   | "platform.merchants.notes"
+  | "platform.merchants.reset_password"
   | "platform.plans.manage"
   | "platform.health.view"
   | "platform.announcements.send"
@@ -49,6 +50,7 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     "platform.merchants.change_plan",
     "platform.merchants.impersonate",
     "platform.merchants.notes",
+    "platform.merchants.reset_password",
     "platform.plans.manage",
     "platform.health.view",
     "platform.announcements.send",
@@ -161,6 +163,7 @@ export const PLATFORM_PERMISSION_LABELS_AR: Partial<Record<Permission, string>> 
   "platform.merchants.change_plan": "تغيير باقة تاجر",
   "platform.merchants.impersonate": "انتحال هوية تاجر (دعم فني)",
   "platform.merchants.notes": "إضافة ملاحظات داخلية على تاجر",
+  "platform.merchants.reset_password": "تغيير كلمة مرور حساب تاجر مباشرة",
   "platform.plans.manage": "إدارة حدود الباقات",
   "platform.health.view": "عرض صحة المنصة",
   "platform.announcements.send": "إرسال إعلانات للتجار",

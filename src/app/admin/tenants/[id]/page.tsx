@@ -6,6 +6,7 @@ import { superAdminDb } from "@/lib/db";
 import { PROVIDER_LABELS_AR } from "@/lib/integrations/registry";
 import { DEFAULT_STARTER_CHATBOT_LIMITS, type ChatbotLimits } from "@/lib/planLimits";
 import { DeleteTenantButton } from "@/components/admin/DeleteTenantButton";
+import { ResetMerchantPasswordButton } from "@/components/admin/ResetMerchantPasswordButton";
 import { TENANT_STATUS_LABELS_AR, TENANT_STATUS_BADGE_CLASS } from "@/lib/tenantStatus";
 import { CORE_PROVIDERS, getIntegrationWebhookHealth } from "@/lib/integrationHealth";
 import {
@@ -13,7 +14,10 @@ import {
   changeTenantPlan,
   addMerchantNote,
   startImpersonationAction,
+  toggleMerchantUserActive,
 } from "../actions";
+
+const USER_ROLE_LABELS_AR: Record<string, string> = { OWNER: "مالك", ADMIN: "مدير", AGENT: "موظف" };
 
 const JOIN_SOURCE_LABELS_AR: Record<string, string> = {
   DIRECT_REGISTER: "تسجيل مباشر (نموذج التسجيل العام)",
@@ -39,6 +43,7 @@ export default async function TenantDetailPage({ params }: { params: { id: strin
   const canChangePlan = hasPermission(session.user.role, "platform.merchants.change_plan");
   const canImpersonate = hasPermission(session.user.role, "platform.merchants.impersonate");
   const canAddNotes = hasPermission(session.user.role, "platform.merchants.notes");
+  const canResetPassword = hasPermission(session.user.role, "platform.merchants.reset_password");
 
   const [tenant, plans, recentInvoices, joinRequest] = await Promise.all([
     superAdminDb.tenant.findUnique({
@@ -47,6 +52,7 @@ export default async function TenantDetailPage({ params }: { params: { id: strin
         subscription: { include: { plan: true } },
         integrations: true,
         merchantNotes: { include: { author: true }, orderBy: { createdAt: "desc" }, take: 20 },
+        users: { select: { id: true, name: true, email: true, role: true, isActive: true }, orderBy: { createdAt: "asc" } },
         _count: { select: { contacts: true, campaigns: true, chatbotFlows: true, users: true } },
       },
     }),
@@ -152,6 +158,34 @@ export default async function TenantDetailPage({ params }: { params: { id: strin
             <button type="submit" className="btn-secondary text-xs">تغيير الباقة يدوياً</button>
           </form>
         )}
+      </div>
+
+      <div className="card p-5">
+        <h2 className="mb-3 font-semibold text-white">حسابات فريق التاجر</h2>
+        <div className="space-y-2">
+          {tenant.users.length === 0 && <p className="text-sm text-slate-500">لا يوجد مستخدمون بعد.</p>}
+          {tenant.users.map((u) => (
+            <div key={u.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/5 p-3">
+              <div>
+                <p className="text-sm text-slate-200">
+                  {u.name} <span className="text-xs text-slate-500">· {USER_ROLE_LABELS_AR[u.role] ?? u.role}</span>
+                  {!u.isActive && <span className="badge bg-danger-500/10 text-danger-500 mr-2">معطَّل</span>}
+                </p>
+                <p className="text-xs text-slate-500" dir="ltr">{u.email}</p>
+              </div>
+              <div className="flex gap-2">
+                {canResetPassword && <ResetMerchantPasswordButton tenantId={tenant.id} userId={u.id} userEmail={u.email} />}
+                {canSuspend && (
+                  <form action={toggleMerchantUserActive.bind(null, tenant.id, u.id, !u.isActive)}>
+                    <button className={`btn-secondary text-xs ${u.isActive ? "text-danger-500" : "text-success-500"}`}>
+                      {u.isActive ? "تعطيل الحساب" : "تفعيل الحساب"}
+                    </button>
+                  </form>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
 
       <div className="card p-5">

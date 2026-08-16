@@ -26,6 +26,8 @@ type FormState = {
   email: string;
   phone: string;
   city: string;
+  password: string;
+  confirmPassword: string;
   planKey: string;
   termsAccepted: boolean;
   website: string; // حقل فخّ (honeypot) — يجب أن يبقى فارغاً؛ أي قيمة هنا تدل على تعبئة آلية (بوت)
@@ -38,6 +40,7 @@ export function PartnersApplyWizard({ plans }: { plans: PublicPlan[] }) {
   const [step, setStep] = useState(0);
   const [form, setForm] = useState<FormState>({
     activityType: "", storeName: "", ownerName: "", email: "", phone: "", city: "",
+    password: "", confirmPassword: "",
     planKey: plans[0]?.key ?? "", termsAccepted: false, website: "",
   });
   const [error, setError] = useState<string | null>(null);
@@ -56,6 +59,8 @@ export function PartnersApplyWizard({ plans }: { plans: PublicPlan[] }) {
       if (!/^\S+@\S+\.\S+$/.test(form.email)) return "بريد إلكتروني غير صالح";
       if (form.phone.trim().length < 8) return "رقم هاتف غير صالح";
       if (!form.city.trim()) return "المدينة مطلوبة";
+      if (form.password.length < 8) return "كلمة المرور يجب أن تكون 8 أحرف على الأقل";
+      if (form.password !== form.confirmPassword) return "كلمتا المرور غير متطابقتين";
     }
     if (step === 2 && !form.planKey) return "اختر باقة للمتابعة";
     if (step === 3 && !form.termsAccepted) return "يجب الموافقة على الشروط والأحكام";
@@ -92,6 +97,7 @@ export function PartnersApplyWizard({ plans }: { plans: PublicPlan[] }) {
       fd.set("email", form.email);
       fd.set("phone", form.phone);
       fd.set("city", form.city);
+      fd.set("password", form.password);
       fd.set("planKey", form.planKey);
       fd.set("termsAccepted", form.termsAccepted ? "on" : "");
       fd.set("formRenderedAt", String(renderedAtRef.current));
@@ -195,6 +201,34 @@ export function PartnersApplyWizard({ plans }: { plans: PublicPlan[] }) {
               <input className="input-field" value={form.city} onChange={(e) => update("city", e.target.value)} placeholder="الرياض" />
             </div>
           </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label-field">كلمة المرور</label>
+              <input
+                type="password"
+                dir="ltr"
+                minLength={8}
+                className="input-field"
+                value={form.password}
+                onChange={(e) => update("password", e.target.value)}
+                placeholder="8 أحرف على الأقل"
+              />
+            </div>
+            <div>
+              <label className="label-field">تأكيد كلمة المرور</label>
+              <input
+                type="password"
+                dir="ltr"
+                minLength={8}
+                className="input-field"
+                value={form.confirmPassword}
+                onChange={(e) => update("confirmPassword", e.target.value)}
+              />
+            </div>
+          </div>
+          <p className="text-xs text-slate-500">
+            حدّد كلمة مرور حسابك الآن — ستتمكن من تسجيل الدخول بها مباشرة فور قبول طلبك، دون انتظار رابط بالبريد الإلكتروني.
+          </p>
         </div>
       )}
 
@@ -232,6 +266,7 @@ export function PartnersApplyWizard({ plans }: { plans: PublicPlan[] }) {
             <p dir="ltr"><span className="text-slate-500">البريد:</span> {form.email}</p>
             <p dir="ltr"><span className="text-slate-500">الهاتف:</span> {form.phone}</p>
             <p><span className="text-slate-500">المدينة:</span> {form.city}</p>
+            <p><span className="text-slate-500">كلمة المرور:</span> تم تحديدها ✓</p>
             <p><span className="text-slate-500">الباقة:</span> {selectedPlan?.name} ({selectedPlan?.priceMonthlySar} ر.س/شهرياً)</p>
           </div>
           <label className="flex items-start gap-2 text-sm text-slate-300">
