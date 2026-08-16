@@ -3,8 +3,15 @@
 -- المبدأ: كل جدول فيه tenantId يُفعَّل عليه RLS، وPolicy تسمح فقط بالصفوف التي
 -- tenantId = current_setting('app.current_tenant_id', true)::text
 -- التطبيق يضبط هذا المتغير عبر `SET LOCAL app.current_tenant_id = '<id>'` داخل كل transaction (lib/db.ts -> withTenant()).
--- ملاحظة: SUPER_ADMIN لا يمرّ عبر withTenant إطلاقاً، بل عبر اتصال منفصل بصلاحية BYPASSRLS (دور db منفصل super_admin_role)
--- محصور على استعلامات القراءة المجمّعة فقط في لوحة Super Admin.
+-- ملاحظة: SUPER_ADMIN لا يمرّ عبر withTenant إطلاقاً، بل عبر اتصال منفصل بدور db منفصل app_superadmin.
+--
+-- تجاوز RLS لدور app_superadmin عبر شرط `current_user = 'app_superadmin'` صريح داخل كل Policy (وليس
+-- خاصية BYPASSRLS على الدور نفسه) — قرار مُتعمَّد اكتُشف ضرورته فعلياً عند النشر الأول على منصة
+-- استضافة مُدارة (Render): الدور الافتراضي المُقدَّم من هذه المنصات ليس Superuser حقيقياً، فلا يقدر
+-- يمنح BYPASSRLS لأي دور آخر إطلاقاً ("Only roles with the BYPASSRLS attribute may create roles with
+-- the BYPASSRLS attribute") — قيد منصة، وليس خطأ إعداد. الشرط الصريح هنا يعطي نفس الأثر (تجاوز كامل
+-- لعزل tenantId لهذا الدور تحديداً) بلا الاعتماد على أي صلاحية نظام خاصة، فيعمل بنفس السلوك على أي
+-- بيئة (محلية أو مُدارة) بلا استثناء.
 
 -- تفعيل RLS + policy لكل جدول مستأجر
 DO $$
@@ -30,8 +37,8 @@ BEGIN
     -- لذلك نسمح بالصف إن كان tenantId = الجلسة الحالية، أو NULL فقط عند عدم ضبط الجلسة (سياق super admin منفصل).
     EXECUTE format(
       $f$CREATE POLICY tenant_isolation_policy ON %I
-        USING ("tenantId" = current_setting('app.current_tenant_id', true))
-        WITH CHECK ("tenantId" = current_setting('app.current_tenant_id', true));$f$,
+        USING ("tenantId" = current_setting('app.current_tenant_id', true) OR current_user = 'app_superadmin')
+        WITH CHECK ("tenantId" = current_setting('app.current_tenant_id', true) OR current_user = 'app_superadmin');$f$,
       t
     );
   END LOOP;
@@ -43,7 +50,8 @@ ALTER TABLE "CampaignRecipient" FORCE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS tenant_isolation_policy ON "CampaignRecipient";
 CREATE POLICY tenant_isolation_policy ON "CampaignRecipient"
   USING (
-    EXISTS (
+    current_user = 'app_superadmin'
+    OR EXISTS (
       SELECT 1 FROM "Campaign" c
       WHERE c.id = "CampaignRecipient"."campaignId"
         AND c."tenantId" = current_setting('app.current_tenant_id', true)
@@ -55,14 +63,14 @@ ALTER TABLE "ContactTag" FORCE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS tenant_isolation_policy ON "ContactTag";
 CREATE POLICY tenant_isolation_policy ON "ContactTag"
   USING (
-    EXISTS (
+    current_user = 'app_superadmin'
+    OR EXISTS (
       SELECT 1 FROM "Contact" c
       WHERE c.id = "ContactTag"."contactId"
         AND c."tenantId" = current_setting('app.current_tenant_id', true)
     )
   );
 
--- دور قاعدة بيانات منفصل لـ Super Admin يتجاوز RLS، يُستخدم فقط في استعلامات لوحة Super Admin المجمّعة للقراءة.
--- (التنفيذ الفعلي لإنشاء الدور يتم يدوياً عبر psql عند التزويد الأول للبيئة الإنتاجية، لأنه يتطلب صلاحية superuser
---  لا تُمنح تلقائياً عبر migration scripts لأسباب أمنية.)
--- CREATE ROLE super_admin_role BYPASSRLS LOGIN PASSWORD '...';
+-- دور قاعدة بيانات منفصل لـ Super Admin يتجاوز RLS لاستعلامات لوحة Super Admin المجمّعة للقراءة —
+-- عبر شرط current_user في كل Policy أعلاه (وليس BYPASSRLS، راجع الشرح أعلى الملف). يُنشأ الدور نفسه
+-- عبر prisma/bootstrap-roles.sql عند تزويد أي بيئة جديدة (محلية أو مُدارة).
