@@ -25,31 +25,31 @@ const TOOLS = [
 ];
 
 function GridItem({
-  icon: Icon, title, body, comingSoon,
+  icon: Icon, title, body, comingSoon, wide,
 }: {
-  icon: (p: { className?: string }) => React.ReactNode; title: string; body: string; comingSoon?: boolean;
+  icon: (p: { className?: string }) => React.ReactNode; title: string; body: string; comingSoon?: boolean; wide?: boolean;
 }) {
   return (
     <div
-      className={`flex items-start gap-3 rounded-xl border p-4 transition ${
+      className={`flex items-start gap-2.5 rounded-xl border p-3 transition sm:gap-3 sm:p-4 ${wide ? "col-span-2" : ""} ${
         comingSoon
           ? "border-dashed border-slate-200 bg-slate-50/60 dark:border-white/10 dark:bg-white/[0.02]"
           : "border-slate-200 bg-white hover:-translate-y-0.5 hover:shadow-card dark:border-white/10 dark:bg-slate-900"
       }`}
     >
       <div
-        className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg ${
+        className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg sm:h-10 sm:w-10 ${
           comingSoon ? "bg-slate-100 text-slate-400 dark:bg-white/5 dark:text-slate-500" : "bg-wa-50 text-wa-600 dark:bg-wa-500/10 dark:text-wa-400"
         }`}
       >
-        <Icon className="h-5 w-5" />
+        <Icon className="h-4 w-4 sm:h-5 sm:w-5" />
       </div>
-      <div>
-        <p className="flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-white">
+      <div className="min-w-0">
+        <p className="flex flex-wrap items-center gap-1.5 text-xs font-semibold text-slate-900 sm:text-sm dark:text-white">
           {title}
           {comingSoon && <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-medium text-slate-500 dark:bg-white/10 dark:text-slate-400">قريباً</span>}
         </p>
-        <p className="mt-0.5 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{body}</p>
+        <p className="mt-0.5 text-[11px] leading-relaxed text-slate-500 sm:text-xs dark:text-slate-400">{body}</p>
       </div>
     </div>
   );
@@ -67,14 +67,14 @@ export function ChannelsToolsSection() {
         <div className="mt-10 grid grid-cols-1 gap-8 lg:grid-cols-2">
           <Reveal>
             <h3 className="mb-4 text-sm font-bold uppercase tracking-wide text-wa-600 dark:text-wa-400">القنوات</h3>
-            <div className="grid grid-cols-1 gap-3">
-              {CHANNELS.map((c) => <GridItem key={c.title} {...c} />)}
+            <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
+              {CHANNELS.map((c, i) => <GridItem key={c.title} {...c} wide={i === CHANNELS.length - 1 && CHANNELS.length % 2 === 1} />)}
             </div>
           </Reveal>
           <Reveal delay={100}>
             <h3 className="mb-4 text-sm font-bold uppercase tracking-wide text-wa-600 dark:text-wa-400">الأدوات</h3>
-            <div className="grid grid-cols-1 gap-3">
-              {TOOLS.map((t) => <GridItem key={t.title} {...t} />)}
+            <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
+              {TOOLS.map((t, i) => <GridItem key={t.title} {...t} wide={i === TOOLS.length - 1 && TOOLS.length % 2 === 1} />)}
             </div>
           </Reveal>
         </div>
