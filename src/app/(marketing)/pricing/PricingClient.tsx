@@ -38,21 +38,28 @@ export function PricingClient({ plans }: { plans: PublicPlan[] }) {
       </div>
 
       {/* موبايل: شريط أفقي قابل للسحب يُظهر بطاقتين فقط في العرض مع Scroll Snap (لا تكديس صفوف فوق
-          بعضها) — بدءاً من lg يتحول لشبكة عادية بكل الباقات ظاهرة معاً بلا سحب. */}
+          بعضها) — بدءاً من lg يتحول لشبكة عادية بكل الباقات ظاهرة معاً بلا سحب.
+          pt-4: تحديد overflow-x وحده (بلا overflow-y) يجعل المتصفح يحسب overflow-y تلقائياً كـauto
+          بدل visible (قاعدة قياسية في CSS Overflow spec) — فيقص شارة "الأكثر شيوعاً" التي تبرز فوق
+          حافة البطاقة (-top-3) دون هامش علوي كافٍ يستوعبها. */}
       <div
-        className="mt-10 flex snap-x snap-mandatory gap-4 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] sm:gap-6 lg:grid lg:grid-cols-4 lg:overflow-visible [&::-webkit-scrollbar]:hidden"
+        className="mt-10 flex snap-x snap-mandatory gap-4 overflow-x-auto pt-4 pb-2 [-ms-overflow-style:none] [scrollbar-width:none] sm:gap-6 lg:grid lg:grid-cols-4 lg:overflow-visible lg:pt-0 [&::-webkit-scrollbar]:hidden"
       >
-        {plans.map((plan) => {
+        {plans.map((plan, i) => {
           const isFeatured = plan.key === featuredKey;
           // نسبة خصم حقيقية لكل باقة على حدة (Plan.annualDiscountBps، تُضبط من Super Admin) — بدل
           // ثابت 20% موحَّد كان مكتوباً مباشرة في هذا الملف بلا أي علاقة بنظام الباقات الفعلي.
           const discountFraction = plan.annualDiscountBps / 10000;
           const displayPrice = annual ? Math.round(plan.priceMonthlySar * (1 - discountFraction)) : plan.priceMonthlySar;
           const features = Array.isArray(plan.features) ? (plan.features as string[]) : [];
+          // نقطة الالتقاط (snap) على أول بطاقة كل زوج فقط (0، 2، ...) — لو وُضعت على كل بطاقة، أي
+          // سحب يدوي بطيء (لا يشبه "رمية" سريعة) قد يتوقف على بطاقة فردية فيظهر نصف بطاقتين بدل زوج
+          // كامل، وهو بالضبط ما لاحظه المستخدم فعلياً عند السحب اليدوي.
+          const isPairStart = i % 2 === 0;
           return (
             <div
               key={plan.key}
-              className={`relative flex h-full w-[calc(50%-0.5rem)] flex-none snap-start flex-col rounded-2xl border p-4 sm:w-[calc(50%-0.75rem)] sm:rounded-3xl sm:p-7 lg:w-auto ${
+              className={`relative flex h-full w-[calc(50%-0.5rem)] flex-none flex-col rounded-2xl border p-4 sm:w-[calc(50%-0.75rem)] sm:rounded-3xl sm:p-7 lg:w-auto ${isPairStart ? "snap-start" : "snap-align-none"} ${
                 isFeatured
                   ? "border-wa-500 bg-white shadow-lg ring-2 ring-wa-500/30 dark:bg-slate-900"
                   : "border-slate-200 bg-white shadow-card dark:border-white/10 dark:bg-slate-900"
