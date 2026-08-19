@@ -34,7 +34,7 @@ export default async function PlatformBillingPage({ searchParams }: { searchPara
     );
   }
   const canViewMerchantDetail = hasPermission(session.user.role, "platform.merchants.view");
-  const canRefund = hasPermission(session.user.role, "platform.view_revenue");
+  const canRefund = hasPermission(session.user.role, "platform.billing.manage");
 
   const page = Math.max(1, parseInt(searchParams.page ?? "1", 10) || 1);
   const where = buildInvoiceWhere(searchParams);
@@ -145,7 +145,7 @@ export default async function PlatformBillingPage({ searchParams }: { searchPara
                 <span className="text-slate-300">{inv.tenant.name}</span>
                 <span className="mr-2 text-danger-500">— {inv.failureReason ?? "سبب غير محدد"}</span>
               </div>
-              <RetryPaymentButton invoiceId={inv.id} />
+              {canRefund && <RetryPaymentButton invoiceId={inv.id} />}
             </div>
           ))}
         </div>

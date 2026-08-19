@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { checkIpRateLimit } from "@/lib/rateLimit";
 
 // دول مدعومة فعلياً على المنصة فقط — أي دولة أخرى يكتشفها البحث الجغرافي تُتجاهَل (يبقى الافتراضي:
 // السعودية) بدل عرض مبدّل عملة لدولة لا تدعمها المنصة أصلاً.
@@ -19,6 +20,12 @@ export async function GET(req: NextRequest) {
     if (!ip || ip === "127.0.0.1" || ip === "::1" || ip.startsWith("192.168.") || ip.startsWith("10.")) {
       return NextResponse.json({ country: null });
     }
+
+    // بلا هذا الحد، أي زائر مجهول يقدر يُشغِّل عدد غير محدود من الطلبات الصادرة من خادمنا لـ
+    // ip-api.com (مسار عام بلا مصادقة بطبيعته) — يخاطر بحظر عنوان IP خادمنا نفسه من خدمة الطبقة
+    // المجانية ويكسر اكتشاف الدولة لكل الزوار الحقيقيين.
+    const rateLimit = await checkIpRateLimit(ip, "geo-detect", 20, 60);
+    if (!rateLimit.allowed) return NextResponse.json({ country: null });
 
     const res = await fetch(`http://ip-api.com/json/${ip}?fields=countryCode`, {
       signal: AbortSignal.timeout(2500),

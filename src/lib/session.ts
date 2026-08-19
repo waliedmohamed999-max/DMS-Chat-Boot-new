@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { authOptions } from "@/lib/auth";
 import { getActiveImpersonation } from "@/lib/impersonation";
 import { getPlatformSession } from "@/lib/platformAuth";
-import { superAdminDb } from "@/lib/db";
+import { superAdminDb, rawDb } from "@/lib/db";
 import { isPlatformRole } from "@/lib/rbac";
 
 export type ImpersonationInfo = { active: true; superAdminName: string; tenantName: string } | { active: false };
@@ -44,12 +44,26 @@ export async function requireTenantSession() {
   if (!session?.user || isPlatformRole(session.user.role) || !session.user.tenantId) {
     redirect("/login");
   }
-  return session as typeof session & {
+  const typedSession = session as typeof session & {
     user: {
       id: string; role: "OWNER" | "ADMIN" | "AGENT"; tenantId: string; name?: string | null; email?: string | null;
       impersonation: ImpersonationInfo;
     };
   };
+
+  // تعليق/إلغاء تاجر (setTenantStatus) كان يمنع تسجيل دخول جديد فقط (auth.ts) — أي مستخدم لديه
+  // جلسة JWT سارية أصلاً (صالحة حتى 7 أيام) يحتفظ بوصول كامل لكل action/صفحة تاجر رغم التعليق، لأن
+  // لا شيء كان يُعيد فحص Tenant.status حياً بعد لحظة الدخول. يُفحَص هنا الآن — نقطة الاختناق المشتركة
+  // لكل صفحة/action تاجر — بدل الاعتماد فقط على حالة الدخول اللحظية. جلسات الانتحال مستثناة عمداً
+  // (فريق الدعم يحتاج الدخول فعلياً لتاجر معلَّق للتحقيق، بنفس مبدأ استثناء وضع الصيانة في
+  // dashboard/layout.tsx).
+  if (!typedSession.user.impersonation.active) {
+    const tenant = await rawDb.tenant.findUnique({ where: { id: typedSession.user.tenantId }, select: { status: true } });
+    if (!tenant || tenant.status === "SUSPENDED") redirect("/login?reason=tenant_suspended");
+    if (tenant.status === "CANCELLED") redirect("/login?reason=tenant_cancelled");
+  }
+
+  return typedSession;
 }
 
 /**

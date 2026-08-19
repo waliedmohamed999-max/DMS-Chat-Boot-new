@@ -23,6 +23,8 @@ export default async function ChartOfAccountsPage() {
     );
   }
 
+  const canManage = hasPermission(session.user.role, "platform.billing.manage");
+
   await ensureChartOfAccounts();
 
   const [accounts, balances] = await Promise.all([
@@ -99,10 +101,12 @@ export default async function ChartOfAccountsPage() {
         {roots.map((r) => renderNode(r, 0))}
       </div>
 
-      <div className="card p-5">
-        <h2 className="mb-3 font-semibold text-white">إضافة حساب فرعي جديد</h2>
-        <AddAccountForm parentOptions={[...rootParentOptions, ...secondLevelOptions]} />
-      </div>
+      {canManage && (
+        <div className="card p-5">
+          <h2 className="mb-3 font-semibold text-white">إضافة حساب فرعي جديد</h2>
+          <AddAccountForm parentOptions={[...rootParentOptions, ...secondLevelOptions]} />
+        </div>
+      )}
     </div>
   );
 }

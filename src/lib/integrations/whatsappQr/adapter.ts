@@ -3,7 +3,7 @@ import type { IntegrationAdapter, SendMessageResult, SyncResult, MessageAttachme
 import { withTenant } from "@/lib/db";
 import { getSocket, phoneE164ToJid } from "@/lib/integrations/whatsappQr/sessionManager";
 import { whatsappQrStopQueue } from "@/lib/integrations/whatsappQr/queue";
-import { assertUrlSafeForOutboundFetch } from "@/lib/chatbot/safeFetch";
+import { fetchMediaWithSsrfProtection } from "@/lib/chatbot/safeFetch";
 
 /**
  * محوّل القناة التجريبية (Baileys/QR). خلافاً لـMeta/Zid/Salla، لا يوجد هنا OAuth ولا HTTP webhook
@@ -43,17 +43,19 @@ export const whatsappQrAdapter: IntegrationAdapter = {
       if (attachment?.kind === "media") {
         // خلافاً لقناة Meta الرسمية (خوادم Meta تُحمِّل رابط الوسائط)، Baileys يُحمِّل الوسائط من
         // خلال خادمنا نفسه (عملية العامل) لإعادة رفعها لواتساب — رابط أدخله التاجر يجعل خادمنا يتصل
-        // بعنوان خارجي، فيُفرَض نفس تحصين SSRF المستخدَم لعقدة "استدعاء API".
-        const safety = await assertUrlSafeForOutboundFetch(attachment.url);
-        if (!safety.safe) return { success: false, error: safety.error };
+        // بعنوان خارجي. تمرير الرابط لـBaileys ليُحمِّله بنفسه كان يتجاوز أي تحصين SSRF تماماً (لا
+        // تحقّق على IP الذي تتصل به المكتبة داخلياً)، فنُحمِّل الوسائط بأنفسنا عبر الاتصال المُحصَّن
+        // (رفض IP خاص/محجوز + تثبيت عنوان IP يمنع DNS rebinding) ثم نمرر البيانات الخام لـBaileys.
+        const download = await fetchMediaWithSsrfProtection(attachment.url);
+        if (!download.success) return { success: false, error: download.error };
 
         const mediaMessage =
           attachment.mediaType === "image"
-            ? { image: { url: attachment.url }, caption: body || undefined }
+            ? { image: download.buffer, caption: body || undefined }
             : attachment.mediaType === "video"
-              ? { video: { url: attachment.url }, caption: body || undefined }
+              ? { video: download.buffer, caption: body || undefined }
               : {
-                  document: { url: attachment.url },
+                  document: download.buffer,
                   fileName: attachment.filename || "ملف",
                   mimetype: guessMimeType(attachment.filename || attachment.url),
                   caption: body || undefined,

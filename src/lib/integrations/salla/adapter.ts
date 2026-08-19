@@ -32,7 +32,13 @@ async function exchangeCodeForTokens(code: string): Promise<SallaTokenResponse> 
       redirect_uri: sallaRedirectUri(),
     }),
   });
-  if (!res.ok) throw new Error(`فشل تبادل رمز OAuth مع سلة: ${res.status} ${await res.text()}`);
+  if (!res.ok) {
+    // جسم الاستجابة الخام لا يُدرَج في رسالة الخطأ المُلقاة (تصل مباشرة لعنوان إعادة توجيه مرئي
+    // للمتصفح في route.ts) — قد يحمل تفاصيل تشخيصية من سلة غير مخصَّصة للعرض للعميل. يُسجَّل هنا
+    // فقط في سجلات الخادم.
+    console.error(`❌ فشل تبادل رمز OAuth مع سلة (${res.status}):`, await res.text());
+    throw new Error("فشل تبادل رمز OAuth مع سلة");
+  }
   return res.json();
 }
 
@@ -45,7 +51,10 @@ async function refreshTokens(refreshToken: string): Promise<SallaTokenResponse> 
       client_id: process.env.SALLA_CLIENT_ID ?? "", client_secret: process.env.SALLA_CLIENT_SECRET ?? "",
     }),
   });
-  if (!res.ok) throw new Error(`فشل تجديد رمز سلة: ${res.status} ${await res.text()}`);
+  if (!res.ok) {
+    console.error(`❌ فشل تجديد رمز سلة (${res.status}):`, await res.text());
+    throw new Error("فشل تجديد رمز سلة");
+  }
   return res.json();
 }
 

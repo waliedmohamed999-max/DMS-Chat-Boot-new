@@ -38,6 +38,11 @@ export type Permission =
   | "platform.content.manage" // تعديل محتوى الصفحة الرئيسية للموقع التسويقي (admin/content)
   | "platform.manage_tenants" // مظلة عامة قديمة، تبقى لتوافق الكود السابق (تعادل مجموع صلاحيات التجار أعلاه)
   | "platform.view_revenue"
+  // إجراءات مالية فعلية تُحرِّك أموالاً حقيقية (استرداد، إعادة محاولة تحصيل، تعديل دليل الحسابات) —
+  // منفصلة عمداً عن platform.view_revenue (كانت مدموجة معها سابقاً، فيمنح "عرض الإيرادات" ضمنياً
+  // صلاحية استرداد فواتير التجار فعلياً، مخالفاً لنفس مبدأ الفصل بين .view و.manage المتّبع في كل
+  // مكان آخر بالنظام؛ راجع DECISIONS.md). ممنوحة لمالك المنصة فقط، وليس لدور PLATFORM_BILLING القرائي.
+  | "platform.billing.manage"
   | "platform.affiliates.manage"; // إدارة برنامج التسويق بالعمولة (اعتماد مسوّقين، صرف عمولات)
 
 const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
@@ -60,6 +65,7 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     "platform.content.manage",
     "platform.manage_tenants",
     "platform.view_revenue",
+    "platform.billing.manage",
     "platform.leads.view",
     "platform.affiliates.manage",
   ],
@@ -173,6 +179,7 @@ export const PLATFORM_PERMISSION_LABELS_AR: Partial<Record<Permission, string>> 
   "platform.content.manage": "تعديل محتوى الصفحة الرئيسية للموقع",
   "platform.leads.view": "عرض رسائل تواصل الموقع",
   "platform.view_revenue": "عرض الإيرادات والفوترة",
+  "platform.billing.manage": "إجراءات مالية فعلية (استرداد، إعادة تحصيل، دليل الحسابات)",
   "platform.affiliates.manage": "إدارة برنامج التسويق بالعمولة",
 };
 

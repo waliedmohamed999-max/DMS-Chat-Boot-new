@@ -49,7 +49,12 @@ async function exchangeCodeForTokens(code: string): Promise<ZidTokenResponse> {
       redirect_uri: zidRedirectUri(),
     }),
   });
-  if (!res.ok) throw new Error(`فشل تبادل رمز OAuth مع زد: ${res.status} ${await res.text()}`);
+  if (!res.ok) {
+    // جسم الاستجابة الخام لا يُدرَج في رسالة الخطأ المُلقاة (تصل مباشرة لعنوان إعادة توجيه مرئي
+    // للمتصفح في route.ts) — يُسجَّل هنا فقط في سجلات الخادم.
+    console.error(`❌ فشل تبادل رمز OAuth مع زد (${res.status}):`, await res.text());
+    throw new Error("فشل تبادل رمز OAuth مع زد");
+  }
   return res.json();
 }
 
@@ -63,7 +68,10 @@ async function refreshTokens(refreshToken: string): Promise<ZidTokenResponse> {
       redirect_uri: zidRedirectUri(),
     }),
   });
-  if (!res.ok) throw new Error(`فشل تجديد رمز زد: ${res.status} ${await res.text()}`);
+  if (!res.ok) {
+    console.error(`❌ فشل تجديد رمز زد (${res.status}):`, await res.text());
+    throw new Error("فشل تجديد رمز زد");
+  }
   return res.json();
 }
 

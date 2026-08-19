@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPaymentProvider } from "@/lib/billing/payment-provider";
 import { superAdminDb, withTenant } from "@/lib/db";
-import { checkTenantRateLimit } from "@/lib/rateLimit";
+import { checkTenantRateLimit, checkIpRateLimit } from "@/lib/rateLimit";
 
 /**
  * نقطة استقبال أحداث بوابة الدفع (نجاح/فشل/استرداد) — **الشكل الحالي للـpayload افتراضي/عام**
@@ -12,6 +12,11 @@ import { checkTenantRateLimit } from "@/lib/rateLimit";
  * بنفس نمط /api/webhooks/zid و/api/webhooks/salla حرفياً.
  */
 export async function POST(req: NextRequest) {
+  // حد بعنوان IP قبل أي تحقّق توقيع أو كتابة قاعدة بيانات (راجع تعليق checkIpRateLimit في lib/rateLimit.ts).
+  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || req.headers.get("x-real-ip") || "unknown";
+  const ipLimit = await checkIpRateLimit(ip, "webhook-payment-unauth", 120, 60);
+  if (!ipLimit.allowed) return new NextResponse("Rate limit exceeded", { status: 429 });
+
   const rawBody = await req.text();
   const signature = req.headers.get("x-payment-signature");
   const signatureValid = getPaymentProvider().verifyWebhookSignature(rawBody, signature);

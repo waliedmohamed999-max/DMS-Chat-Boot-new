@@ -19,7 +19,7 @@ export type AddAccountResult = { success: true } | { success: false; error: stri
  */
 export async function issueRefund(invoiceId: string, reason: string): Promise<IssueRefundResult> {
   const session = await requireSuperAdminSession();
-  requirePermission(session.user.role, "platform.view_revenue");
+  requirePermission(session.user.role, "platform.billing.manage");
   if (!reason.trim()) return { success: false, error: "سبب الاسترداد مطلوب" };
 
   const invoice = await superAdminDb.invoice.findUnique({ where: { id: invoiceId } });
@@ -57,7 +57,7 @@ export async function issueRefund(invoiceId: string, reason: string): Promise<Is
  */
 export async function retryFailedPaymentAsAdmin(invoiceId: string): Promise<RetryPaymentResult> {
   const session = await requireSuperAdminSession();
-  requirePermission(session.user.role, "platform.view_revenue");
+  requirePermission(session.user.role, "platform.billing.manage");
 
   const invoice = await superAdminDb.invoice.findUnique({ where: { id: invoiceId } });
   if (!invoice || invoice.status !== "FAILED") return { success: false, error: "لا توجد فاتورة فاشلة بهذا المعرّف" };
@@ -91,7 +91,7 @@ export async function retryFailedPaymentAsAdmin(invoiceId: string): Promise<Retr
  */
 export async function addChartOfAccountsEntry(formData: FormData): Promise<AddAccountResult> {
   const session = await requireSuperAdminSession();
-  requirePermission(session.user.role, "platform.view_revenue");
+  requirePermission(session.user.role, "platform.billing.manage");
 
   const parentCode = String(formData.get("parentCode") ?? "").trim();
   const name = String(formData.get("name") ?? "").trim();
