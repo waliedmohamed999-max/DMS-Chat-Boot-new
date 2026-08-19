@@ -7,8 +7,14 @@ import { getTenantCampaignLimits, isUnlimited } from "@/lib/campaigns/limits";
 import { suggestBestSendHour } from "@/lib/campaigns/bestSendTime";
 import { CampaignWizard, type CampaignWizardInitialValues } from "@/components/dashboard/CampaignWizard";
 import type { SegmentFilter } from "@/lib/campaigns/audience";
+import type { OrderStatus } from "@prisma/client";
+import { ORDER_STATUSES_ORDERED } from "@/lib/orders/labels";
 
-export default async function NewCampaignPage({ searchParams }: { searchParams: { duplicateFrom?: string; audienceTagId?: string } }) {
+export default async function NewCampaignPage({
+  searchParams,
+}: {
+  searchParams: { duplicateFrom?: string; audienceTagId?: string; orderStatus?: string; orderWithinDays?: string };
+}) {
   const session = await requireTenantSession();
   const tenantId = session.user.tenantId;
 
@@ -46,6 +52,11 @@ export default async function NewCampaignPage({ searchParams }: { searchParams: 
     // قادم من "إضافة كجمهور مباشر لحملة جديدة" في إجراءات جهات الاتصال الجماعية — نفس آلية
     // "شريحة مخصصة" الموجودة أصلاً، بلا أي تعديل على منطق المعالج نفسه.
     initialValues = { audienceType: "SEGMENT", filter: { tagIds: [searchParams.audienceTagId] } };
+  } else if (searchParams.orderStatus && ORDER_STATUSES_ORDERED.includes(searchParams.orderStatus as OrderStatus)) {
+    // قادم من "استهدف بحملة" في صفحة الطلبات (dashboard/orders) — نفس فلتر order الموجود أصلاً في
+    // SegmentFilter (audience.ts)، مُعبّأ مسبقاً بحالة الطلبات المحدَّدة ونافذة زمنية تغطي أقدمها.
+    const withinDays = Math.max(1, parseInt(searchParams.orderWithinDays ?? "30", 10) || 30);
+    initialValues = { audienceType: "SEGMENT", filter: { order: { status: searchParams.orderStatus as OrderStatus, withinDays } } };
   }
 
   return (

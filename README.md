@@ -135,6 +135,7 @@ node scripts/smoke-admin-v2.js    # يختبر إدارة الباقات الك�
 | الشات بوت (قوالب جاهزة + بوابات باقة/دور) | `/dashboard/chatbot` |
 | اختبار شات بوت للقراءة فقط (دور الموظف) | `/dashboard/chatbot/[id]/test` |
 | التكاملات | `/dashboard/integrations` |
+| الطلبات (زد/سلة، بما فيها السلات المتروكة) | `/dashboard/orders` |
 | الفوترة والاشتراك | `/dashboard/billing` |
 | الفريق والإعدادات | `/dashboard/settings` |
 | Super Admin — نظرة عامة | `/admin` |

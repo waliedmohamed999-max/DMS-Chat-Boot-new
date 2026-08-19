@@ -19,6 +19,11 @@ export type Permission =
   | "billing.manage"
   | "team.manage"
   | "settings.manage"
+  // طلبات زد/سلة المزامَنة (بما فيها السلات المتروكة) — orders.view للعرض فقط (منح AGENT إياها، بلا
+  // orders.manage، بنفس فلسفة استثناء contacts.export له: بيانات عملاء/مبالغ حساسة يُسمح بعرضها له
+  // لخدمة العميل لكن لا يستهدفها بحملات ولا يرسل لها رسائل بنفسه). orders.manage = تحديد جماعي/استهداف/إرسال سريع.
+  | "orders.view"
+  | "orders.manage"
   // صلاحيات لوحة مالك المنصة (Super Admin) — مجزّأة لفريق داخلي متعدد الأدوار وليس صلاحية واحدة شاملة
   | "platform.approvals.review"
   | "platform.merchants.view"
@@ -101,6 +106,8 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     "billing.manage",
     "team.manage",
     "settings.manage",
+    "orders.view",
+    "orders.manage",
   ],
   ADMIN: [
     "campaigns.view",
@@ -121,6 +128,8 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     // إجراء مالي فعلي (تغيير باقة، إلغاء، تحديث دفع)، الأزرار نفسها تُخفى وتُرفض من الخادم أيضاً.
     "billing.view",
     "team.manage",
+    "orders.view",
+    "orders.manage",
   ],
   AGENT: [
     // موظف: عرض واختبار فقط — لا دخول لمحرر التدفقات ولا نشر ولا حذف. لا contacts.export عمداً:
@@ -129,6 +138,9 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     "chatbot.test",
     "inbox.reply",
     "contacts.manage",
+    // orders.view بلا orders.manage: يشوف الطلبات/السلات المتروكة لخدمة العميل، بلا استهداف بحملات
+    // ولا تحديد جماعي ولا إرسال سريع (نفس فلسفة استبعاده من contacts.export).
+    "orders.view",
   ],
 };
 
@@ -205,6 +217,8 @@ export const TENANT_PERMISSION_LABELS_AR: Partial<Record<Permission, string>> = 
   "billing.manage": "إدارة الفوترة والباقة",
   "team.manage": "إدارة فريق المتجر",
   "settings.manage": "إعدادات المتجر",
+  "orders.view": "عرض الطلبات (زد/سلة)",
+  "orders.manage": "استهداف/إرسال سريع للطلبات",
 };
 
 /** كل الأدوار في النظام بترتيب عرض ثابت — تُستخدم لعرض مصفوفة صلاحيات شاملة (منصة + تجار) في مكان واحد */

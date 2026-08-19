@@ -1,10 +1,6 @@
 import { notFound } from "next/navigation";
 import { superAdminDb } from "@/lib/db";
-
-const ORDER_STATUS_LABELS_AR: Record<string, string> = {
-  ABANDONED_CART: "🛒 سلة متروكة", PENDING: "⏳ قيد الانتظار", PAID: "✅ مدفوع",
-  SHIPPED: "🚚 تم الشحن", DELIVERED: "📦 تم التسليم", CANCELLED: "❌ ملغي",
-};
+import { ORDER_STATUS_LABELS_AR } from "@/lib/orders/labels";
 
 export default async function TenantOrdersPage({ params }: { params: { id: string } }) {
   const tenant = await superAdminDb.tenant.findUnique({ where: { id: params.id }, select: { id: true } });

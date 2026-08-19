@@ -19,6 +19,7 @@ const NAV_ITEMS: (NavItem & { requires?: Permission })[] = [
   { href: "/dashboard/campaigns", label: "الحملات", icon: "📣" },
   { href: "/dashboard/templates", label: "قوالب الرسائل", icon: "📝" },
   { href: "/dashboard/integrations", label: "التكاملات", icon: "🔌" },
+  { href: "/dashboard/orders", label: "الطلبات", icon: "📦", requires: "orders.view" },
   { href: "/dashboard/billing", label: "الفوترة والاشتراك", icon: "💳", requires: "billing.manage" },
   { href: "/dashboard/settings", label: "الفريق والإعدادات", icon: "⚙️", requires: "team.manage" },
 ];
