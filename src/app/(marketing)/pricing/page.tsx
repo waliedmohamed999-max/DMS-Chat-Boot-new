@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { getPublicPlans } from "@/app/partners/apply/actions";
-import { getCountryConfigs } from "@/lib/billing/countryConfig";
 import { Reveal } from "@/components/marketing/Reveal";
 import { PricingClient } from "./PricingClient";
 
@@ -21,10 +20,7 @@ const FAQS = [
 ];
 
 export default async function PricingPage() {
-  const [plans, countryConfigs] = await Promise.all([getPublicPlans(), getCountryConfigs()]);
-  const countries = countryConfigs
-    .filter((c) => c.isActive)
-    .map((c) => ({ country: c.country, currency: c.currency, isDefault: c.isDefault }));
+  const plans = await getPublicPlans();
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-16">
@@ -36,7 +32,7 @@ export default async function PricingPage() {
       {plans.length === 0 ? (
         <p className="mt-12 text-center text-slate-400">لا توجد باقات متاحة حالياً.</p>
       ) : (
-        <PricingClient plans={plans} countries={countries} />
+        <PricingClient plans={plans} />
       )}
 
       <div className="mx-auto mt-24 max-w-2xl">

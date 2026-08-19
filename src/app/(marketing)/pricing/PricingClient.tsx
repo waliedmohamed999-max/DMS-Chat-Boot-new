@@ -3,9 +3,8 @@
 import { useState } from "react";
 import Link from "next/link";
 import { resolvePlanPrice } from "@/lib/planPricing";
-import { COUNTRY_LABELS_AR, CURRENCY_SYMBOLS } from "@/lib/currency";
-
-type Country = "SA" | "AE" | "EG";
+import { CURRENCY_SYMBOLS, COUNTRY_LABELS_AR, COUNTRY_TO_CURRENCY } from "@/lib/currency";
+import { useCountry } from "@/components/marketing/CountryContext";
 
 type PublicPlan = {
   key: string;
@@ -20,12 +19,12 @@ type PublicPlan = {
   annualDiscountBps: number;
 };
 
-type CountryOption = { country: Country; currency: string; isDefault: boolean };
-
-export function PricingClient({ plans, countries }: { plans: PublicPlan[]; countries: CountryOption[] }) {
+export function PricingClient({ plans }: { plans: PublicPlan[] }) {
   const [annual, setAnnual] = useState(false);
-  const [country, setCountry] = useState<Country>(countries.find((c) => c.isDefault)?.country ?? "SA");
-  const currency = countries.find((c) => c.country === country)?.currency ?? "SAR";
+  // الدولة مصدرها الآن السياق المشترك (زر 🌍 في الشريط العلوي) — لا حالة محلية منفصلة هنا، فتبقى
+  // متزامنة مع أي صفحة تسويقية أخرى تلقائياً بدل مبدّل مستقل بهذه الصفحة وحدها.
+  const { country } = useCountry();
+  const currency = COUNTRY_TO_CURRENCY[country];
   const currencySymbol = CURRENCY_SYMBOLS[currency] ?? currency;
 
   // باقة بلا سعر محدَّد لهذه الدولة تُخفى تماماً — لا تحويل عملة تلقائي مُخترَع (راجع lib/planPricing.ts).
@@ -39,26 +38,11 @@ export function PricingClient({ plans, countries }: { plans: PublicPlan[]; count
 
   return (
     <>
-      {countries.length > 1 && (
-        <div className="mt-6 flex items-center justify-center gap-2">
-          {countries.map((c) => (
-            <button
-              key={c.country}
-              type="button"
-              onClick={() => setCountry(c.country)}
-              className={`rounded-full border px-4 py-1.5 text-sm font-medium transition ${
-                country === c.country
-                  ? "border-wa-500 bg-wa-500 text-white"
-                  : "border-slate-300 text-slate-600 hover:bg-slate-50 dark:border-white/15 dark:text-slate-300 dark:hover:bg-white/5"
-              }`}
-            >
-              {COUNTRY_LABELS_AR[c.country]}
-            </button>
-          ))}
-        </div>
-      )}
+      <p className="mt-4 text-center text-xs text-slate-400 dark:text-slate-500">
+        الأسعار معروضة لـ{COUNTRY_LABELS_AR[country]} — غيّرها من زر 🌍 أعلى الصفحة.
+      </p>
 
-      <div className="mt-8 flex items-center justify-center gap-3">
+      <div className="mt-4 flex items-center justify-center gap-3">
         <span className={`text-sm font-medium ${!annual ? "text-slate-900 dark:text-white" : "text-slate-400"}`}>شهري</span>
         <button
           type="button"

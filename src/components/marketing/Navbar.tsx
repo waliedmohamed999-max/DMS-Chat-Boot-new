@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ThemeToggle } from "@/components/marketing/ThemeToggle";
+import { CountryGlobeButton, CountryPillRow } from "@/components/marketing/CountrySwitcher";
 import { LogoFull } from "@/components/Logo";
 
 const NAV_LINKS = [
@@ -49,6 +50,7 @@ export function Navbar() {
         </nav>
 
         <div className="hidden items-center gap-3 lg:flex">
+          <CountryGlobeButton />
           <ThemeToggle />
           <Link href="/login" className="text-sm font-medium text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white">
             تسجيل الدخول
@@ -67,14 +69,17 @@ export function Navbar() {
           </Link>
         </div>
 
-        <button
-          type="button"
-          onClick={() => setOpen((o) => !o)}
-          className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-600 lg:hidden dark:border-white/10 dark:text-slate-300"
-          aria-label="القائمة"
-        >
-          {open ? "✕" : "☰"}
-        </button>
+        <div className="flex items-center gap-2 lg:hidden">
+          <CountryGlobeButton />
+          <button
+            type="button"
+            onClick={() => setOpen((o) => !o)}
+            className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-600 dark:border-white/10 dark:text-slate-300"
+            aria-label="القائمة"
+          >
+            {open ? "✕" : "☰"}
+          </button>
+        </div>
       </div>
     </header>
 
@@ -109,6 +114,10 @@ export function Navbar() {
             <div className="mt-3 flex items-center justify-between border-t border-slate-100 px-2 pt-4 dark:border-white/10">
               <span className="text-sm text-slate-500 dark:text-slate-400">المظهر</span>
               <ThemeToggle />
+            </div>
+            <div className="mt-3 flex items-center justify-between px-2">
+              <span className="text-sm text-slate-500 dark:text-slate-400">الدولة</span>
+              <CountryPillRow />
             </div>
             <div className="mt-4 flex flex-col gap-3">
               <Link

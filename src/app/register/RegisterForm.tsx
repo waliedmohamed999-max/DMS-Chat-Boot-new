@@ -35,11 +35,10 @@ function SubmitButton() {
   );
 }
 
-export function RegisterForm({ plans, countries }: { plans: PublicPlan[]; countries: CountryOption[] }) {
+export function RegisterForm({ plans, countries, initialCountry }: { plans: PublicPlan[]; countries: CountryOption[]; initialCountry: Country }) {
   useCaptureReferral();
   const [state, formAction] = useFormState(registerTenant, { error: null });
-  const defaultCountry = countries.find((c) => c.isDefault)?.country ?? "SA";
-  const [country, setCountry] = useState<Country>(defaultCountry);
+  const [country, setCountry] = useState<Country>(initialCountry);
 
   // الباقات المعروضة تتغيّر حسب الدولة المختارة — باقة بلا سعر محدَّد لتلك الدولة تُخفى تماماً
   // (لا تحويل عملة تلقائي مُخترَع، راجع lib/planPricing.ts).

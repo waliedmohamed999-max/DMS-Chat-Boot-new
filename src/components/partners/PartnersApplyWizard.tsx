@@ -43,13 +43,12 @@ type FormState = {
 
 const STEPS = ["نوع النشاط", "بيانات العمل", "اختر باقتك", "المراجعة والإرسال"] as const;
 
-export function PartnersApplyWizard({ plans, countries }: { plans: PublicPlan[]; countries: CountryOption[] }) {
+export function PartnersApplyWizard({ plans, countries, initialCountry }: { plans: PublicPlan[]; countries: CountryOption[]; initialCountry: Country }) {
   useCaptureReferral();
   const [step, setStep] = useState(0);
-  const defaultCountry = countries.find((c) => c.isDefault)?.country ?? "SA";
-  const defaultPlanKey = plans.find((p) => resolvePlanPrice(p, defaultCountry) !== null)?.key ?? "";
+  const defaultPlanKey = plans.find((p) => resolvePlanPrice(p, initialCountry) !== null)?.key ?? "";
   const [form, setForm] = useState<FormState>({
-    activityType: "", storeName: "", ownerName: "", email: "", phone: "", city: "", country: defaultCountry,
+    activityType: "", storeName: "", ownerName: "", email: "", phone: "", city: "", country: initialCountry,
     password: "", confirmPassword: "",
     planKey: defaultPlanKey, termsAccepted: false, website: "",
   });
