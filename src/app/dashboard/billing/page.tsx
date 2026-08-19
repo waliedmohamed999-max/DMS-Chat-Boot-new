@@ -11,6 +11,8 @@ import { PlanComparison, type ComparisonPlan } from "./PlanComparison";
 import { CancelSubscriptionFlow } from "./CancelSubscriptionFlow";
 import { RetryPaymentButton } from "./RetryPaymentButton";
 import { DevSimulateFailureButton } from "./DevSimulateFailureButton";
+import { resolvePlanPrice } from "@/lib/planPricing";
+import { COUNTRY_TO_CURRENCY, formatMoney } from "@/lib/currency";
 
 export default async function BillingPage() {
   const session = await requireTenantSession();
@@ -18,8 +20,9 @@ export default async function BillingPage() {
   const canManage = hasPermission(session.user.role, "billing.manage");
   const tenantId = session.user.tenantId;
 
-  const [subscription, invoices, catalogPlans, pendingCustomPlanRequest, paymentMethod, activeUserCount, connectedWhatsappCount, publishedFlowCount] =
+  const [tenant, subscription, invoices, catalogPlans, pendingCustomPlanRequest, paymentMethod, activeUserCount, connectedWhatsappCount, publishedFlowCount] =
     await Promise.all([
+      rawDb.tenant.findUniqueOrThrow({ where: { id: tenantId }, select: { country: true } }),
       withTenant(tenantId, (tx) => tx.subscription.findUnique({ where: { tenantId }, include: { plan: true } })),
       withTenant(tenantId, (tx) => tx.invoice.findMany({ where: { tenantId }, orderBy: { createdAt: "desc" }, take: 50 })),
       // الباقات المخصصة (isCustomForTenantId) لا تظهر أبداً في كتالوج الباقات العام لبقية التجار
@@ -31,17 +34,23 @@ export default async function BillingPage() {
       withTenant(tenantId, (tx) => tx.chatbotFlow.count({ where: { tenantId, status: "PUBLISHED" } })),
     ]);
 
-  const comparisonPlans: ComparisonPlan[] = catalogPlans.map((p) => {
-    const chatbotLimits = parseChatbotLimits(p.chatbotLimitsJson) ?? DEFAULT_STARTER_CHATBOT_LIMITS;
-    const campaignLimits = parseCampaignLimits(p.campaignLimitsJson) ?? DEFAULT_STARTER_CAMPAIGN_LIMITS;
-    return {
-      id: p.id, name: p.name, priceMonthlySar: p.priceMonthlySar, annualDiscountBps: p.annualDiscountBps, isPopular: p.isPopular,
-      maxUsers: p.maxUsers, maxWhatsappNumbers: p.maxWhatsappNumbers, maxMessagesPerMonth: p.maxMessagesPerMonth,
-      maxActiveFlows: chatbotLimits.maxActiveFlows, hasAiNode: chatbotLimits.allowedNodeTypes.includes("ai_reply"),
-      hasApiCallNode: chatbotLimits.allowedNodeTypes.includes("api_call"), maxCampaignsPerMonth: campaignLimits.maxCampaignsPerMonth,
-      supportTier: p.supportTier, features: (p.features as string[] | null) ?? [],
-    };
-  });
+  const tenantCurrency = COUNTRY_TO_CURRENCY[tenant.country];
+  // باقة بلا سعر مُحدَّد لدولة هذا التاجر تُستبعَد تماماً من المقارنة — لا سعر مُحوَّل مُخترَع (راجع lib/planPricing.ts).
+  const comparisonPlans: ComparisonPlan[] = catalogPlans
+    .map((p) => {
+      const price = resolvePlanPrice(p, tenant.country);
+      if (price === null) return null;
+      const chatbotLimits = parseChatbotLimits(p.chatbotLimitsJson) ?? DEFAULT_STARTER_CHATBOT_LIMITS;
+      const campaignLimits = parseCampaignLimits(p.campaignLimitsJson) ?? DEFAULT_STARTER_CAMPAIGN_LIMITS;
+      return {
+        id: p.id, name: p.name, priceMonthlySar: price, annualDiscountBps: p.annualDiscountBps, isPopular: p.isPopular,
+        maxUsers: p.maxUsers, maxWhatsappNumbers: p.maxWhatsappNumbers, maxMessagesPerMonth: p.maxMessagesPerMonth,
+        maxActiveFlows: chatbotLimits.maxActiveFlows, hasAiNode: chatbotLimits.allowedNodeTypes.includes("ai_reply"),
+        hasApiCallNode: chatbotLimits.allowedNodeTypes.includes("api_call"), maxCampaignsPerMonth: campaignLimits.maxCampaignsPerMonth,
+        supportTier: p.supportTier, features: (p.features as string[] | null) ?? [],
+      };
+    })
+    .filter((p): p is ComparisonPlan => p !== null);
 
   const daysRemaining = subscription ? Math.ceil((subscription.currentPeriodEnd.getTime() - Date.now()) / 86400000) : 0;
   const latestFailedInvoice = invoices.find((i) => i.status === "FAILED");
@@ -121,7 +130,7 @@ export default async function BillingPage() {
           </div>
 
           <div className="mt-4 flex items-center justify-between border-t border-white/5 pt-3 text-xs text-slate-500">
-            <span>الفاتورة القادمة: {subscription.plan.priceMonthlySar} ر.س</span>
+            <span dir="ltr">الفاتورة القادمة: {formatMoney(resolvePlanPrice(subscription.plan, tenant.country) ?? subscription.plan.priceMonthlySar, tenantCurrency)}</span>
             <span dir="ltr">تجديد الدورة: {subscription.currentPeriodEnd.toLocaleDateString("ar-SA")}</span>
           </div>
         </div>
@@ -132,7 +141,7 @@ export default async function BillingPage() {
         canManage={canManage}
       />
 
-      <PlanComparison plans={comparisonPlans} currentPlanId={subscription?.planId ?? null} canManage={canManage} />
+      <PlanComparison plans={comparisonPlans} currentPlanId={subscription?.planId ?? null} canManage={canManage} currency={tenantCurrency} />
 
       <div className="card p-5">
         <h2 className="mb-2 font-semibold text-white">تحتاج باقة مخصصة (Enterprise)؟</h2>
@@ -180,9 +189,9 @@ export default async function BillingPage() {
               <tr key={inv.id} className="border-b border-white/5 last:border-0">
                 <td className="p-3 text-slate-400" dir="ltr">#{inv.invoiceNumber}</td>
                 <td className="p-3 text-slate-300">{inv.createdAt.toLocaleDateString("ar-SA")}</td>
-                <td className="p-3 text-slate-100">
-                  {inv.amountSar} ر.س
-                  <span className="mr-1 text-xs text-slate-500">(منها {inv.vatAmountSar} ر.س ضريبة قيمة مضافة {inv.vatRateBps / 100}%)</span>
+                <td className="p-3 text-slate-100" dir="ltr">
+                  {formatMoney(inv.amountSar, inv.currency)}
+                  <span className="mr-1 text-xs text-slate-500">(منها {formatMoney(inv.vatAmountSar, inv.currency)} ضريبة قيمة مضافة {inv.vatRateBps / 100}%)</span>
                 </td>
                 <td className="p-3">
                   <span

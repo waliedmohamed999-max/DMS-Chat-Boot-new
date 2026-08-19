@@ -2,6 +2,7 @@
 
 import crypto from "crypto";
 import bcrypt from "bcryptjs";
+import type { Country } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { requireSuperAdminSession } from "@/lib/session";
 import { requirePermission } from "@/lib/rbac";
@@ -17,6 +18,7 @@ import {
 } from "@/lib/email/partnerTemplates";
 import { getVatRateBps, computeVatAmount } from "@/lib/billing/vat";
 import { postInvoicePaymentEntry } from "@/lib/accounting/postings";
+import { COUNTRY_TO_CURRENCY } from "@/lib/currency";
 
 async function loadRequest(requestId: string) {
   return superAdminDb.approvalRequest.findUniqueOrThrow({ where: { id: requestId }, include: { tenant: true } });
@@ -28,6 +30,10 @@ type PartnerApplicationPayload = {
   ownerName: string;
   phone: string;
   city: string;
+  // دولة المتقدّم — تُحدَّد كـTenant.country عند الاعتماد، فتحدد عملة/ضريبة كل فواتيره لاحقاً. طلبات
+  // قديمة سابقة لإضافة هذا الحقل لن تحمله — احتياط "SA" في مكان الاستخدام أدناه (تلقائياً السلوك
+  // القديم قبل تعدد الدول، بلا أي تغيير سلوك للطلبات الحالية المعلَّقة وقت هذا التحديث).
+  country?: Country;
   requestedPlanKey: string;
   requestedPlanName: string;
   termsAcceptedAt: string;
@@ -72,7 +78,7 @@ export async function approvePartnerApplication(requestId: string) {
   const setupExpiresAt = new Date(Date.now() + 7 * 24 * 3600 * 1000);
 
   const tenantId = await superAdminDb.$transaction(async (tx) => {
-    const tenant = await tx.tenant.create({ data: { slug, name: payload.storeName, status: "TRIAL", joinSource: "PARTNER_APPLICATION" } });
+    const tenant = await tx.tenant.create({ data: { slug, name: payload.storeName, status: "TRIAL", joinSource: "PARTNER_APPLICATION", country: payload.country ?? "SA" } });
 
     if (payload.referralAffiliateId) {
       await tx.referral.create({ data: { affiliateId: payload.referralAffiliateId, tenantId: tenant.id } });
@@ -277,7 +283,12 @@ export async function approveCustomPlan(requestId: string, formData: FormData) {
   if (!name) throw new Error("اسم الباقة مطلوب");
 
   const tenantId = request.tenantId!;
-  const vatRateBps = await getVatRateBps();
+  // باقة Enterprise مخصصة لتاجر واحد بعينه (isCustomForTenantId) — السعر المُدخَل هنا هو بعملة دولة
+  // ذلك التاجر تحديداً (وليس بالضرورة ريالاً سعودياً)، فلا حاجة لحقل pricingJson متعدد الدول هنا
+  // كما في الباقات القياسية المشتركة بين كل التجار.
+  const tenant = await superAdminDb.tenant.findUniqueOrThrow({ where: { id: tenantId }, select: { country: true } });
+  const vatRateBps = await getVatRateBps(tenant.country);
+  const currency = COUNTRY_TO_CURRENCY[tenant.country];
   const vatAmountSar = computeVatAmount(priceMonthlySar, vatRateBps);
   const periodEnd = new Date(Date.now() + 30 * 24 * 3600 * 1000);
 
@@ -307,7 +318,7 @@ export async function approveCustomPlan(requestId: string, formData: FormData) {
 
     const invoice = await tx.invoice.create({
       data: {
-        tenantId, amountSar: priceMonthlySar, vatRateBps, vatAmountSar, planKey: plan.key,
+        tenantId, amountSar: priceMonthlySar, currency, vatRateBps, vatAmountSar, planKey: plan.key,
         status: "PAID", periodStart: new Date(), periodEnd, paidAt: new Date(),
       },
     });
@@ -315,7 +326,7 @@ export async function approveCustomPlan(requestId: string, formData: FormData) {
     return { invoiceId: invoice.id, planKey: plan.key };
   });
 
-  await postInvoicePaymentEntry({ id: created.invoiceId, amountSar: priceMonthlySar, vatAmountSar, planKey: created.planKey }).catch((err) =>
+  await postInvoicePaymentEntry({ id: created.invoiceId, amountSar: priceMonthlySar, vatAmountSar, planKey: created.planKey, currency }).catch((err) =>
     console.error("❌ فشل تسجيل قيد محاسبي لفاتورة باقة Enterprise:", err)
   );
 

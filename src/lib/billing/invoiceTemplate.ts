@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import type { Invoice } from "@prisma/client";
 import type { SellerInfo } from "@/lib/billing/invoicePdf";
+import { CURRENCY_SYMBOLS } from "@/lib/currency";
 
 const STATUS_LABELS_AR: Record<string, string> = {
   PAID: "مدفوعة", PENDING: "قيد الانتظار", FAILED: "فشلت", REFUNDED: "مستردة", CANCELLED: "ملغاة", OVERDUE: "متأخرة",
@@ -45,9 +46,11 @@ function loadFontFaces(): string {
 
 // أرقام غربية (0-9) صراحة للمبالغ المالية — ليس فقط تفضيلاً بصرياً: المستندات المالية الرسمية
 // (وتوجيهات ZATCA نفسها) تتوقّع أرقاماً غربية لضمان قراءة آلية/محاسبية متّسقة، بخلاف نص الفاتورة
-// العادي (تواريخ/أوصاف) الذي يبقى عربياً بالكامل بلا أي مشكلة.
-function formatSar(amountSar: number): string {
-  return amountSar.toLocaleString("en-US");
+// العادي (تواريخ/أوصاف) الذي يبقى عربياً بالكامل بلا أي مشكلة. رمز العملة نفسه (ر.س/د.إ/ج.م) يتبع
+// عملة الفاتورة الفعلية (invoice.currency) بدل افتراض الريال السعودي دائماً.
+function formatAmount(amount: number, currency: string): string {
+  const symbol = CURRENCY_SYMBOLS[currency] ?? currency;
+  return `${amount.toLocaleString("en-US")} ${symbol}`;
 }
 
 function formatDate(date: Date): string {
@@ -61,7 +64,9 @@ export type InvoiceTemplateInput = {
   tenantEmail?: string | null;
   planName?: string | null;
   seller: SellerInfo;
-  qrDataUri: string;
+  // null لأي فاتورة غير سعودية (invoice.currency !== "SAR") — رمز ZATCA سعودي تحديداً، لا يُعرَض
+  // قسم التحقق إطلاقاً في تلك الحالة (راجع invoicePdf.ts).
+  qrDataUri: string | null;
   supportEmail?: string | null;
   supportPhone?: string | null;
 };
@@ -201,20 +206,21 @@ table.items tbody tr:last-child td { border-bottom: none; }
       <tr>
         <td>${escapeHtml(lineItemDescription)}</td>
         <td>1</td>
-        <td>${formatSar(subtotal)} ر.س</td>
-        <td>${formatSar(subtotal)} ر.س</td>
+        <td>${formatAmount(subtotal, invoice.currency)}</td>
+        <td>${formatAmount(subtotal, invoice.currency)}</td>
       </tr>
     </tbody>
   </table>
 
   <div class="totals">
     <div class="totals-box">
-      <div class="totals-row"><span>المجموع الفرعي</span><span>${formatSar(subtotal)} ر.س</span></div>
-      <div class="totals-row"><span>ضريبة القيمة المضافة (${vatPercent}%)</span><span>${formatSar(invoice.vatAmountSar)} ر.س</span></div>
-      <div class="totals-row grand"><span>الإجمالي</span><span>${formatSar(invoice.amountSar)} ر.س</span></div>
+      <div class="totals-row"><span>المجموع الفرعي</span><span>${formatAmount(subtotal, invoice.currency)}</span></div>
+      <div class="totals-row"><span>ضريبة القيمة المضافة (${vatPercent}%)</span><span>${formatAmount(invoice.vatAmountSar, invoice.currency)}</span></div>
+      <div class="totals-row grand"><span>الإجمالي</span><span>${formatAmount(invoice.amountSar, invoice.currency)}</span></div>
     </div>
   </div>
 
+  ${qrDataUri ? `
   <div class="qr-section">
     <img src="${qrDataUri}" alt="ZATCA QR" />
     <div class="qr-caption">
@@ -222,6 +228,7 @@ table.items tbody tr:last-child td { border-bottom: none; }
       امسح الرمز للتحقق من صحة الفاتورة وفق متطلبات هيئة الزكاة والضريبة والجمارك — المرحلة الأولى للفوترة الإلكترونية.
     </div>
   </div>
+  ` : ""}
 
   <div class="footer">
     <p class="thank-you">شكراً لاستخدامك منصتنا</p>

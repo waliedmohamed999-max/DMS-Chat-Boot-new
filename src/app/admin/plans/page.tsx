@@ -4,7 +4,11 @@ import { hasPermission } from "@/lib/rbac";
 import { DEFAULT_STARTER_CHATBOT_LIMITS, type ChatbotLimits } from "@/lib/planLimits";
 import { DEFAULT_STARTER_CAMPAIGN_LIMITS, type CampaignLimits } from "@/lib/campaigns/limits";
 import { NODE_TYPES } from "@/lib/chatbot/nodeTypes";
-import { updatePlanChatbotLimits, updatePlanCampaignLimits, createPlan, updatePlanCoreFields, togglePlanActive, setPlanAsPopular, unsetPlanPopular } from "./actions";
+import { parsePlanPricing } from "@/lib/planPricing";
+import {
+  updatePlanChatbotLimits, updatePlanCampaignLimits, updatePlanPricing,
+  createPlan, updatePlanCoreFields, togglePlanActive, setPlanAsPopular, unsetPlanPopular,
+} from "./actions";
 
 const CONFIGURABLE_NODE_TYPES = ["message", "question", "condition", "ai_reply", "api_call", "handoff"] as const;
 
@@ -66,6 +70,7 @@ export default async function AdminPlansPage() {
         {plans.map((plan) => {
           const limits = (plan.chatbotLimitsJson as ChatbotLimits | null) ?? DEFAULT_STARTER_CHATBOT_LIMITS;
           const campaignLimits = (plan.campaignLimitsJson as CampaignLimits | null) ?? DEFAULT_STARTER_CAMPAIGN_LIMITS;
+          const pricing = parsePlanPricing(plan.pricingJson);
           const features = (plan.features as string[] | null) ?? [];
           return (
             <div key={plan.id} className="card space-y-4 p-5">
@@ -118,6 +123,25 @@ export default async function AdminPlansPage() {
                 </div>
                 <textarea name="features" defaultValue={features.join("\n")} required rows={3} className="input-field text-sm" />
                 <button type="submit" className="btn-secondary w-full text-sm">حفظ البيانات الأساسية</button>
+              </form>
+
+              <form action={updatePlanPricing.bind(null, plan.id)} className="space-y-2 border-t border-white/5 pt-4">
+                <p className="text-xs font-medium text-slate-400">التسعير حسب الدولة</p>
+                <p className="text-xs text-slate-500">
+                  السعودية = السعر الأساسي أعلاه ({plan.priceMonthlySar} ر.س). اترك حقل دولة فارغاً
+                  لإخفاء الباقة عن تلك الدولة حتى تُحدَّد سعرها.
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="label-field text-xs">سعر الإمارات (د.إ)</label>
+                    <input name="priceAe" type="number" min={0} defaultValue={pricing.AE?.amount ?? ""} className="input-field text-sm" dir="ltr" placeholder="غير مُسعَّرة بعد" />
+                  </div>
+                  <div>
+                    <label className="label-field text-xs">سعر مصر (ج.م)</label>
+                    <input name="priceEg" type="number" min={0} defaultValue={pricing.EG?.amount ?? ""} className="input-field text-sm" dir="ltr" placeholder="غير مُسعَّرة بعد" />
+                  </div>
+                </div>
+                <button type="submit" className="btn-secondary w-full text-sm">حفظ التسعير حسب الدولة</button>
               </form>
 
               <form action={updatePlanChatbotLimits.bind(null, plan.id)} className="space-y-3">

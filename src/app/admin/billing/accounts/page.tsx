@@ -3,12 +3,14 @@ import { hasPermission } from "@/lib/rbac";
 import { superAdminDb } from "@/lib/db";
 import { ensureChartOfAccounts } from "@/lib/accounting/chartOfAccounts";
 import { computeAllAccountBalances } from "@/lib/accounting/balances";
+import { formatMoney } from "@/lib/currency";
 import { BillingTabs } from "../BillingTabs";
 import { AddAccountForm } from "./AddAccountForm";
 
 type AccountNode = {
   id: string; code: string; name: string; type: string; isSystemAccount: boolean;
-  balance: number; children: AccountNode[];
+  // رصيد لكل عملة على حدة — {عملة: رصيد}، لا يُدمَج أبداً في رقم واحد (راجع balances.ts).
+  balances: Record<string, number>; children: AccountNode[];
 };
 
 export default async function ChartOfAccountsPage() {
@@ -29,7 +31,7 @@ export default async function ChartOfAccountsPage() {
   ]);
 
   const byId = new Map<string, AccountNode>(
-    accounts.map((a) => [a.id, { id: a.id, code: a.code, name: a.name, type: a.type, isSystemAccount: a.isSystemAccount, balance: balances.get(a.id) ?? 0, children: [] }])
+    accounts.map((a) => [a.id, { id: a.id, code: a.code, name: a.name, type: a.type, isSystemAccount: a.isSystemAccount, balances: balances.get(a.id) ?? {}, children: [] }])
   );
   const roots: AccountNode[] = [];
   for (const a of accounts) {
@@ -39,6 +41,7 @@ export default async function ChartOfAccountsPage() {
   }
 
   function renderRow(node: AccountNode, depth: number) {
+    const currencies = Object.keys(node.balances);
     return (
       <div className="flex items-center justify-between py-1.5" style={{ paddingRight: `${depth * 20}px` }}>
         <div className="flex items-center gap-2">
@@ -46,7 +49,18 @@ export default async function ChartOfAccountsPage() {
           <span className="text-sm text-slate-200">{node.name}</span>
           {!node.isSystemAccount && <span className="badge bg-accent-500/10 text-accent-400 text-[10px]">مخصَّص</span>}
         </div>
-        <span className="text-sm font-medium text-slate-100" dir="ltr">{node.balance.toLocaleString()} ر.س</span>
+        {/* رصيد منفصل لكل عملة موجودة فعلياً لهذا الحساب — لا دمج بين عملات مختلفة أبداً */}
+        <div className="flex flex-col items-end gap-0.5">
+          {currencies.length === 0 ? (
+            <span className="text-sm font-medium text-slate-100" dir="ltr">{formatMoney(0, "SAR")}</span>
+          ) : (
+            currencies.map((currency) => (
+              <span key={currency} className="text-sm font-medium text-slate-100" dir="ltr">
+                {formatMoney(node.balances[currency]!, currency)}
+              </span>
+            ))
+          )}
+        </div>
       </div>
     );
   }

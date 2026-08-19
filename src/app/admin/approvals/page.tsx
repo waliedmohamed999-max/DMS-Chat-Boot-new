@@ -15,7 +15,7 @@ export default async function ApprovalsCenterPage() {
 
   const requests = await superAdminDb.approvalRequest.findMany({
     where: { status: { in: ["PENDING", "NEEDS_INFO"] } },
-    include: { tenant: { select: { id: true, name: true, slug: true } } },
+    include: { tenant: { select: { id: true, name: true, slug: true, country: true } } },
     orderBy: { createdAt: "asc" },
   });
 

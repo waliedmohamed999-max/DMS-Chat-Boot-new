@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Suspense } from "react";
 import { getPublicPlans } from "@/app/partners/apply/actions";
+import { getCountryConfigs } from "@/lib/billing/countryConfig";
 import { PartnersApplyWizard } from "@/components/partners/PartnersApplyWizard";
 import { AuthShell } from "@/components/auth/AuthShell";
 import { LogoFull } from "@/components/Logo";
@@ -9,7 +10,10 @@ import { LogoFull } from "@/components/Logo";
 export const dynamic = "force-dynamic";
 
 export default async function PartnersApplyPage() {
-  const plans = await getPublicPlans();
+  const [plans, countryConfigs] = await Promise.all([getPublicPlans(), getCountryConfigs()]);
+  const countries = countryConfigs
+    .filter((c) => c.isActive)
+    .map((c) => ({ country: c.country, currency: c.currency, isDefault: c.isDefault }));
 
   return (
     <AuthShell
@@ -36,7 +40,7 @@ export default async function PartnersApplyPage() {
           </div>
         ) : (
           <Suspense>
-            <PartnersApplyWizard plans={plans} />
+            <PartnersApplyWizard plans={plans} countries={countries} />
           </Suspense>
         )}
 

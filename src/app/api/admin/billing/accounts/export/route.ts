@@ -31,8 +31,15 @@ export async function GET() {
     data: { userId: session.user.id, action: "platform.chart_of_accounts_export", targetType: "Account", metaJson: { count: accounts.length } },
   });
 
-  const HEADERS = ["Code", "Name", "Type", "Parent Code", "Balance (SAR)"];
-  const rows = accounts.map((a) => [a.code, a.name, TYPE_LABELS_AR[a.type] ?? a.type, a.parent?.code ?? "", String(balances.get(a.id) ?? 0)]);
+  // صف منفصل لكل (حساب، عملة) — لا عمود "Balance (SAR)" ثابت بعد الآن، لأن حساباً واحداً قد يحمل
+  // أرصدة بعملات مختلفة فعلياً (لا يُدمَجان في رقم واحد أبداً، راجع balances.ts).
+  const HEADERS = ["Code", "Name", "Type", "Parent Code", "Currency", "Balance"];
+  const rows = accounts.flatMap((a) => {
+    const byCurrency = balances.get(a.id) ?? {};
+    const currencies = Object.keys(byCurrency);
+    if (currencies.length === 0) return [[a.code, a.name, TYPE_LABELS_AR[a.type] ?? a.type, a.parent?.code ?? "", "SAR", "0"]];
+    return currencies.map((currency) => [a.code, a.name, TYPE_LABELS_AR[a.type] ?? a.type, a.parent?.code ?? "", currency, String(byCurrency[currency])]);
+  });
 
   const filename = `دليل-الحسابات-${new Date().toISOString().slice(0, 10)}.csv`;
   const lines = [HEADERS.join(","), ...rows.map((r) => r.map(escapeCsvField).join(","))];

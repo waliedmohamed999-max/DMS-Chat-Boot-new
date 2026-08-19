@@ -36,7 +36,7 @@ export async function issueRefund(invoiceId: string, reason: string): Promise<Is
     return note;
   });
 
-  await postRefundEntry(invoiceId, subtotal, invoice.vatAmountSar);
+  await postRefundEntry(invoiceId, subtotal, invoice.vatAmountSar, invoice.currency);
 
   await superAdminDb.auditLog.create({
     data: {
@@ -62,12 +62,12 @@ export async function retryFailedPaymentAsAdmin(invoiceId: string): Promise<Retr
   const invoice = await superAdminDb.invoice.findUnique({ where: { id: invoiceId } });
   if (!invoice || invoice.status !== "FAILED") return { success: false, error: "لا توجد فاتورة فاشلة بهذا المعرّف" };
 
-  const charge = await getPaymentProvider().chargeSubscription(invoice.tenantId, invoice.amountSar);
+  const charge = await getPaymentProvider().chargeSubscription(invoice.tenantId, invoice.amountSar, invoice.currency);
 
   if (charge.success) {
     await superAdminDb.invoice.update({ where: { id: invoiceId }, data: { status: "PAID", paidAt: new Date(), failureReason: null } });
     await superAdminDb.subscription.update({ where: { tenantId: invoice.tenantId }, data: { status: "ACTIVE" } });
-    await postInvoicePaymentEntry({ id: invoice.id, amountSar: invoice.amountSar, vatAmountSar: invoice.vatAmountSar, planKey: invoice.planKey }).catch((err) =>
+    await postInvoicePaymentEntry({ id: invoice.id, amountSar: invoice.amountSar, vatAmountSar: invoice.vatAmountSar, planKey: invoice.planKey, currency: invoice.currency }).catch((err) =>
       console.error("❌ فشل تسجيل قيد محاسبي لإعادة محاولة الدفع (من لوحة المنصة):", err)
     );
   } else {

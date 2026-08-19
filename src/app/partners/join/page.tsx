@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { getPublicPlans } from "@/app/partners/apply/actions";
 import { LogoFull } from "@/components/Logo";
+import { resolvePlanPrice } from "@/lib/planPricing";
+import { formatMoney } from "@/lib/currency";
 
 // الباقات تُقرأ من جدول Plan الحقيقي القابل للتعديل من لوحة مالك المنصة (admin/plans) — بدون هذا،
 // كانت الصفحة تُبنى ثابتة وقت `next build` فقط وتُجمِّد الأسعار المعروضة للجمهور حتى إعادة نشر جديدة.
@@ -14,7 +16,12 @@ const BENEFITS = [
 ];
 
 export default async function PartnersJoinPage() {
-  const plans = await getPublicPlans();
+  const allPlans = await getPublicPlans();
+  // صفحة تعريفية بلا مبدّل دولة (اختيار الدولة الفعلي يتم لاحقاً في /partners/apply نفسها) —
+  // تُعرَض أسعار السعودية (الدولة الأساسية) هنا افتراضياً.
+  const plans = allPlans
+    .map((plan) => ({ plan, price: resolvePlanPrice(plan, "SA") }))
+    .filter((x): x is { plan: typeof allPlans[number]; price: number } => x.price !== null);
 
   return (
     <div className="min-h-screen bg-white dark:bg-slate-950">
@@ -64,11 +71,11 @@ export default async function PartnersJoinPage() {
         <section className="mx-auto max-w-5xl px-4 py-12">
           <h2 className="mb-6 text-center text-2xl font-bold text-slate-900 dark:text-white">باقاتنا</h2>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            {plans.map((plan) => (
+            {plans.map(({ plan, price }) => (
               <div key={plan.key} className="rounded-2xl border border-slate-200 bg-white p-6 text-center shadow-card dark:border-white/10 dark:bg-slate-900">
                 <p className="font-semibold text-slate-900 dark:text-white">{plan.name}</p>
-                <p className="mt-2 text-2xl font-bold text-wa-600 dark:text-wa-400">
-                  {plan.priceMonthlySar} <span className="text-sm font-normal text-slate-400">ر.س / شهرياً</span>
+                <p className="mt-2 text-2xl font-bold text-wa-600 dark:text-wa-400" dir="ltr">
+                  {formatMoney(price, "SAR")} <span className="text-sm font-normal text-slate-400">/ شهرياً</span>
                 </p>
                 <ul className="mt-4 space-y-1 text-right text-sm text-slate-500 dark:text-slate-400">
                   <li>حتى {plan.maxUsers} مستخدمين</li>

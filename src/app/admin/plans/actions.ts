@@ -183,6 +183,39 @@ export async function updatePlanCampaignLimits(planId: string, formData: FormDat
   revalidatePath("/dashboard/campaigns");
 }
 
+/** سعر هذه الباقة لدول غير السعودية (priceMonthlySar الأساسي يبقى يُعدَّل من updatePlanCoreFields
+ * أعلاه بلا تغيير) — حقل فارغ لدولة معينة يعني عدم عرض الباقة لتلك الدولة حتى يُحدَّد سعرها فعلياً،
+ * بنفس مبدأ null-يعني-fallback المستخدَم في updatePlanChatbotLimits/updatePlanCampaignLimits. */
+export async function updatePlanPricing(planId: string, formData: FormData) {
+  const session = await requireSuperAdminSession();
+  requirePermission(session.user.role, "platform.plans.manage");
+
+  const priceAeRaw = String(formData.get("priceAe") ?? "").trim();
+  const priceEgRaw = String(formData.get("priceEg") ?? "").trim();
+
+  const pricingJson: { AE?: { amount: number }; EG?: { amount: number } } = {};
+  if (priceAeRaw !== "") {
+    const amount = Math.max(0, parseInt(priceAeRaw, 10) || 0);
+    pricingJson.AE = { amount };
+  }
+  if (priceEgRaw !== "") {
+    const amount = Math.max(0, parseInt(priceEgRaw, 10) || 0);
+    pricingJson.EG = { amount };
+  }
+
+  await superAdminDb.plan.update({ where: { id: planId }, data: { pricingJson } });
+
+  await superAdminDb.auditLog.create({
+    data: { userId: session.user.id, action: "platform.plan_pricing_update", targetType: "Plan", targetId: planId, metaJson: pricingJson },
+  });
+
+  revalidatePath("/admin/plans");
+  revalidatePath("/pricing");
+  revalidatePath("/register");
+  revalidatePath("/partners/apply");
+  revalidatePath("/partners/join");
+}
+
 export async function updatePlanChatbotLimits(planId: string, formData: FormData) {
   const session = await requireSuperAdminSession();
   requirePermission(session.user.role, "platform.plans.manage");

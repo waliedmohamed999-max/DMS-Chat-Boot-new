@@ -1,10 +1,12 @@
-import { getPlatformSettings } from "@/lib/platformSettings";
+import type { Country } from "@prisma/client";
+import { getCountryConfig } from "@/lib/billing/countryConfig";
 
-/** المصدر المركزي الوحيد لنسبة الضريبة — تُقرأ من PlatformSettings.vatRateBps (قابلة للتعديل من
- * admin/settings دون تعديل كود)، بدل ثابت منفصل كان مكرَّراً في كود الفوترة (بند 6 في البرومنت). */
-export async function getVatRateBps(): Promise<number> {
-  const settings = await getPlatformSettings();
-  return settings.vatRateBps;
+/** المصدر المركزي الوحيد لنسبة الضريبة — تُقرأ من CountryConfig الخاص بدولة التاجر (قابلة للتعديل
+ * من admin/countries دون تعديل كود)، بدل نسبة عالمية واحدة (PlatformSettings.vatRateBps القديمة،
+ * لم تعد المصدر الفعلي بعد إضافة دعم تعدد الدول — راجع تعليق الحقل في schema.prisma). */
+export async function getVatRateBps(country: Country): Promise<number> {
+  const config = await getCountryConfig(country);
+  return config.vatRateBps;
 }
 
 /** amountSar شامل الضريبة أصلاً — يفصل الجزء الضريبي منه فقط (بدون تغيير المبلغ الإجمالي المُحصَّل). */

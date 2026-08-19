@@ -3,8 +3,10 @@
 import { useEffect, useState, useTransition } from "react";
 import { previewPlanChange, changePlan, type PlanChangePreview } from "./actions";
 import type { ComparisonPlan } from "./PlanComparison";
+import { CURRENCY_SYMBOLS } from "@/lib/currency";
 
-export function ChangePlanModal({ plan, onClose }: { plan: ComparisonPlan; onClose: () => void }) {
+export function ChangePlanModal({ plan, currency, onClose }: { plan: ComparisonPlan; currency: string; onClose: () => void }) {
+  const currencySymbol = CURRENCY_SYMBOLS[currency] ?? currency;
   const [preview, setPreview] = useState<PlanChangePreview | null>(null);
   const [confirmResult, setConfirmResult] = useState<{ success: boolean; error?: string } | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -44,13 +46,13 @@ export function ChangePlanModal({ plan, onClose }: { plan: ComparisonPlan; onClo
           <div className="space-y-3 text-sm">
             <div className="rounded-lg border border-white/5 bg-navy-900 p-3">
               <div className="flex justify-between"><span className="text-slate-500">أيام متبقية من الدورة الحالية</span><span dir="ltr">{preview.daysRemaining} يوم</span></div>
-              <div className="flex justify-between"><span className="text-slate-500">رصيد الباقة الحالية غير المستخدم</span><span dir="ltr">{preview.creditApplied} ر.س</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">رصيد الباقة الحالية غير المستخدم</span><span dir="ltr">{preview.creditApplied} {currencySymbol}</span></div>
               <div className="mt-2 flex justify-between border-t border-white/5 pt-2 font-bold text-white">
-                <span>المبلغ المستحق الآن</span><span dir="ltr">{preview.dueNow} ر.س</span>
+                <span>المبلغ المستحق الآن</span><span dir="ltr">{preview.dueNow} {currencySymbol}</span>
               </div>
               <div className="mt-2 flex justify-between text-xs text-slate-500">
                 <span>الفاتورة القادمة</span>
-                <span dir="ltr">{new Date(preview.nextBillingDate).toLocaleDateString("ar-SA")} — {preview.nextBillingAmount} ر.س</span>
+                <span dir="ltr">{new Date(preview.nextBillingDate).toLocaleDateString("ar-SA")} — {preview.nextBillingAmount} {currencySymbol}</span>
               </div>
             </div>
 

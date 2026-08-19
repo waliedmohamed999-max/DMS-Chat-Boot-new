@@ -24,13 +24,18 @@ export async function generateInvoicePdfBuffer(input: {
 }): Promise<Buffer> {
   const { invoice, seller } = input;
 
-  const qrDataUri = await generateZatcaQrDataUri({
-    sellerName: seller.sellerLegalName,
-    vatNumber: seller.sellerVatNumber ?? "",
-    timestampIso: invoice.createdAt.toISOString(),
-    invoiceTotal: invoice.amountSar.toFixed(2),
-    vatTotal: invoice.vatAmountSar.toFixed(2),
-  });
+  // رمز ZATCA متطلب قانوني سعودي تحديداً (المرحلة الأولى للفوترة الإلكترونية) — لا معنى له ولا يجب
+  // ظهوره على فاتورة تاجر إماراتي/مصري إطلاقاً (لن يكون رمزاً حقيقياً/صحيحاً لأي جهة تلك الدولة).
+  // invoice.currency === "SAR" مكافئ فعلياً لـ"تاجر سعودي" (SAR مقصورة على دولة SA فقط).
+  const qrDataUri = invoice.currency === "SAR"
+    ? await generateZatcaQrDataUri({
+        sellerName: seller.sellerLegalName,
+        vatNumber: seller.sellerVatNumber ?? "",
+        timestampIso: invoice.createdAt.toISOString(),
+        invoiceTotal: invoice.amountSar.toFixed(2),
+        vatTotal: invoice.vatAmountSar.toFixed(2),
+      })
+    : null;
 
   const html = buildInvoiceHtml({ ...input, qrDataUri });
   return renderHtmlToPdfBuffer(html);

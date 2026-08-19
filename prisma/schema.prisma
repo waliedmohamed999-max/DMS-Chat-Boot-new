@@ -26,6 +26,14 @@ enum UserRole {
   AGENT // موظف رد بصلاحيات محدودة
 }
 
+// دول تشغيل المنصة — السعودية الأساس (الافتراضي)، ممتدة للإمارات ومصر. تحدد عملة/ضريبة كل تاجر
+// عبر CountryConfig (راجع تعريفها أسفل PlatformSettings) بدل رقم/عملة عالمية واحدة كما كان سابقاً.
+enum Country {
+  SA
+  AE
+  EG
+}
+
 enum TenantStatus {
   PENDING_REVIEW // تسجيل جديد بانتظار موافقة مالك المنصة قبل أي تفعيل فعلي
   TRIAL
@@ -52,6 +60,9 @@ model Tenant {
   primaryColor    String           @default("#6D5EF8") // تخصيص white-label جزئي
   status          TenantStatus     @default(PENDING_REVIEW)
   joinSource      TenantJoinSource @default(DIRECT_REGISTER)
+  // دولة التاجر — تحدد العملة ونسبة الضريبة الفعليتين (عبر CountryConfig) لكل فاتورة/اشتراك تابع
+  // لهذا التاجر. تُلتقط وقت التسجيل الفعلي (مسارات التسجيل الثلاثة) ولا تتغيّر بعد ذلك.
+  country         Country          @default(SA)
   rejectionReason String? // سبب الرفض أو "طلب معلومات إضافية" الظاهر للتاجر
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
@@ -227,6 +238,11 @@ model Plan {
   //          abTestingEnabled: boolean } — قيمة null تعني الرجوع لحدود Starter الافتراضية (lib/campaigns/limits.ts).
   // ملاحظة: abTestingEnabled علم بيانات محجوز لترقية مستقبلية فقط (لا واجهة A/B فعلية مبنية بعد — انظر DECISIONS.md).
   campaignLimitsJson  Json?
+  // سعر هذه الباقة لدول غير السعودية — priceMonthlySar يبقى سعر السعودية (الأساس/الافتراضي) بلا
+  // تغيير. الشكل: { AE?: { amount: number }, EG?: { amount: number } } — دولة غائبة من هذا الحقل
+  // تعني أن الباقة غير مُسعَّرة/غير معروضة لتلك الدولة بعد (لا تحويل عملة تلقائي مُخترَع أبداً)،
+  // راجع lib/planPricing.ts::resolvePlanPrice(). قابل للتعديل من admin/plans بنفس نمط الحقلين أعلاه.
+  pricingJson         Json?
   isActive            Boolean  @default(true)
   // "الأكثر طلباً" — علم حقيقي قابل للتعديل من Super Admin (كان سابقاً استنتاجاً بصرياً بحتاً في
   // كود الصفحة التسويقية: منتصف مصفوفة الباقات — قرار غير حقيقي، أُصلح في هذه الجولة).
@@ -314,7 +330,11 @@ model Invoice {
   // شامل الضريبة (نفس المبلغ المعروض فعلياً في صفحة الأسعار/priceMonthlySar — لا تغيير في قيمة
   // التحصيل الفعلية). vatAmountSar هو الجزء الداخلي منه فقط للشفافية في الفاتورة، وليس مبلغاً إضافياً.
   amountSar            Int
-  vatRateBps           Int           @default(1500) // نقاط أساس؛ تُنسَخ من PlatformSettings.vatRateBps وقت الإصدار
+  // رمز العملة الفعلي لهذه الفاتورة (SAR/AED/EGP) — يُنسَخ من CountryConfig الخاص بدولة التاجر وقت
+  // الإصدار (نفس أسلوب نسخ vatRateBps أدناه بالضبط). اسم عمود amountSar تاريخي فقط الآن ولا يعني
+  // بالضرورة ريالاً سعودياً بعد إضافة هذا الحقل — راجع lib/currency.ts للتنسيق الصحيح دائماً.
+  currency             String        @default("SAR")
+  vatRateBps           Int           @default(1500) // نقاط أساس؛ تُنسَخ من CountryConfig.vatRateBps وقت الإصدار
   vatAmountSar         Int           @default(0) // = amountSar × vatRateBps ÷ (10000 + vatRateBps)، مُقرَّب
   status               InvoiceStatus @default(PENDING)
   failureReason        String? // سبب فشل الدفع، يظهر في لوحة الإيرادات لفريق المنصة
@@ -393,6 +413,11 @@ model JournalLine {
   creditAccountId String?
   creditAccount   Account?     @relation("CreditAccount", fields: [creditAccountId], references: [id])
   amountSar       Int
+  // عملة هذا السطر — كل أسطر نفس JournalEntry تحمل نفس العملة إلزامياً (يُفرَض في
+  // postJournalEntry نفسه: عملة واحدة للقيد كاملاً، وليس تجميعاً بعد الإنشاء) — هذا يمنع بنيوياً
+  // خلط عملتين في نفس القيد بدل الاكتفاء بفحص وقت التشغيل. computeAllAccountBalances() يُجمِّع
+  // الأرصدة حسب (الحساب + العملة) معاً، فلا يُجمَع رصيد بعملتين مختلفتين في رقم واحد أبداً.
+  currency        String       @default("SAR")
 
   @@index([journalEntryId])
 }
@@ -406,6 +431,7 @@ model CreditNote {
   invoice          Invoice  @relation(fields: [invoiceId], references: [id])
   tenantId         String
   amountSar        Int
+  currency         String   @default("SAR") // يُنسَخ من الفاتورة الأصلية invoice.currency وقت الإنشاء
   vatAmountSar     Int
   reason           String
   createdAt        DateTime @default(now())
@@ -1103,8 +1129,11 @@ model PlatformSettings {
   supportPhone           String?
   defaultTrialDays       Int      @default(14)
   termsVersion           String?
-  // نسبة ضريبة القيمة المضافة الافتراضية بنقاط أساس (1500 = 15%) — المصدر المركزي الوحيد الذي يجب
-  // أن تُقرأ منه كل حسابات الضريبة في وحدة الفوترة، بدل ثابت منفصل مكرَّر في كود الفوترة.
+  // نسبة الضريبة/العملة العالمية القديمة — لم تعودا المصدر الفعلي لحسابات الضريبة/الفوترة بعد إضافة
+  // CountryConfig (أسفل هذا الموديل): كل دولة لها نسبة ضريبتها وعملتها الخاصة الآن (السعودية/الإمارات/
+  // مصر)، وvatRateBps هنا تحديداً كانت تُقرأ من getVatRateBps() سابقاً قبل أن تصير تأخذ Country
+  // كمعامل وتقرأ من CountryConfig بدلاً منها. أُبقيا بلا حذف لعدم فقد بيانات موجودة، لكنهما معطَّلان
+  // فعلياً الآن (defaultCurrency كان أصلاً حقلاً زخرفياً غير مقروء من أي كود قبل هذا التغيير أيضاً).
   vatRateBps             Int      @default(1500)
   defaultCurrency        String   @default("SAR")
   // إعدادات تطبيق Meta على مستوى المنصة (Embedded Signup لكل التجار) — تُفضَّل هذه القيم على متغيرات
@@ -1129,6 +1158,25 @@ model PlatformSettings {
   encryptedOpenAiApiKey  String?
   aiModel                String   @default("gpt-4o-mini")
   updatedAt              DateTime @updatedAt
+}
+
+// إعداد كل دولة تشغّل فيها المنصة — عملتها ونسبة ضريبتها، منفصلة عن PlatformSettings عمداً (ذلك
+// موديل "صف وحيد" واحد لا يحتمل أكثر من قيمة لكل حقل، بينما هذا صف واحد لكل دولة). قابل للتعديل
+// حياً من admin/countries دون نشر كود جديد، بنفس فلسفة كل الإعدادات الأخرى في هذا المشروع.
+model CountryConfig {
+  id            String   @id @default(cuid())
+  country       Country  @unique
+  currency      String // ISO 4217: SAR | AED | EGP
+  currencyLabel String // تسمية عربية للعرض: "ريال سعودي" | "درهم إماراتي" | "جنيه مصري"
+  vatRateBps    Int // نقاط أساس، قابلة للتعديل من الإدارة لكل دولة على حدة
+  // السعودية هي الدولة الافتراضية (isDefault=true) — صف واحد فقط يحمل true، تُستخدم كاختيار
+  // مبدئي في نماذج التسجيل العامة قبل أي إشارة أخرى لدولة الزائر.
+  isDefault     Boolean  @default(false)
+  // يتحكم بظهور الدولة في نماذج التسجيل/الأسعار العامة — يسمح بتجهيز تسعير دولة جديدة من الإدارة
+  // قبل إتاحتها فعلياً للجمهور، بدل أن يظهر خيارها فوراً بمجرد إضافة الصف.
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }
 
 // ========================= محتوى الصفحة الرئيسية للموقع التسويقي (قابل للتعديل من admin/content) =========================

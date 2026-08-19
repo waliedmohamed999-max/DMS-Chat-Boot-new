@@ -44,7 +44,9 @@ export async function GET(req: NextRequest) {
     data: { userId: session.user.id, action: "platform.ledger_export", targetType: "JournalEntry", metaJson: { count: entries.length, filters: filterParams } },
   });
 
-  const HEADERS = ["Date", "Account", "Debit", "Credit", "Memo"];
+  // عمود Currency صريح (لم يكن موجوداً سابقاً — الأعمدة كانت تفترض ريالاً سعودياً ضمنياً بلا أي
+  // تسمية وحدة إطلاقاً) — ضروري الآن مع وجود أكثر من عملة فعلية في دفتر القيود.
+  const HEADERS = ["Date", "Account", "Currency", "Debit", "Credit", "Memo"];
   const rows: string[][] = [];
   for (const entry of entries) {
     const dateStr = entry.entryDate.toISOString().slice(0, 10);
@@ -52,6 +54,7 @@ export async function GET(req: NextRequest) {
       rows.push([
         dateStr,
         line.debitAccount?.name ?? line.creditAccount?.name ?? "",
+        line.currency,
         line.debitAccountId ? String(line.amountSar) : "",
         line.creditAccountId ? String(line.amountSar) : "",
         entry.description,

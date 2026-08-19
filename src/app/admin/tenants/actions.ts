@@ -13,6 +13,8 @@ import { getPlatformSettings } from "@/lib/platformSettings";
 import { sendEmail } from "@/lib/email/send";
 import { partnerApplicationApprovedEmail } from "@/lib/email/partnerTemplates";
 import { approveNewTenant, rejectRequest } from "@/app/admin/approvals/actions";
+import { resolvePlanPrice } from "@/lib/planPricing";
+import type { Country } from "@prisma/client";
 
 export type CreateTenantManuallyResult = { success: true; tenantId: string } | { success: false; error: string };
 
@@ -33,6 +35,8 @@ export async function createTenantManually(formData: FormData): Promise<CreateTe
   const ownerEmail = String(formData.get("ownerEmail") ?? "").trim().toLowerCase();
   const ownerPhone = String(formData.get("ownerPhone") ?? "").trim();
   const planId = String(formData.get("planId") ?? "");
+  const countryRaw = String(formData.get("country") ?? "SA");
+  const country: Country = countryRaw === "AE" || countryRaw === "EG" ? countryRaw : "SA";
   const leadId = String(formData.get("leadId") ?? "").trim() || null;
 
   if (!storeName) return { success: false, error: "اسم المتجر مطلوب" };
@@ -45,6 +49,7 @@ export async function createTenantManually(formData: FormData): Promise<CreateTe
 
   const plan = await superAdminDb.plan.findUnique({ where: { id: planId } });
   if (!plan) return { success: false, error: "الباقة المختارة غير موجودة" };
+  if (resolvePlanPrice(plan, country) === null) return { success: false, error: "هذه الباقة غير مُسعَّرة لهذه الدولة" };
 
   const platformSettings = await getPlatformSettings();
 
@@ -57,7 +62,7 @@ export async function createTenantManually(formData: FormData): Promise<CreateTe
   const setupExpiresAt = new Date(Date.now() + 7 * 24 * 3600 * 1000);
 
   const tenantId = await superAdminDb.$transaction(async (tx) => {
-    const tenant = await tx.tenant.create({ data: { slug, name: storeName, status: "TRIAL", joinSource: "MANUAL_ADMIN" } });
+    const tenant = await tx.tenant.create({ data: { slug, name: storeName, status: "TRIAL", joinSource: "MANUAL_ADMIN", country } });
 
     // نفس قاعدة كلمة المرور المستخدَمة في approvePartnerApplication — عشوائية وغير مُبلَّغة لأحد،
     // الحساب لا يصبح قابلاً لتسجيل الدخول إلا بعد إكمال رابط إعداد الحساب.
@@ -131,6 +136,10 @@ export async function changeTenantPlan(tenantId: string, planId: string) {
   requirePermission(session.user.role, "platform.merchants.change_plan");
 
   const plan = await superAdminDb.plan.findUniqueOrThrow({ where: { id: planId } });
+  const tenant = await superAdminDb.tenant.findUniqueOrThrow({ where: { id: tenantId }, select: { country: true } });
+  if (resolvePlanPrice(plan, tenant.country) === null) {
+    throw new Error("هذه الباقة غير مُسعَّرة لدولة هذا التاجر — حدِّد سعرها من إدارة الباقات أولاً");
+  }
 
   await superAdminDb.subscription.upsert({
     where: { tenantId },

@@ -5,6 +5,7 @@ import { superAdminDb } from "@/lib/db";
 import { TENANT_STATUS_LABELS_AR, TENANT_STATUS_BADGE_CLASS } from "@/lib/tenantStatus";
 import { buildTenantListWhere, type TenantListSearchParams } from "@/lib/admin/tenantFilters";
 import { CORE_PROVIDERS, computeCompleteness, computeHealthLevel } from "@/lib/integrationHealth";
+import { getCountryConfigs } from "@/lib/billing/countryConfig";
 import { Pagination } from "@/components/admin/Pagination";
 import { TenantRowActions } from "./TenantRowActions";
 import { CreateTenantButton } from "./CreateTenantButton";
@@ -34,7 +35,11 @@ export default async function TenantsListPage({ searchParams }: { searchParams: 
   const dir = searchParams.dir === "asc" ? "asc" : "desc";
 
   const where = await buildTenantListWhere(searchParams);
-  const plans = await superAdminDb.plan.findMany({ where: { isCustomForTenantId: null }, orderBy: { priceMonthlySar: "asc" } });
+  const [plans, countryConfigs] = await Promise.all([
+    superAdminDb.plan.findMany({ where: { isCustomForTenantId: null }, orderBy: { priceMonthlySar: "asc" } }),
+    getCountryConfigs(),
+  ]);
+  const countries = countryConfigs.filter((c) => c.isActive).map((c) => ({ country: c.country, currency: c.currency, isDefault: c.isDefault }));
 
   // "تحويل إلى تاجر جديد" من صفحة رسائل التواصل (بند و في برومنت التدقيق) — يصل هنا بمعرّف الرسالة
   // فقط، فتُجلَب بياناتها لتعبئة نموذج الإنشاء اليدوي مسبقاً بدل إعادة كتابتها يدوياً من الصفر.
@@ -109,6 +114,7 @@ export default async function TenantsListPage({ searchParams }: { searchParams: 
           {canReview && (
             <CreateTenantButton
               plans={plans}
+              countries={countries}
               prefill={
                 prefillLead
                   ? { leadId: prefillLead.id, storeName: prefillLead.name, ownerName: prefillLead.name, ownerEmail: prefillLead.email, ownerPhone: prefillLead.phone }

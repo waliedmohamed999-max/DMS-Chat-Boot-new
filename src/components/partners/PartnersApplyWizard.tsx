@@ -4,15 +4,22 @@ import { useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { submitPartnerApplication, type SubmitApplicationResult } from "@/app/partners/apply/actions";
 import { useCaptureReferral } from "@/lib/affiliates/useReferralCapture";
+import { resolvePlanPrice } from "@/lib/planPricing";
+import { COUNTRY_LABELS_AR, CURRENCY_SYMBOLS } from "@/lib/currency";
+
+type Country = "SA" | "AE" | "EG";
 
 type PublicPlan = {
   key: string;
   name: string;
   priceMonthlySar: number;
+  pricingJson: unknown;
   maxUsers: number;
   maxWhatsappNumbers: number;
   maxMessagesPerMonth: number;
 };
+
+type CountryOption = { country: Country; currency: string; isDefault: boolean };
 
 const ACTIVITY_TYPES = [
   "متجر إلكتروني", "مطعم أو كافيه", "عيادة أو مركز طبي", "صالون أو مركز تجميل",
@@ -26,6 +33,7 @@ type FormState = {
   email: string;
   phone: string;
   city: string;
+  country: Country;
   password: string;
   confirmPassword: string;
   planKey: string;
@@ -35,13 +43,15 @@ type FormState = {
 
 const STEPS = ["نوع النشاط", "بيانات العمل", "اختر باقتك", "المراجعة والإرسال"] as const;
 
-export function PartnersApplyWizard({ plans }: { plans: PublicPlan[] }) {
+export function PartnersApplyWizard({ plans, countries }: { plans: PublicPlan[]; countries: CountryOption[] }) {
   useCaptureReferral();
   const [step, setStep] = useState(0);
+  const defaultCountry = countries.find((c) => c.isDefault)?.country ?? "SA";
+  const defaultPlanKey = plans.find((p) => resolvePlanPrice(p, defaultCountry) !== null)?.key ?? "";
   const [form, setForm] = useState<FormState>({
-    activityType: "", storeName: "", ownerName: "", email: "", phone: "", city: "",
+    activityType: "", storeName: "", ownerName: "", email: "", phone: "", city: "", country: defaultCountry,
     password: "", confirmPassword: "",
-    planKey: plans[0]?.key ?? "", termsAccepted: false, website: "",
+    planKey: defaultPlanKey, termsAccepted: false, website: "",
   });
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<SubmitApplicationResult | null>(null);
@@ -50,6 +60,21 @@ export function PartnersApplyWizard({ plans }: { plans: PublicPlan[] }) {
 
   function update<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((f) => ({ ...f, [key]: value }));
+  }
+
+  // الباقات المعروضة تتغيّر حسب الدولة المختارة — باقة بلا سعر لتلك الدولة تُخفى تماماً (بدون
+  // تحويل عملة تلقائي، راجع lib/planPricing.ts).
+  const availablePlans = plans
+    .map((p) => ({ plan: p, price: resolvePlanPrice(p, form.country) }))
+    .filter((x): x is { plan: PublicPlan; price: number } => x.price !== null);
+
+  function handleCountryChange(next: Country) {
+    const nextAvailable = plans.map((p) => ({ plan: p, price: resolvePlanPrice(p, next) })).filter((x) => x.price !== null);
+    setForm((f) => ({
+      ...f,
+      country: next,
+      planKey: nextAvailable.some((x) => x.plan.key === f.planKey) ? f.planKey : (nextAvailable[0]?.plan.key ?? ""),
+    }));
   }
 
   function validateStep(): string | null {
@@ -97,6 +122,7 @@ export function PartnersApplyWizard({ plans }: { plans: PublicPlan[] }) {
       fd.set("email", form.email);
       fd.set("phone", form.phone);
       fd.set("city", form.city);
+      fd.set("country", form.country);
       fd.set("password", form.password);
       fd.set("planKey", form.planKey);
       fd.set("termsAccepted", form.termsAccepted ? "on" : "");
@@ -126,7 +152,8 @@ export function PartnersApplyWizard({ plans }: { plans: PublicPlan[] }) {
     );
   }
 
-  const selectedPlan = plans.find((p) => p.key === form.planKey);
+  const selectedPlanEntry = availablePlans.find((x) => x.plan.key === form.planKey);
+  const selectedCurrency = CURRENCY_SYMBOLS[countries.find((c) => c.country === form.country)?.currency ?? "SAR"];
 
   return (
     <div className="card mx-auto max-w-lg p-6">
@@ -201,6 +228,14 @@ export function PartnersApplyWizard({ plans }: { plans: PublicPlan[] }) {
               <input className="input-field" value={form.city} onChange={(e) => update("city", e.target.value)} placeholder="الرياض" />
             </div>
           </div>
+          <div>
+            <label className="label-field">الدولة</label>
+            <select className="input-field" value={form.country} onChange={(e) => handleCountryChange(e.target.value as Country)}>
+              {countries.map((c) => (
+                <option key={c.country} value={c.country}>{COUNTRY_LABELS_AR[c.country]}</option>
+              ))}
+            </select>
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="label-field">كلمة المرور</label>
@@ -235,7 +270,8 @@ export function PartnersApplyWizard({ plans }: { plans: PublicPlan[] }) {
       {step === 2 && (
         <div className="space-y-2">
           <label className="label-field">اختر الباقة المناسبة لك</label>
-          {plans.map((plan) => (
+          {availablePlans.length === 0 && <p className="text-sm text-slate-400">لا توجد باقات مُسعَّرة لهذه الدولة بعد — تواصل مع الدعم.</p>}
+          {availablePlans.map(({ plan, price }) => (
             <label
               key={plan.key}
               className={`block cursor-pointer rounded-lg border p-3 transition ${
@@ -250,7 +286,7 @@ export function PartnersApplyWizard({ plans }: { plans: PublicPlan[] }) {
                     حتى {plan.maxUsers} مستخدمين · {plan.maxWhatsappNumbers} رقم واتساب · {plan.maxMessagesPerMonth.toLocaleString("ar-SA")} رسالة/شهر
                   </p>
                 </div>
-                <p className="text-lg font-bold text-wa-400">{plan.priceMonthlySar} ر.س</p>
+                <p className="text-lg font-bold text-wa-400" dir="ltr">{price} {CURRENCY_SYMBOLS[countries.find((c) => c.country === form.country)?.currency ?? "SAR"]}</p>
               </div>
             </label>
           ))}
@@ -266,8 +302,9 @@ export function PartnersApplyWizard({ plans }: { plans: PublicPlan[] }) {
             <p dir="ltr"><span className="text-slate-500">البريد:</span> {form.email}</p>
             <p dir="ltr"><span className="text-slate-500">الهاتف:</span> {form.phone}</p>
             <p><span className="text-slate-500">المدينة:</span> {form.city}</p>
+            <p><span className="text-slate-500">الدولة:</span> {COUNTRY_LABELS_AR[form.country]}</p>
             <p><span className="text-slate-500">كلمة المرور:</span> تم تحديدها ✓</p>
-            <p><span className="text-slate-500">الباقة:</span> {selectedPlan?.name} ({selectedPlan?.priceMonthlySar} ر.س/شهرياً)</p>
+            <p dir="ltr"><span className="text-slate-500">الباقة:</span> {selectedPlanEntry?.plan.name} ({selectedPlanEntry?.price} {selectedCurrency}/شهرياً)</p>
           </div>
           <label className="flex items-start gap-2 text-sm text-slate-300">
             <input type="checkbox" checked={form.termsAccepted} onChange={(e) => update("termsAccepted", e.target.checked)} className="mt-0.5" />

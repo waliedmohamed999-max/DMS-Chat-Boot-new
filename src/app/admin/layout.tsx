@@ -12,6 +12,7 @@ const ALL_NAV_ITEMS: (NavItem & { requires?: Permission })[] = [
   { href: "/admin/health", label: "صحة المنصة", icon: "🩺", requires: "platform.health.view" },
   { href: "/admin/billing", label: "الإيرادات والفوترة", icon: "💰", requires: "platform.view_revenue" },
   { href: "/admin/plans", label: "حدود الباقات", icon: "🧩", requires: "platform.plans.manage" },
+  { href: "/admin/countries", label: "الدول والعملات", icon: "🌍", requires: "platform.settings.manage" },
   { href: "/admin/affiliates", label: "التسويق بالعمولة", icon: "🤝", requires: "platform.affiliates.manage" },
   { href: "/admin/announcements", label: "إعلانات المنصة", icon: "📢", requires: "platform.announcements.send" },
   { href: "/admin/team", label: "فريق المنصة الداخلي", icon: "🔐", requires: "platform.team.manage" },

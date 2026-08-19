@@ -8,6 +8,7 @@ import { checkTenantRateLimit } from "@/lib/rateLimit";
 import { sendEmail } from "@/lib/email/send";
 import { partnerApplicationReceivedEmail } from "@/lib/email/partnerTemplates";
 import { resolveReferralAffiliateId } from "@/lib/affiliates/referralCapture";
+import { resolvePlanPrice } from "@/lib/planPricing";
 
 const applySchema = z.object({
   activityType: z.string().min(2, "اختر نوع النشاط"),
@@ -16,6 +17,7 @@ const applySchema = z.object({
   email: z.string().email("بريد إلكتروني غير صالح"),
   phone: z.string().min(8, "رقم هاتف غير صالح"),
   city: z.string().min(2, "المدينة مطلوبة"),
+  country: z.enum(["SA", "AE", "EG"]).default("SA"),
   password: z.string().min(8, "كلمة المرور يجب أن تكون 8 أحرف على الأقل"),
   planKey: z.string().min(1, "اختر باقة"),
   termsAccepted: z.string().optional(),
@@ -30,7 +32,7 @@ export async function getPublicPlans() {
   return rawDb.plan.findMany({
     where: { isActive: true, isCustomForTenantId: null },
     orderBy: { priceMonthlySar: "asc" },
-    select: { key: true, name: true, priceMonthlySar: true, maxUsers: true, maxWhatsappNumbers: true, maxMessagesPerMonth: true, features: true, isPopular: true, annualDiscountBps: true },
+    select: { key: true, name: true, priceMonthlySar: true, pricingJson: true, maxUsers: true, maxWhatsappNumbers: true, maxMessagesPerMonth: true, features: true, isPopular: true, annualDiscountBps: true },
   });
 }
 
@@ -84,6 +86,9 @@ export async function submitPartnerApplication(formData: FormData): Promise<Subm
   if (!plan) {
     return { success: false, error: "الباقة المختارة لم تعد متاحة، يرجى اختيار باقة أخرى." };
   }
+  if (resolvePlanPrice(plan, data.country) === null) {
+    return { success: false, error: "هذه الباقة غير متاحة بعد لدولتك المختارة." };
+  }
 
   // يُقرأ الآن (جلسة/كوكي المتقدّم نفسه) لا وقت الموافقة لاحقاً (متصفح مالك المنصة، بلا كوكي إحالة
   // إطلاقاً) — يُخزَّن في payloadJson ليُستخدَم عند إنشاء التينانت الفعلي في approvePartnerApplication.
@@ -106,6 +111,7 @@ export async function submitPartnerApplication(formData: FormData): Promise<Subm
         ownerName: data.ownerName,
         phone: data.phone,
         city: data.city,
+        country: data.country,
         passwordHash,
         requestedPlanKey: plan.key,
         requestedPlanName: plan.name,

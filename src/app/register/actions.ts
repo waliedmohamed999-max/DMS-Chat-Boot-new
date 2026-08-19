@@ -8,6 +8,7 @@ import { getPlatformSettings } from "@/lib/platformSettings";
 import { slugify } from "@/lib/slug";
 import { checkTenantRateLimit } from "@/lib/rateLimit";
 import { resolveReferralAffiliateId } from "@/lib/affiliates/referralCapture";
+import { resolvePlanPrice } from "@/lib/planPricing";
 import { z } from "zod";
 
 const registerSchema = z.object({
@@ -15,7 +16,10 @@ const registerSchema = z.object({
   ownerName: z.string().min(2, "الاسم قصير جداً"),
   email: z.string().email("بريد إلكتروني غير صالح"),
   password: z.string().min(8, "كلمة المرور يجب أن تكون 8 أحرف على الأقل"),
-  planKey: z.enum(["starter", "growth", "scale"]),
+  // لم يعد enum ثابتاً (starter|growth|scale) — الباقات المتاحة تُجلَب حياً حسب الدولة (Phase 8)،
+  // فالتحقق الفعلي من صحة planKey ووجود سعر لتلك الدولة يتم لاحقاً في هذه الدالة، لا هنا.
+  planKey: z.string().min(1, "اختر باقة"),
+  country: z.enum(["SA", "AE", "EG"]).default("SA"),
   businessActivity: z.string().min(2, "صف نشاطك التجاري بإيجاز"),
 });
 
@@ -29,6 +33,7 @@ export async function registerTenant(
     email: formData.get("email"),
     password: formData.get("password"),
     planKey: formData.get("planKey"),
+    country: formData.get("country") || "SA",
     businessActivity: formData.get("businessActivity"),
   });
 
@@ -49,7 +54,11 @@ export async function registerTenant(
     return { error: "هذا البريد الإلكتروني مسجّل مسبقاً" };
   }
 
-  const plan = await superAdminDb.plan.findUniqueOrThrow({ where: { key: parsed.data.planKey } });
+  const plan = await superAdminDb.plan.findUnique({ where: { key: parsed.data.planKey, isActive: true } });
+  if (!plan) return { error: "الباقة المختارة لم تعد متاحة" };
+  if (resolvePlanPrice(plan, parsed.data.country) === null) {
+    return { error: "هذه الباقة غير متاحة بعد لدولتك المختارة" };
+  }
   const platformSettings = await getPlatformSettings();
 
   let slug = slugify(parsed.data.storeName);
@@ -63,7 +72,7 @@ export async function registerTenant(
     // كل تسجيل جديد يدخل بحالة "بانتظار المراجعة" — لا تفعيل تلقائي قبل موافقة مالك المنصة
     // عبر مركز الموافقات (Approvals Center)، تطبيقاً لسياسة المراجعة اليدوية للتجار الجدد.
     const tenant = await tx.tenant.create({
-      data: { slug, name: parsed.data.storeName, status: "PENDING_REVIEW", joinSource: "DIRECT_REGISTER" },
+      data: { slug, name: parsed.data.storeName, status: "PENDING_REVIEW", joinSource: "DIRECT_REGISTER", country: parsed.data.country },
     });
 
     if (referralAffiliateId) {

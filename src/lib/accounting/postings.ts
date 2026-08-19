@@ -13,6 +13,11 @@ export async function postJournalEntry(params: {
   description: string;
   sourceType: string;
   sourceId: string;
+  // عملة واحدة للقيد بأكمله (وليس تجميع الأسطر حسب العملة بعد الإنشاء) — كل حدث مصدر حقيقي (فاتورة
+  // واحدة، إشعار دائن واحد) عملته واحدة أصلاً، فهذا يمنع خلط عملتين في نفس القيد بنيوياً بدل الاكتفاء
+  // بفحصه وقت التشغيل. computeAllAccountBalances() في balances.ts يُجمِّع الأرصدة حسب (الحساب +
+  // العملة) معاً بناءً على هذا الحقل — لا يُجمَع رصيد بعملتين مختلفتين في رقم واحد أبداً.
+  currency: string;
   lines: JournalLineInput[];
 }): Promise<void> {
   const totalDebit = params.lines.reduce((sum, l) => sum + (l.debitAccountCode ? l.amountSar : 0), 0);
@@ -39,6 +44,7 @@ export async function postJournalEntry(params: {
           debitAccountId: l.debitAccountCode ? codeToId.get(l.debitAccountCode) : null,
           creditAccountId: l.creditAccountCode ? codeToId.get(l.creditAccountCode) : null,
           amountSar: l.amountSar,
+          currency: params.currency,
         })),
       },
     },
@@ -47,7 +53,7 @@ export async function postJournalEntry(params: {
 
 /** عند تحصيل فاتورة: مدين نقدية (كامل المبلغ) = دائن إيراد مؤجل (القيمة قبل الضريبة) + دائن ضريبة
  * مستحقة. الإيراد لا يُعترَف به فوراً بالكامل — يتحقق تدريجياً عبر lib/accounting/revenueRecognition.ts. */
-export async function postInvoicePaymentEntry(invoice: { id: string; amountSar: number; vatAmountSar: number; planKey: string | null }): Promise<void> {
+export async function postInvoicePaymentEntry(invoice: { id: string; amountSar: number; vatAmountSar: number; planKey: string | null; currency: string }): Promise<void> {
   await ensureChartOfAccounts();
   const subtotal = invoice.amountSar - invoice.vatAmountSar;
 
@@ -55,6 +61,7 @@ export async function postInvoicePaymentEntry(invoice: { id: string; amountSar: 
     description: `تحصيل فاتورة #${invoice.id}`,
     sourceType: "invoice_payment",
     sourceId: invoice.id,
+    currency: invoice.currency,
     lines: [
       { debitAccountCode: ACCOUNT_CODES.CASH, amountSar: invoice.amountSar },
       { creditAccountCode: ACCOUNT_CODES.DEFERRED_REVENUE, amountSar: subtotal },
@@ -65,7 +72,7 @@ export async function postInvoicePaymentEntry(invoice: { id: string; amountSar: 
 
 /** الاعتراف التدريجي بجزء من الإيراد المؤجل كإيراد محقَّق فعلياً — مدين إيراد مؤجل، دائن حساب
  * الإيراد الفرعي الصحيح حسب الباقة. */
-export async function postRevenueRecognitionEntry(invoiceId: string, amountSar: number, planKey: string | null): Promise<void> {
+export async function postRevenueRecognitionEntry(invoiceId: string, amountSar: number, planKey: string | null, currency: string): Promise<void> {
   if (amountSar <= 0) return;
   const revenueCode = planKey ? await resolveRevenueAccountCode(planKey) : ACCOUNT_CODES.REVENUE_ENTERPRISE;
 
@@ -73,6 +80,7 @@ export async function postRevenueRecognitionEntry(invoiceId: string, amountSar: 
     description: `اعتراف بإيراد محقَّق — فاتورة #${invoiceId}`,
     sourceType: "revenue_recognition",
     sourceId: invoiceId,
+    currency,
     lines: [
       { debitAccountCode: ACCOUNT_CODES.DEFERRED_REVENUE, amountSar },
       { creditAccountCode: revenueCode, amountSar },
@@ -83,12 +91,13 @@ export async function postRevenueRecognitionEntry(invoiceId: string, amountSar: 
 /** استرداد فاتورة: يُسجَّل كمصروف "مبالغ مستردة" (وليس عكساً لقيود الإيراد السابقة — الإيراد التاريخي
  * يبقى كما هو، والاسترداد يُقيَّد في فترته الفعلية، ممارسة محاسبية قياسية وأبسط من إعادة حساب جداول
  * الاعتراف بالإيراد الجزئي). مدين مصروف مستردات + مدين ضريبة مستحقة (تُخفَّض) = دائن نقدية. */
-export async function postRefundEntry(invoiceId: string, subtotalSar: number, vatAmountSar: number): Promise<void> {
+export async function postRefundEntry(invoiceId: string, subtotalSar: number, vatAmountSar: number, currency: string): Promise<void> {
   await ensureChartOfAccounts();
   await postJournalEntry({
     description: `استرداد فاتورة #${invoiceId}`,
     sourceType: "invoice_refund",
     sourceId: invoiceId,
+    currency,
     lines: [
       { debitAccountCode: ACCOUNT_CODES.EXPENSE_REFUNDS, amountSar: subtotalSar },
       { debitAccountCode: ACCOUNT_CODES.VAT_PAYABLE, amountSar: vatAmountSar },

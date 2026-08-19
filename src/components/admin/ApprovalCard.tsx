@@ -10,6 +10,7 @@ import {
   rejectRequest,
   requestMoreInfo,
 } from "@/app/admin/approvals/actions";
+import { COUNTRY_TO_CURRENCY, CURRENCY_SYMBOLS } from "@/lib/currency";
 
 type ApprovalRequestSummary = {
   id: string;
@@ -19,7 +20,7 @@ type ApprovalRequestSummary = {
   applicantEmail: string | null;
   reviewerNote: string | null;
   createdAt: string;
-  tenant: { id: string; name: string; slug: string } | null;
+  tenant: { id: string; name: string; slug: string; country: "SA" | "AE" | "EG" } | null;
 };
 
 const TYPE_LABELS: Record<ApprovalRequestSummary["type"], { label: string; icon: string }> = {
@@ -154,7 +155,14 @@ export function ApprovalCard({ request }: { request: ApprovalRequestSummary }) {
         >
           <div className="grid grid-cols-2 gap-2">
             <input name="planName" required placeholder="اسم الباقة" className="input-field text-sm" />
-            <input name="price" type="number" required placeholder="السعر (ر.س)" className="input-field text-sm" dir="ltr" />
+            <input
+              name="price"
+              type="number"
+              required
+              placeholder={`السعر (${CURRENCY_SYMBOLS[COUNTRY_TO_CURRENCY[request.tenant?.country ?? "SA"]]})`}
+              className="input-field text-sm"
+              dir="ltr"
+            />
             <input name="maxUsers" type="number" required placeholder="أقصى مستخدمين" className="input-field text-sm" dir="ltr" />
             <input name="maxWhatsappNumbers" type="number" required placeholder="أقصى أرقام واتساب" className="input-field text-sm" dir="ltr" />
             <input name="maxMessagesPerMonth" type="number" required placeholder="أقصى رسائل شهرياً" className="input-field text-sm col-span-2" dir="ltr" />

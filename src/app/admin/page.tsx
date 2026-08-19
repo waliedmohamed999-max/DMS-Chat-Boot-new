@@ -3,6 +3,7 @@ import { superAdminDb } from "@/lib/db";
 import { requireSuperAdminSession } from "@/lib/session";
 import { hasPermission } from "@/lib/rbac";
 import { TENANT_STATUS_LABELS_AR, TENANT_STATUS_BADGE_CLASS, TENANT_STATUS_BAR_CLASS } from "@/lib/tenantStatus";
+import { formatMoney } from "@/lib/currency";
 
 export default async function AdminOverviewPage() {
   const session = await requireSuperAdminSession();
@@ -16,7 +17,8 @@ export default async function AdminOverviewPage() {
   const [tenantsCount, activeSubs, invoicesPaid, tenantsByStatus, pendingApprovalsCount, recentActivity] = await Promise.all([
     superAdminDb.tenant.count(),
     superAdminDb.subscription.count({ where: { status: "ACTIVE" } }),
-    canViewRevenue ? superAdminDb.invoice.aggregate({ where: { status: "PAID" }, _sum: { amountSar: true } }) : null,
+    // مجموع لكل عملة على حدة — لا يُدمَج أبداً في رقم واحد (نفس مبدأ صفحة الإيرادات التفصيلية).
+    canViewRevenue ? superAdminDb.invoice.groupBy({ by: ["currency"], where: { status: "PAID" }, _sum: { amountSar: true } }) : null,
     superAdminDb.tenant.groupBy({ by: ["status"], _count: true }),
     superAdminDb.approvalRequest.count({ where: { status: "PENDING" } }),
     canViewAuditLog
@@ -46,7 +48,9 @@ export default async function AdminOverviewPage() {
         {canViewRevenue && (
           <div className="card p-5">
             <p className="text-sm text-slate-400">إجمالي الإيرادات المحصّلة</p>
-            <p className="mt-2 text-2xl font-bold text-accent-400" dir="ltr">{invoicesPaid?._sum.amountSar ?? 0} ر.س</p>
+            {(invoicesPaid && invoicesPaid.length > 0 ? invoicesPaid : [{ currency: "SAR", _sum: { amountSar: 0 } }]).map((row) => (
+              <p key={row.currency} className="mt-2 text-2xl font-bold text-accent-400" dir="ltr">{formatMoney(row._sum.amountSar ?? 0, row.currency)}</p>
+            ))}
           </div>
         )}
         {canReviewApprovals ? (

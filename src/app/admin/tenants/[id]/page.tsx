@@ -9,6 +9,8 @@ import { DeleteTenantButton } from "@/components/admin/DeleteTenantButton";
 import { ResetMerchantPasswordButton } from "@/components/admin/ResetMerchantPasswordButton";
 import { TENANT_STATUS_LABELS_AR, TENANT_STATUS_BADGE_CLASS } from "@/lib/tenantStatus";
 import { CORE_PROVIDERS, getIntegrationWebhookHealth } from "@/lib/integrationHealth";
+import { resolvePlanPrice } from "@/lib/planPricing";
+import { formatMoney, COUNTRY_TO_CURRENCY } from "@/lib/currency";
 import {
   setTenantStatus,
   changeTenantPlan,
@@ -68,6 +70,12 @@ export default async function TenantDetailPage({ params }: { params: { id: strin
 
   if (!tenant) notFound();
 
+  // باقات غير مُسعَّرة لدولة هذا التاجر تُخفى من قائمة "تغيير الباقة يدوياً" — تطابقاً مع نفس القيد
+  // المفروض فعلياً في changeTenantPlan (admin/tenants/actions.ts)، بدل عرض خيار سيُرفَض عند الحفظ.
+  const availablePlansForTenant = plans
+    .map((p) => ({ plan: p, price: resolvePlanPrice(p, tenant.country) }))
+    .filter((x): x is { plan: (typeof plans)[number]; price: number } => x.price !== null);
+
   const webhookHealthByProvider = await Promise.all(
     CORE_PROVIDERS.map(async (provider) => ({ provider, ...(await getIntegrationWebhookHealth(tenant.id, provider)) }))
   );
@@ -97,6 +105,7 @@ export default async function TenantDetailPage({ params }: { params: { id: strin
               <span className={`badge ${TENANT_STATUS_BADGE_CLASS[tenant.status] ?? "bg-slate-500/10 text-slate-400"}`}>
                 {TENANT_STATUS_LABELS_AR[tenant.status] ?? tenant.status}
               </span>
+              <span className="badge bg-white/5 text-slate-300" dir="ltr">{COUNTRY_TO_CURRENCY[tenant.country]}</span>
             </div>
             <p className="mt-1 text-xs text-slate-500">
               مصدر الانضمام: {JOIN_SOURCE_LABELS_AR[tenant.joinSource] ?? tenant.joinSource}
@@ -151,8 +160,8 @@ export default async function TenantDetailPage({ params }: { params: { id: strin
             await changeTenantPlan(tenant.id, String(fd.get("planId")));
           }} className="flex gap-2">
             <select name="planId" defaultValue={tenant.subscription?.planId} className="input-field text-sm">
-              {plans.map((p) => (
-                <option key={p.id} value={p.id}>{p.name} — {p.priceMonthlySar} ر.س</option>
+              {availablePlansForTenant.map(({ plan: p, price }) => (
+                <option key={p.id} value={p.id}>{p.name} — {formatMoney(price, COUNTRY_TO_CURRENCY[tenant.country])}</option>
               ))}
             </select>
             <button type="submit" className="btn-secondary text-xs">تغيير الباقة يدوياً</button>
@@ -240,7 +249,7 @@ export default async function TenantDetailPage({ params }: { params: { id: strin
             <div key={inv.id} className="flex items-center justify-between rounded-lg border border-white/5 p-2.5 text-sm">
               <span className="text-slate-400" dir="ltr">#{inv.invoiceNumber}</span>
               <span className="text-slate-300">{inv.createdAt.toLocaleDateString("ar-SA")}</span>
-              <span className="text-slate-100" dir="ltr">{inv.amountSar} ر.س</span>
+              <span className="text-slate-100" dir="ltr">{formatMoney(inv.amountSar, inv.currency)}</span>
               <span
                 className={`badge ${
                   inv.status === "PAID" ? "bg-success-500/10 text-success-500"

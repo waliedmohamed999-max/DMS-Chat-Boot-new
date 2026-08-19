@@ -2,10 +2,13 @@
 
 import { useState } from "react";
 import { ChangePlanModal } from "./ChangePlanModal";
+import { CURRENCY_SYMBOLS } from "@/lib/currency";
 
 export type ComparisonPlan = {
   id: string;
   name: string;
+  // السعر الفعلي المُحلَّل لعملة/دولة هذا التاجر تحديداً (عبر resolvePlanPrice) — ليس بالضرورة
+  // ريالاً سعودياً؛ الاسم تاريخي فقط (نفس اصطلاح Invoice.amountSar). راجع prop العملة أدناه.
   priceMonthlySar: number;
   annualDiscountBps: number;
   isPopular: boolean;
@@ -22,9 +25,10 @@ export type ComparisonPlan = {
 
 const SUPPORT_LABELS: Record<string, string> = { email: "دعم عبر البريد", priority: "دعم ذو أولوية", dedicated: "مدير حساب مخصص" };
 
-export function PlanComparison({ plans, currentPlanId, canManage }: { plans: ComparisonPlan[]; currentPlanId: string | null; canManage: boolean }) {
+export function PlanComparison({ plans, currentPlanId, canManage, currency }: { plans: ComparisonPlan[]; currentPlanId: string | null; canManage: boolean; currency: string }) {
   const [annual, setAnnual] = useState(false);
   const [modalPlan, setModalPlan] = useState<ComparisonPlan | null>(null);
+  const currencySymbol = CURRENCY_SYMBOLS[currency] ?? currency;
 
   return (
     <div className="card p-5">
@@ -53,11 +57,11 @@ export function PlanComparison({ plans, currentPlanId, canManage }: { plans: Com
                 <span className="absolute -top-3 right-4 rounded-full bg-accent-500 px-3 py-1 text-xs font-bold text-white">⭐ الأكثر طلباً</span>
               )}
               <h3 className="font-bold text-white">{plan.name}</h3>
-              <p className="mt-1 text-2xl font-bold text-accent-400">
-                {displayPrice} <span className="text-sm font-normal text-slate-400">ر.س/شهرياً</span>
+              <p className="mt-1 text-2xl font-bold text-accent-400" dir="ltr">
+                {displayPrice} <span className="text-sm font-normal text-slate-400">{currencySymbol}/شهرياً</span>
               </p>
               {annual && plan.annualDiscountBps > 0 && (
-                <p className="text-xs text-success-500">وفّر {plan.annualDiscountBps / 100}% — يُفوتَر {displayPrice * 12} ر.س/سنوياً</p>
+                <p className="text-xs text-success-500" dir="ltr">وفّر {plan.annualDiscountBps / 100}% — يُفوتَر {displayPrice * 12} {currencySymbol}/سنوياً</p>
               )}
               <ul className="mt-4 space-y-1.5 text-sm text-slate-300">
                 {plan.features.map((f, i) => (
@@ -126,7 +130,7 @@ export function PlanComparison({ plans, currentPlanId, canManage }: { plans: Com
         </table>
       </div>
 
-      {modalPlan && <ChangePlanModal plan={modalPlan} onClose={() => setModalPlan(null)} />}
+      {modalPlan && <ChangePlanModal plan={modalPlan} currency={currency} onClose={() => setModalPlan(null)} />}
     </div>
   );
 }

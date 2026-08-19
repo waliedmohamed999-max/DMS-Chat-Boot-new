@@ -4,6 +4,7 @@ import { hasPermission } from "@/lib/rbac";
 import { superAdminDb } from "@/lib/db";
 import { computeRevenueSummary } from "@/lib/admin/revenueAnalytics";
 import { buildInvoiceWhere, type InvoiceSearchParams } from "@/lib/admin/invoiceFilters";
+import { formatMoney } from "@/lib/currency";
 import { DonutChart } from "@/components/admin/DonutChart";
 import { BarChart } from "@/components/admin/BarChart";
 import { Pagination } from "@/components/admin/Pagination";
@@ -38,9 +39,10 @@ export default async function PlatformBillingPage({ searchParams }: { searchPara
   const page = Math.max(1, parseInt(searchParams.page ?? "1", 10) || 1);
   const where = buildInvoiceWhere(searchParams);
 
-  const [summary, invoicesPaidTotal, invoicesFailed, invoices, invoiceTotal, plans] = await Promise.all([
+  const [summary, invoicesPaidTotalByCurrency, invoicesFailed, invoices, invoiceTotal, plans] = await Promise.all([
     computeRevenueSummary(),
-    superAdminDb.invoice.aggregate({ where: { status: "PAID" }, _sum: { amountSar: true } }),
+    // مجموع لكل عملة على حدة — لا يُدمَج أبداً في رقم واحد (نفس مبدأ computeAllAccountBalances).
+    superAdminDb.invoice.groupBy({ by: ["currency"], where: { status: "PAID" }, _sum: { amountSar: true } }),
     superAdminDb.invoice.findMany({ where: { status: "FAILED" }, include: { tenant: true }, orderBy: { createdAt: "desc" }, take: 10 }),
     superAdminDb.invoice.findMany({
       where, include: { tenant: { include: { paymentMethod: true } } },
@@ -51,6 +53,30 @@ export default async function PlatformBillingPage({ searchParams }: { searchPara
   ]);
 
   const totalPages = Math.max(1, Math.ceil(invoiceTotal / PAGE_SIZE));
+
+  // كل العملات التي ظهرت في أي مصدر بيانات فعلياً — تُستخدَم لعرض سطر منفصل لكل عملة في كل بطاقة
+  // إحصائية، وSAR دائماً أولاً (الدولة الأساسية) حتى لو كانت صفراً.
+  const allCurrencies = Array.from(
+    new Set(["SAR", ...Object.keys(summary.mrr), ...Object.keys(summary.arr), ...invoicesPaidTotalByCurrency.map((r) => r.currency)])
+  ).sort((a, b) => (a === "SAR" ? -1 : b === "SAR" ? 1 : a.localeCompare(b)));
+
+  function MultiCurrencyStat({ amounts }: { amounts: Record<string, number> }) {
+    return (
+      <>
+        {allCurrencies
+          .filter((c) => c === "SAR" || amounts[c] !== undefined)
+          .map((c) => (
+            <p key={c} className="mt-1 font-bold text-white" dir="ltr">{formatMoney(amounts[c] ?? 0, c)}</p>
+          ))}
+      </>
+    );
+  }
+
+  const paidTotalByCurrency: Record<string, number> = {};
+  for (const row of invoicesPaidTotalByCurrency) paidTotalByCurrency[row.currency] = row._sum.amountSar ?? 0;
+
+  const trendCurrencies = Array.from(new Set(summary.mrrTrend.flatMap((m) => Object.keys(m.amounts)))).filter((c) => c !== "SAR");
+  const allTrendCurrencies = ["SAR", ...trendCurrencies];
 
   return (
     <div className="space-y-6">
@@ -64,19 +90,21 @@ export default async function PlatformBillingPage({ searchParams }: { searchPara
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 lg:grid-cols-6">
         <div className="card p-4">
           <p className="text-xs text-slate-400">MRR (إيراد شهري متكرر)</p>
-          <p className="mt-1 font-bold text-white" dir="ltr">{summary.mrrSar.toLocaleString()} ر.س</p>
+          <MultiCurrencyStat amounts={summary.mrr} />
         </div>
         <div className="card p-4">
           <p className="text-xs text-slate-400">ARR (إيراد سنوي متكرر)</p>
-          <p className="mt-1 font-bold text-white" dir="ltr">{summary.arrSar.toLocaleString()} ر.س</p>
+          <MultiCurrencyStat amounts={summary.arr} />
         </div>
         <div className="card p-4">
           <p className="text-xs text-slate-400">تسرّب الإيراد (Churn) هذا الشهر</p>
-          <p className="mt-1 font-bold text-warning-500" dir="ltr">{summary.churnPercent}%</p>
+          {allCurrencies.filter((c) => c === "SAR" || summary.churnPercent[c] !== undefined).map((c) => (
+            <p key={c} className="mt-1 font-bold text-warning-500" dir="ltr">{summary.churnPercent[c] ?? 0}% <span className="text-xs text-slate-500">{c}</span></p>
+          ))}
         </div>
         <div className="card p-4">
           <p className="text-xs text-slate-400">إجمالي المحصَّل تاريخياً</p>
-          <p className="mt-1 font-bold text-success-500" dir="ltr">{(invoicesPaidTotal._sum.amountSar ?? 0).toLocaleString()} ر.س</p>
+          <MultiCurrencyStat amounts={paidTotalByCurrency} />
         </div>
         <div className="card p-4">
           <p className="text-xs text-slate-400">تجديدات خلال 7 أيام</p>
@@ -89,9 +117,15 @@ export default async function PlatformBillingPage({ searchParams }: { searchPara
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <div className="card p-5">
-          <h2 className="mb-3 font-semibold text-white">اتجاه الإيراد المفوتَر — آخر 12 شهراً</h2>
-          <BarChart data={summary.mrrTrend} />
+        <div className="card space-y-4 p-5">
+          <h2 className="font-semibold text-white">اتجاه الإيراد المفوتَر — آخر 12 شهراً</h2>
+          {/* رسم منفصل لكل عملة فعلية — لا يُدمَج اتجاهان بعملتين مختلفتين في رسم واحد أبداً */}
+          {allTrendCurrencies.map((currency) => (
+            <div key={currency}>
+              <p className="mb-1 text-xs text-slate-500" dir="ltr">{currency}</p>
+              <BarChart data={summary.mrrTrend.map((m) => ({ label: m.label, amountSar: m.amounts[currency] ?? 0 }))} />
+            </div>
+          ))}
         </div>
         <div className="card p-5">
           <h2 className="mb-3 font-semibold text-white">توزيع الاشتراكات النشطة حسب الباقة</h2>
@@ -158,7 +192,7 @@ export default async function PlatformBillingPage({ searchParams }: { searchPara
                     inv.tenant.name
                   )}
                 </td>
-                <td className="p-3 text-slate-100" dir="ltr">{inv.amountSar} ر.س <span className="text-slate-500">(ض.ق.م {inv.vatAmountSar})</span></td>
+                <td className="p-3 text-slate-100" dir="ltr">{formatMoney(inv.amountSar, inv.currency)} <span className="text-slate-500">(ض.ق.م {inv.vatAmountSar})</span></td>
                 <td className="p-3 text-xs text-slate-400" dir="ltr">
                   {inv.tenant.paymentMethod ? `${inv.tenant.paymentMethod.brand} •••• ${inv.tenant.paymentMethod.last4}` : "—"}
                 </td>

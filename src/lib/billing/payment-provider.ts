@@ -15,7 +15,7 @@ export type TokenizeResult =
   | { success: false; error: string };
 
 export interface PaymentProvider {
-  chargeSubscription(tenantId: string, amountSar: number): Promise<{ success: boolean; reference: string; failureReason?: string }>;
+  chargeSubscription(tenantId: string, amount: number, currency: string): Promise<{ success: boolean; reference: string; failureReason?: string }>;
   /** يحوّل بيانات بطاقة خام إلى Token آمن — **لا يُعاد أو يُخزَّن رقم البطاقة الكامل أبداً**، حتى داخل
    * هذه الدالة نفسها في وضع Sandbox (يُقرأ آخر 4 أرقام فقط، والباقي يُهمَل فوراً من الذاكرة). */
   tokenizePaymentMethod(card: MockCardInput): Promise<TokenizeResult>;
@@ -33,7 +33,7 @@ function detectMockBrand(cardNumber: string): string {
 const PAYMENT_WEBHOOK_SECRET = process.env.PAYMENT_WEBHOOK_SECRET;
 
 export const mockPaymentProvider: PaymentProvider = {
-  async chargeSubscription(_tenantId: string, _amountSar: number) {
+  async chargeSubscription(_tenantId: string, _amount: number, _currency: string) {
     return { success: true, reference: `mock_charge_${Date.now()}` };
   },
 

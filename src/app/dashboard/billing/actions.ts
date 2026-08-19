@@ -10,6 +10,8 @@ import { checkDowngradeAllowed } from "@/lib/billing/downgradeCheck";
 import { getVatRateBps, computeVatAmount } from "@/lib/billing/vat";
 import { postInvoicePaymentEntry } from "@/lib/accounting/postings";
 import { writeAuditLog } from "@/lib/audit";
+import { resolvePlanPrice } from "@/lib/planPricing";
+import { COUNTRY_TO_CURRENCY } from "@/lib/currency";
 
 const PAUSE_DURATION_DAYS = 30;
 
@@ -24,23 +26,25 @@ export async function previewPlanChange(planId: string): Promise<PlanChangePrevi
   requirePermission(session.user.role, "billing.view");
   const tenantId = session.user.tenantId;
 
-  const [subscription, targetPlan] = await Promise.all([
+  const [tenant, subscription, targetPlan] = await Promise.all([
+    rawDb.tenant.findUniqueOrThrow({ where: { id: tenantId }, select: { country: true } }),
     withTenant(tenantId, (tx) => tx.subscription.findUnique({ where: { tenantId }, include: { plan: true } })),
     rawDb.plan.findUnique({ where: { id: planId } }),
   ]);
   if (!subscription || !targetPlan) return { success: false, error: "بيانات الاشتراك أو الباقة غير موجودة" };
 
-  if (targetPlan.priceMonthlySar < subscription.plan.priceMonthlySar) {
+  const currentPrice = resolvePlanPrice(subscription.plan, tenant.country);
+  const targetPrice = resolvePlanPrice(targetPlan, tenant.country);
+  if (currentPrice === null || targetPrice === null) {
+    return { success: false, error: "هذه الباقة غير مُسعَّرة بعد لدولتك — تواصل مع الدعم." };
+  }
+
+  if (targetPrice < currentPrice) {
     const blockCheck = await withTenant(tenantId, (tx) => checkDowngradeAllowed(tx, tenantId, targetPlan));
     if (!blockCheck.allowed) return { success: true, blocked: true, reasons: blockCheck.reasons };
   }
 
-  const proration = calculateProration(
-    subscription.plan.priceMonthlySar,
-    targetPlan.priceMonthlySar,
-    subscription.currentPeriodStart,
-    subscription.currentPeriodEnd
-  );
+  const proration = calculateProration(currentPrice, targetPrice, subscription.currentPeriodStart, subscription.currentPeriodEnd);
   return { success: true, blocked: false, ...proration };
 }
 
@@ -51,8 +55,12 @@ export async function changePlan(planId: string): Promise<ChangePlanResult> {
   requirePermission(session.user.role, "billing.manage");
   const tenantId = session.user.tenantId;
 
+  const tenant = await rawDb.tenant.findUniqueOrThrow({ where: { id: tenantId }, select: { country: true } });
+  const currency = COUNTRY_TO_CURRENCY[tenant.country];
   const plan = await rawDb.plan.findUniqueOrThrow({ where: { id: planId } });
-  const vatRateBps = await getVatRateBps();
+  const targetPrice = resolvePlanPrice(plan, tenant.country);
+  if (targetPrice === null) return { success: false, error: "هذه الباقة غير مُسعَّرة بعد لدولتك — تواصل مع الدعم." };
+  const vatRateBps = await getVatRateBps(tenant.country);
 
   // معرّف الفاتورة "المدفوعة" (إن وُجدت) يُستخرَج من داخل المعاملة لتسجيل قيد محاسبي بعدها خارجها —
   // Account/JournalEntry جداول عامة على مستوى المنصة (بلا RLS) تُكتَب عبر superAdminDb، وهو اتصال
@@ -64,24 +72,26 @@ export async function changePlan(planId: string): Promise<ChangePlanResult> {
     await tx.$queryRaw`SELECT id FROM "Subscription" WHERE "tenantId" = ${tenantId} FOR UPDATE`;
 
     const subscription = await tx.subscription.findUniqueOrThrow({ where: { tenantId }, include: { plan: true } });
+    const currentPrice = resolvePlanPrice(subscription.plan, tenant.country);
+    if (currentPrice === null) return { success: false as const, error: "باقتك الحالية غير مُسعَّرة لدولتك — تواصل مع الدعم." };
 
-    if (plan.priceMonthlySar < subscription.plan.priceMonthlySar) {
+    if (targetPrice < currentPrice) {
       const blockCheck = await checkDowngradeAllowed(tx, tenantId, plan);
       if (!blockCheck.allowed) return { success: false as const, error: blockCheck.reasons.join(" ") };
     }
 
-    const proration = calculateProration(subscription.plan.priceMonthlySar, plan.priceMonthlySar, subscription.currentPeriodStart, subscription.currentPeriodEnd);
+    const proration = calculateProration(currentPrice, targetPrice, subscription.currentPeriodStart, subscription.currentPeriodEnd);
     const vatAmountSar = computeVatAmount(proration.dueNow, vatRateBps);
 
     let charge: { success: boolean; reference: string; failureReason?: string } = { success: true, reference: "no_charge_due" };
     if (proration.dueNow > 0) {
-      charge = await getPaymentProvider().chargeSubscription(tenantId, proration.dueNow);
+      charge = await getPaymentProvider().chargeSubscription(tenantId, proration.dueNow, currency);
     }
 
     if (!charge.success) {
       await tx.invoice.create({
         data: {
-          tenantId, amountSar: proration.dueNow, vatRateBps, vatAmountSar, planKey: plan.key,
+          tenantId, amountSar: proration.dueNow, currency, vatRateBps, vatAmountSar, planKey: plan.key,
           status: "FAILED", failureReason: charge.failureReason ?? "فشل التحصيل", periodStart: new Date(), periodEnd: subscription.currentPeriodEnd,
         },
       });
@@ -94,7 +104,7 @@ export async function changePlan(planId: string): Promise<ChangePlanResult> {
     if (proration.dueNow > 0) {
       const invoice = await tx.invoice.create({
         data: {
-          tenantId, amountSar: proration.dueNow, vatRateBps, vatAmountSar, planKey: plan.key,
+          tenantId, amountSar: proration.dueNow, currency, vatRateBps, vatAmountSar, planKey: plan.key,
           status: "PAID", periodStart: new Date(), periodEnd: subscription.currentPeriodEnd, paidAt: new Date(),
         },
       });
@@ -105,7 +115,7 @@ export async function changePlan(planId: string): Promise<ChangePlanResult> {
   });
 
   if (result.success && result.paidInvoiceId) {
-    await postInvoicePaymentEntry({ id: result.paidInvoiceId, amountSar: result.amountSar, vatAmountSar: result.vatAmountSar, planKey: result.planKey }).catch((err) =>
+    await postInvoicePaymentEntry({ id: result.paidInvoiceId, amountSar: result.amountSar, vatAmountSar: result.vatAmountSar, planKey: result.planKey, currency }).catch((err) =>
       console.error("❌ فشل تسجيل قيد محاسبي لفاتورة تغيير الباقة:", err)
     );
   }
@@ -231,7 +241,7 @@ export async function retryFailedPayment(invoiceId: string): Promise<ChangePlanR
   const invoice = await withTenant(tenantId, (tx) => tx.invoice.findUnique({ where: { id: invoiceId, tenantId } }));
   if (!invoice || invoice.status !== "FAILED") return { success: false, error: "لا توجد فاتورة فاشلة بهذا المعرّف" };
 
-  const charge = await getPaymentProvider().chargeSubscription(tenantId, invoice.amountSar);
+  const charge = await getPaymentProvider().chargeSubscription(tenantId, invoice.amountSar, invoice.currency);
 
   await withTenant(tenantId, async (tx) => {
     if (charge.success) {
@@ -243,7 +253,7 @@ export async function retryFailedPayment(invoiceId: string): Promise<ChangePlanR
   });
 
   if (charge.success) {
-    await postInvoicePaymentEntry({ id: invoice.id, amountSar: invoice.amountSar, vatAmountSar: invoice.vatAmountSar, planKey: invoice.planKey }).catch((err) =>
+    await postInvoicePaymentEntry({ id: invoice.id, amountSar: invoice.amountSar, vatAmountSar: invoice.vatAmountSar, planKey: invoice.planKey, currency: invoice.currency }).catch((err) =>
       console.error("❌ فشل تسجيل قيد محاسبي لإعادة محاولة الدفع:", err)
     );
   }
@@ -267,13 +277,16 @@ export async function devSimulatePaymentFailure() {
   requirePermission(session.user.role, "billing.manage");
   const tenantId = session.user.tenantId;
 
+  const tenant = await rawDb.tenant.findUniqueOrThrow({ where: { id: tenantId }, select: { country: true } });
+  const currency = COUNTRY_TO_CURRENCY[tenant.country];
   const subscription = await withTenant(tenantId, (tx) => tx.subscription.findUniqueOrThrow({ where: { tenantId }, include: { plan: true } }));
-  const vatRateBps = await getVatRateBps();
+  const price = resolvePlanPrice(subscription.plan, tenant.country) ?? subscription.plan.priceMonthlySar;
+  const vatRateBps = await getVatRateBps(tenant.country);
 
   await withTenant(tenantId, async (tx) => {
     await tx.invoice.create({
       data: {
-        tenantId, amountSar: subscription.plan.priceMonthlySar, vatRateBps, vatAmountSar: computeVatAmount(subscription.plan.priceMonthlySar, vatRateBps),
+        tenantId, amountSar: price, currency, vatRateBps, vatAmountSar: computeVatAmount(price, vatRateBps),
         planKey: subscription.plan.key,
         status: "FAILED", failureReason: "محاكاة اختبار: رصيد البطاقة غير كافٍ (Sandbox)",
         periodStart: subscription.currentPeriodStart, periodEnd: subscription.currentPeriodEnd,

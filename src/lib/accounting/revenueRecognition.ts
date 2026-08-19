@@ -14,7 +14,7 @@ import { postRevenueRecognitionEntry } from "@/lib/accounting/postings";
 export async function recognizeRevenueForActiveInvoices(): Promise<void> {
   const invoices = await superAdminDb.invoice.findMany({
     where: { status: "PAID" },
-    select: { id: true, amountSar: true, vatAmountSar: true, planKey: true, periodStart: true, periodEnd: true, recognizedRevenueSar: true },
+    select: { id: true, amountSar: true, vatAmountSar: true, planKey: true, periodStart: true, periodEnd: true, recognizedRevenueSar: true, currency: true },
   });
 
   const now = Date.now();
@@ -31,7 +31,7 @@ export async function recognizeRevenueForActiveInvoices(): Promise<void> {
     if (delta <= 0) continue;
 
     try {
-      await postRevenueRecognitionEntry(invoice.id, delta, invoice.planKey);
+      await postRevenueRecognitionEntry(invoice.id, delta, invoice.planKey, invoice.currency);
       await superAdminDb.invoice.update({ where: { id: invoice.id }, data: { recognizedRevenueSar: invoice.recognizedRevenueSar + delta } });
     } catch (err) {
       console.error(`❌ فشل الاعتراف بإيراد الفاتورة ${invoice.id}:`, err);

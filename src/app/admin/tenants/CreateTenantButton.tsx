@@ -2,15 +2,24 @@
 
 import { useState, useTransition } from "react";
 import { createTenantManually } from "./actions";
+import { resolvePlanPrice } from "@/lib/planPricing";
+import { COUNTRY_LABELS_AR, CURRENCY_SYMBOLS } from "@/lib/currency";
 
-type Plan = { id: string; name: string; priceMonthlySar: number };
+type Country = "SA" | "AE" | "EG";
+type Plan = { id: string; name: string; priceMonthlySar: number; pricingJson: unknown };
+type CountryOption = { country: Country; currency: string; isDefault: boolean };
 type Prefill = { leadId: string; storeName: string; ownerName: string; ownerEmail: string; ownerPhone: string } | null;
 
-export function CreateTenantButton({ plans, prefill = null }: { plans: Plan[]; prefill?: Prefill }) {
+export function CreateTenantButton({ plans, countries, prefill = null }: { plans: Plan[]; countries: CountryOption[]; prefill?: Prefill }) {
   const [open, setOpen] = useState(!!prefill);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const [country, setCountry] = useState<Country>(countries.find((c) => c.isDefault)?.country ?? "SA");
+  const currencySymbol = CURRENCY_SYMBOLS[countries.find((c) => c.country === country)?.currency ?? "SAR"];
+  const availablePlans = plans
+    .map((p) => ({ plan: p, price: resolvePlanPrice(p, country) }))
+    .filter((x): x is { plan: Plan; price: number } => x.price !== null);
 
   function handleSubmit(formData: FormData) {
     setError(null);
@@ -69,13 +78,22 @@ export function CreateTenantButton({ plans, prefill = null }: { plans: Plan[]; p
               <input name="ownerPhone" defaultValue={prefill?.ownerPhone ?? ""} className="input-field text-sm" dir="ltr" />
             </div>
             <div>
+              <label className="label-field text-xs">الدولة</label>
+              <select name="country" value={country} onChange={(e) => setCountry(e.target.value as Country)} className="input-field text-sm">
+                {countries.map((c) => (
+                  <option key={c.country} value={c.country}>{COUNTRY_LABELS_AR[c.country]}</option>
+                ))}
+              </select>
+            </div>
+            <div>
               <label className="label-field text-xs">الباقة</label>
               <select name="planId" required className="input-field text-sm">
                 <option value="">اختر باقة...</option>
-                {plans.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name} — {p.priceMonthlySar} ر.س/شهرياً</option>
+                {availablePlans.map(({ plan, price }) => (
+                  <option key={plan.id} value={plan.id}>{plan.name} — {price} {currencySymbol}/شهرياً</option>
                 ))}
               </select>
+              {availablePlans.length === 0 && <p className="mt-1 text-xs text-danger-500">لا توجد باقات مُسعَّرة لهذه الدولة بعد.</p>}
             </div>
             <div className="flex gap-2 pt-1">
               <button type="submit" disabled={isPending} className="btn-primary flex-1 text-xs">

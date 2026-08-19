@@ -7,6 +7,7 @@ import { SolutionsSection } from "@/components/marketing/SolutionsSection";
 import { LogoMarquee } from "@/components/marketing/LogoMarquee";
 import { CampaignIcon, ChatbotIcon, CrmIcon, IntegrationIcon } from "@/components/marketing/ServiceIcons";
 import { getPublicPlans } from "@/app/partners/apply/actions";
+import { getCountryConfigs } from "@/lib/billing/countryConfig";
 import { PricingClient } from "@/app/(marketing)/pricing/PricingClient";
 import { getSiteContent } from "@/lib/siteContent";
 
@@ -24,7 +25,10 @@ export const metadata: Metadata = {
 const FEATURE_ICONS = [CampaignIcon, ChatbotIcon, CrmIcon, IntegrationIcon];
 
 export default async function HomePage() {
-  const [plans, content] = await Promise.all([getPublicPlans(), getSiteContent()]);
+  const [plans, content, countryConfigs] = await Promise.all([getPublicPlans(), getSiteContent(), getCountryConfigs()]);
+  const countries = countryConfigs
+    .filter((c) => c.isActive)
+    .map((c) => ({ country: c.country, currency: c.currency, isDefault: c.isDefault }));
 
   return (
     <div>
@@ -125,7 +129,7 @@ export default async function HomePage() {
             <p className="mt-3 text-slate-500 dark:text-slate-400">أسعار شفافة بلا رسوم مخفية — ابدأ بتجربة مجانية بلا بطاقة ائتمانية.</p>
           </Reveal>
 
-          {plans.length > 0 && <PricingClient plans={plans} />}
+          {plans.length > 0 && <PricingClient plans={plans} countries={countries} />}
 
           <Reveal className="mt-8 text-center">
             <Link href="/pricing" className="text-sm font-semibold text-wa-600 hover:underline dark:text-wa-400">
