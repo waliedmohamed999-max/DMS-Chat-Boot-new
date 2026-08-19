@@ -53,6 +53,26 @@ export default async function AdminCountriesPage() {
             </div>
 
             {config.isDefault ? (
+              <p className="text-xs text-slate-500">سعر الصرف: 1 (العملة الأساسية التي تُسعَّر بها كل الباقات).</p>
+            ) : (
+              <div>
+                <label className="label-field">سعر الصرف مقابل الريال السعودي</label>
+                <input
+                  name="exchangeRateFromSar"
+                  type="number"
+                  min={0}
+                  step={0.0001}
+                  defaultValue={config.exchangeRateFromSar}
+                  className="input-field text-sm"
+                  dir="ltr"
+                />
+                <p className="mt-1 text-xs text-slate-500">
+                  كم وحدة من {config.currency} تعادل 1 ريال سعودي — يُستخدَم لتحويل أسعار الباقات تلقائياً لهذه الدولة.
+                </p>
+              </div>
+            )}
+
+            {config.isDefault ? (
               <p className="text-xs text-slate-500">متاحة دائماً في نماذج التسجيل (الدولة الأساسية).</p>
             ) : (
               <label className="flex items-center gap-1.5 text-xs text-slate-300">

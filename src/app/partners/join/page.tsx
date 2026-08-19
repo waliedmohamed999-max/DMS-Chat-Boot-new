@@ -19,9 +19,7 @@ export default async function PartnersJoinPage() {
   const allPlans = await getPublicPlans();
   // صفحة تعريفية بلا مبدّل دولة (اختيار الدولة الفعلي يتم لاحقاً في /partners/apply نفسها) —
   // تُعرَض أسعار السعودية (الدولة الأساسية) هنا افتراضياً.
-  const plans = allPlans
-    .map((plan) => ({ plan, price: resolvePlanPrice(plan, "SA") }))
-    .filter((x): x is { plan: typeof allPlans[number]; price: number } => x.price !== null);
+  const plans = allPlans.map((plan) => ({ plan, price: resolvePlanPrice(plan, { country: "SA" as const, exchangeRateFromSar: 1 }) }));
 
   return (
     <div className="min-h-screen bg-white dark:bg-slate-950">

@@ -13,7 +13,6 @@ import { getPlatformSettings } from "@/lib/platformSettings";
 import { sendEmail } from "@/lib/email/send";
 import { partnerApplicationApprovedEmail } from "@/lib/email/partnerTemplates";
 import { approveNewTenant, rejectRequest } from "@/app/admin/approvals/actions";
-import { resolvePlanPrice } from "@/lib/planPricing";
 import type { Country } from "@prisma/client";
 
 export type CreateTenantManuallyResult = { success: true; tenantId: string } | { success: false; error: string };
@@ -49,7 +48,7 @@ export async function createTenantManually(formData: FormData): Promise<CreateTe
 
   const plan = await superAdminDb.plan.findUnique({ where: { id: planId } });
   if (!plan) return { success: false, error: "الباقة المختارة غير موجودة" };
-  if (resolvePlanPrice(plan, country) === null) return { success: false, error: "هذه الباقة غير مُسعَّرة لهذه الدولة" };
+  // كل باقة لها سعر تلقائي لكل دولة الآن (تحويل بسعر الصرف أو سعر يدوي مخصَّص — راجع lib/planPricing.ts).
 
   const platformSettings = await getPlatformSettings();
 
@@ -136,10 +135,6 @@ export async function changeTenantPlan(tenantId: string, planId: string) {
   requirePermission(session.user.role, "platform.merchants.change_plan");
 
   const plan = await superAdminDb.plan.findUniqueOrThrow({ where: { id: planId } });
-  const tenant = await superAdminDb.tenant.findUniqueOrThrow({ where: { id: tenantId }, select: { country: true } });
-  if (resolvePlanPrice(plan, tenant.country) === null) {
-    throw new Error("هذه الباقة غير مُسعَّرة لدولة هذا التاجر — حدِّد سعرها من إدارة الباقات أولاً");
-  }
 
   await superAdminDb.subscription.upsert({
     where: { tenantId },

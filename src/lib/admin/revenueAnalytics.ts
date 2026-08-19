@@ -1,6 +1,8 @@
 import { superAdminDb } from "@/lib/db";
 import { resolvePlanPrice } from "@/lib/planPricing";
 import { COUNTRY_TO_CURRENCY } from "@/lib/currency";
+import { getCountryConfigs } from "@/lib/billing/countryConfig";
+import type { Country } from "@prisma/client";
 
 const MONTH_LABELS_AR = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"];
 
@@ -39,19 +41,21 @@ export async function computeRevenueSummary(): Promise<RevenueSummary> {
   const in30Days = new Date(now.getTime() + 30 * 24 * 3600 * 1000);
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
-  const [activeSubs, cancelledThisMonth, renewals7d, renewals30d] = await Promise.all([
+  const [activeSubs, cancelledThisMonth, renewals7d, renewals30d, countryConfigs] = await Promise.all([
     superAdminDb.subscription.findMany({ where: { status: { in: ["ACTIVE", "TRIALING"] } }, include: { plan: true, tenant: { select: { country: true } } } }),
     superAdminDb.subscription.findMany({ where: { status: "CANCELLED", updatedAt: { gte: monthStart } }, include: { plan: true, tenant: { select: { country: true } } } }),
     superAdminDb.subscription.count({ where: { currentPeriodEnd: { gte: now, lte: in7Days } } }),
     superAdminDb.subscription.count({ where: { currentPeriodEnd: { gte: now, lte: in30Days } } }),
+    getCountryConfigs(),
   ]);
+  const configByCountry = new Map(countryConfigs.map((c) => [c.country, c]));
+  const configFor = (country: Country) => configByCountry.get(country) ?? { country, exchangeRateFromSar: 1 };
 
   const mrr: CurrencyAmounts = {};
   const byPlan = new Map<string, { name: string; count: number; revenue: CurrencyAmounts }>();
   for (const s of activeSubs) {
     const currency = COUNTRY_TO_CURRENCY[s.tenant.country];
-    const price = resolvePlanPrice(s.plan, s.tenant.country);
-    if (price === null) continue; // باقة مخصصة/غير مُسعَّرة لدولة هذا التاجر — لا مساهمة رقمية وهمية
+    const price = resolvePlanPrice(s.plan, configFor(s.tenant.country));
     addTo(mrr, currency, price);
 
     const entry = byPlan.get(s.planId) ?? { name: s.plan.name, count: 0, revenue: {} };
@@ -65,8 +69,7 @@ export async function computeRevenueSummary(): Promise<RevenueSummary> {
   const churnedMrr: CurrencyAmounts = {};
   for (const s of cancelledThisMonth) {
     const currency = COUNTRY_TO_CURRENCY[s.tenant.country];
-    const price = resolvePlanPrice(s.plan, s.tenant.country);
-    if (price === null) continue;
+    const price = resolvePlanPrice(s.plan, configFor(s.tenant.country));
     addTo(churnedMrr, currency, price);
   }
   const churnPercent: CurrencyAmounts = {};

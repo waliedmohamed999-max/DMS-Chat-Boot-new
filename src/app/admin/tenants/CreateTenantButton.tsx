@@ -7,7 +7,7 @@ import { COUNTRY_LABELS_AR, CURRENCY_SYMBOLS } from "@/lib/currency";
 
 type Country = "SA" | "AE" | "EG";
 type Plan = { id: string; name: string; priceMonthlySar: number; pricingJson: unknown };
-type CountryOption = { country: Country; currency: string; isDefault: boolean };
+type CountryOption = { country: Country; currency: string; exchangeRateFromSar: number; isDefault: boolean };
 type Prefill = { leadId: string; storeName: string; ownerName: string; ownerEmail: string; ownerPhone: string } | null;
 
 export function CreateTenantButton({ plans, countries, prefill = null }: { plans: Plan[]; countries: CountryOption[]; prefill?: Prefill }) {
@@ -16,10 +16,10 @@ export function CreateTenantButton({ plans, countries, prefill = null }: { plans
   const [success, setSuccess] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [country, setCountry] = useState<Country>(countries.find((c) => c.isDefault)?.country ?? "SA");
-  const currencySymbol = CURRENCY_SYMBOLS[countries.find((c) => c.country === country)?.currency ?? "SAR"];
-  const availablePlans = plans
-    .map((p) => ({ plan: p, price: resolvePlanPrice(p, country) }))
-    .filter((x): x is { plan: Plan; price: number } => x.price !== null);
+  const countryOption = countries.find((c) => c.country === country) ?? countries[0] ?? { country, currency: "SAR", exchangeRateFromSar: 1, isDefault: true };
+  const currencySymbol = CURRENCY_SYMBOLS[countryOption.currency] ?? countryOption.currency;
+  // كل باقة لها سعر تلقائي لكل دولة الآن (راجع lib/planPricing.ts).
+  const availablePlans = plans.map((p) => ({ plan: p, price: resolvePlanPrice(p, countryOption) }));
 
   function handleSubmit(formData: FormData) {
     setError(null);
@@ -93,7 +93,7 @@ export function CreateTenantButton({ plans, countries, prefill = null }: { plans
                   <option key={plan.id} value={plan.id}>{plan.name} — {price} {currencySymbol}/شهرياً</option>
                 ))}
               </select>
-              {availablePlans.length === 0 && <p className="mt-1 text-xs text-danger-500">لا توجد باقات مُسعَّرة لهذه الدولة بعد.</p>}
+              {availablePlans.length === 0 && <p className="mt-1 text-xs text-danger-500">لا توجد باقات متاحة حالياً.</p>}
             </div>
             <div className="flex gap-2 pt-1">
               <button type="submit" disabled={isPending} className="btn-primary flex-1 text-xs">

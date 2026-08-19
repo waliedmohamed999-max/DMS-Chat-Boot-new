@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { cookies } from "next/headers";
 import { getPublicPlans } from "@/app/partners/apply/actions";
-import { getCountryConfigs } from "@/lib/billing/countryConfig";
+import { getCountryConfigs, toPublicCountryOptions } from "@/lib/billing/countryConfig";
 import { PartnersApplyWizard } from "@/components/partners/PartnersApplyWizard";
 import { AuthShell } from "@/components/auth/AuthShell";
 import { LogoFull } from "@/components/Logo";
@@ -12,9 +12,7 @@ export const dynamic = "force-dynamic";
 
 export default async function PartnersApplyPage() {
   const [plans, countryConfigs] = await Promise.all([getPublicPlans(), getCountryConfigs()]);
-  const countries = countryConfigs
-    .filter((c) => c.isActive)
-    .map((c) => ({ country: c.country, currency: c.currency, isDefault: c.isDefault }));
+  const countries = toPublicCountryOptions(countryConfigs);
 
   // هذه الصفحة خارج تخطيط (marketing) (بلا Navbar/CountryProvider) — تقرأ نفس كوكي dms_country
   // مباشرة حتى تبقى الدولة المختارة من زر 🌍 في الموقع العام متسقة هنا أيضاً.

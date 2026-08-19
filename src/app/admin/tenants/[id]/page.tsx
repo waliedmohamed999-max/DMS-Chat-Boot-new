@@ -11,6 +11,7 @@ import { TENANT_STATUS_LABELS_AR, TENANT_STATUS_BADGE_CLASS } from "@/lib/tenant
 import { CORE_PROVIDERS, getIntegrationWebhookHealth } from "@/lib/integrationHealth";
 import { resolvePlanPrice } from "@/lib/planPricing";
 import { formatMoney, COUNTRY_TO_CURRENCY } from "@/lib/currency";
+import { getCountryConfig } from "@/lib/billing/countryConfig";
 import {
   setTenantStatus,
   changeTenantPlan,
@@ -70,11 +71,9 @@ export default async function TenantDetailPage({ params }: { params: { id: strin
 
   if (!tenant) notFound();
 
-  // باقات غير مُسعَّرة لدولة هذا التاجر تُخفى من قائمة "تغيير الباقة يدوياً" — تطابقاً مع نفس القيد
-  // المفروض فعلياً في changeTenantPlan (admin/tenants/actions.ts)، بدل عرض خيار سيُرفَض عند الحفظ.
-  const availablePlansForTenant = plans
-    .map((p) => ({ plan: p, price: resolvePlanPrice(p, tenant.country) }))
-    .filter((x): x is { plan: (typeof plans)[number]; price: number } => x.price !== null);
+  // كل باقة لها سعر تلقائي لكل دولة الآن (راجع lib/planPricing.ts).
+  const tenantCountryConfig = await getCountryConfig(tenant.country);
+  const availablePlansForTenant = plans.map((p) => ({ plan: p, price: resolvePlanPrice(p, tenantCountryConfig) }));
 
   const webhookHealthByProvider = await Promise.all(
     CORE_PROVIDERS.map(async (provider) => ({ provider, ...(await getIntegrationWebhookHealth(tenant.id, provider)) }))

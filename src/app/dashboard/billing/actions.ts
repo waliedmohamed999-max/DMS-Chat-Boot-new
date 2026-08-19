@@ -12,6 +12,7 @@ import { postInvoicePaymentEntry } from "@/lib/accounting/postings";
 import { writeAuditLog } from "@/lib/audit";
 import { resolvePlanPrice } from "@/lib/planPricing";
 import { COUNTRY_TO_CURRENCY } from "@/lib/currency";
+import { getCountryConfig } from "@/lib/billing/countryConfig";
 
 const PAUSE_DURATION_DAYS = 30;
 
@@ -33,11 +34,9 @@ export async function previewPlanChange(planId: string): Promise<PlanChangePrevi
   ]);
   if (!subscription || !targetPlan) return { success: false, error: "بيانات الاشتراك أو الباقة غير موجودة" };
 
-  const currentPrice = resolvePlanPrice(subscription.plan, tenant.country);
-  const targetPrice = resolvePlanPrice(targetPlan, tenant.country);
-  if (currentPrice === null || targetPrice === null) {
-    return { success: false, error: "هذه الباقة غير مُسعَّرة بعد لدولتك — تواصل مع الدعم." };
-  }
+  const countryConfig = await getCountryConfig(tenant.country);
+  const currentPrice = resolvePlanPrice(subscription.plan, countryConfig);
+  const targetPrice = resolvePlanPrice(targetPlan, countryConfig);
 
   if (targetPrice < currentPrice) {
     const blockCheck = await withTenant(tenantId, (tx) => checkDowngradeAllowed(tx, tenantId, targetPlan));
@@ -58,8 +57,8 @@ export async function changePlan(planId: string): Promise<ChangePlanResult> {
   const tenant = await rawDb.tenant.findUniqueOrThrow({ where: { id: tenantId }, select: { country: true } });
   const currency = COUNTRY_TO_CURRENCY[tenant.country];
   const plan = await rawDb.plan.findUniqueOrThrow({ where: { id: planId } });
-  const targetPrice = resolvePlanPrice(plan, tenant.country);
-  if (targetPrice === null) return { success: false, error: "هذه الباقة غير مُسعَّرة بعد لدولتك — تواصل مع الدعم." };
+  const countryConfig = await getCountryConfig(tenant.country);
+  const targetPrice = resolvePlanPrice(plan, countryConfig);
   const vatRateBps = await getVatRateBps(tenant.country);
 
   // معرّف الفاتورة "المدفوعة" (إن وُجدت) يُستخرَج من داخل المعاملة لتسجيل قيد محاسبي بعدها خارجها —
@@ -72,8 +71,7 @@ export async function changePlan(planId: string): Promise<ChangePlanResult> {
     await tx.$queryRaw`SELECT id FROM "Subscription" WHERE "tenantId" = ${tenantId} FOR UPDATE`;
 
     const subscription = await tx.subscription.findUniqueOrThrow({ where: { tenantId }, include: { plan: true } });
-    const currentPrice = resolvePlanPrice(subscription.plan, tenant.country);
-    if (currentPrice === null) return { success: false as const, error: "باقتك الحالية غير مُسعَّرة لدولتك — تواصل مع الدعم." };
+    const currentPrice = resolvePlanPrice(subscription.plan, countryConfig);
 
     if (targetPrice < currentPrice) {
       const blockCheck = await checkDowngradeAllowed(tx, tenantId, plan);
@@ -280,7 +278,7 @@ export async function devSimulatePaymentFailure() {
   const tenant = await rawDb.tenant.findUniqueOrThrow({ where: { id: tenantId }, select: { country: true } });
   const currency = COUNTRY_TO_CURRENCY[tenant.country];
   const subscription = await withTenant(tenantId, (tx) => tx.subscription.findUniqueOrThrow({ where: { tenantId }, include: { plan: true } }));
-  const price = resolvePlanPrice(subscription.plan, tenant.country) ?? subscription.plan.priceMonthlySar;
+  const price = resolvePlanPrice(subscription.plan, await getCountryConfig(tenant.country));
   const vatRateBps = await getVatRateBps(tenant.country);
 
   await withTenant(tenantId, async (tx) => {

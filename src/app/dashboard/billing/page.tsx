@@ -13,6 +13,7 @@ import { RetryPaymentButton } from "./RetryPaymentButton";
 import { DevSimulateFailureButton } from "./DevSimulateFailureButton";
 import { resolvePlanPrice } from "@/lib/planPricing";
 import { COUNTRY_TO_CURRENCY, formatMoney } from "@/lib/currency";
+import { getCountryConfig } from "@/lib/billing/countryConfig";
 
 export default async function BillingPage() {
   const session = await requireTenantSession();
@@ -35,22 +36,20 @@ export default async function BillingPage() {
     ]);
 
   const tenantCurrency = COUNTRY_TO_CURRENCY[tenant.country];
-  // باقة بلا سعر مُحدَّد لدولة هذا التاجر تُستبعَد تماماً من المقارنة — لا سعر مُحوَّل مُخترَع (راجع lib/planPricing.ts).
-  const comparisonPlans: ComparisonPlan[] = catalogPlans
-    .map((p) => {
-      const price = resolvePlanPrice(p, tenant.country);
-      if (price === null) return null;
-      const chatbotLimits = parseChatbotLimits(p.chatbotLimitsJson) ?? DEFAULT_STARTER_CHATBOT_LIMITS;
-      const campaignLimits = parseCampaignLimits(p.campaignLimitsJson) ?? DEFAULT_STARTER_CAMPAIGN_LIMITS;
-      return {
-        id: p.id, name: p.name, priceMonthlySar: price, annualDiscountBps: p.annualDiscountBps, isPopular: p.isPopular,
-        maxUsers: p.maxUsers, maxWhatsappNumbers: p.maxWhatsappNumbers, maxMessagesPerMonth: p.maxMessagesPerMonth,
-        maxActiveFlows: chatbotLimits.maxActiveFlows, hasAiNode: chatbotLimits.allowedNodeTypes.includes("ai_reply"),
-        hasApiCallNode: chatbotLimits.allowedNodeTypes.includes("api_call"), maxCampaignsPerMonth: campaignLimits.maxCampaignsPerMonth,
-        supportTier: p.supportTier, features: (p.features as string[] | null) ?? [],
-      };
-    })
-    .filter((p): p is ComparisonPlan => p !== null);
+  const tenantCountryConfig = await getCountryConfig(tenant.country);
+  // كل باقة لها سعر تلقائي لكل دولة الآن (راجع lib/planPricing.ts).
+  const comparisonPlans: ComparisonPlan[] = catalogPlans.map((p) => {
+    const price = resolvePlanPrice(p, tenantCountryConfig);
+    const chatbotLimits = parseChatbotLimits(p.chatbotLimitsJson) ?? DEFAULT_STARTER_CHATBOT_LIMITS;
+    const campaignLimits = parseCampaignLimits(p.campaignLimitsJson) ?? DEFAULT_STARTER_CAMPAIGN_LIMITS;
+    return {
+      id: p.id, name: p.name, priceMonthlySar: price, annualDiscountBps: p.annualDiscountBps, isPopular: p.isPopular,
+      maxUsers: p.maxUsers, maxWhatsappNumbers: p.maxWhatsappNumbers, maxMessagesPerMonth: p.maxMessagesPerMonth,
+      maxActiveFlows: chatbotLimits.maxActiveFlows, hasAiNode: chatbotLimits.allowedNodeTypes.includes("ai_reply"),
+      hasApiCallNode: chatbotLimits.allowedNodeTypes.includes("api_call"), maxCampaignsPerMonth: campaignLimits.maxCampaignsPerMonth,
+      supportTier: p.supportTier, features: (p.features as string[] | null) ?? [],
+    };
+  });
 
   const daysRemaining = subscription ? Math.ceil((subscription.currentPeriodEnd.getTime() - Date.now()) / 86400000) : 0;
   const latestFailedInvoice = invoices.find((i) => i.status === "FAILED");
@@ -130,7 +129,7 @@ export default async function BillingPage() {
           </div>
 
           <div className="mt-4 flex items-center justify-between border-t border-white/5 pt-3 text-xs text-slate-500">
-            <span dir="ltr">الفاتورة القادمة: {formatMoney(resolvePlanPrice(subscription.plan, tenant.country) ?? subscription.plan.priceMonthlySar, tenantCurrency)}</span>
+            <span dir="ltr">الفاتورة القادمة: {formatMoney(resolvePlanPrice(subscription.plan, tenantCountryConfig), tenantCurrency)}</span>
             <span dir="ltr">تجديد الدورة: {subscription.currentPeriodEnd.toLocaleDateString("ar-SA")}</span>
           </div>
         </div>

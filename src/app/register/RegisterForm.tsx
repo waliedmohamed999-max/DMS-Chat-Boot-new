@@ -20,7 +20,7 @@ type PublicPlan = {
   isPopular: boolean;
 };
 
-type CountryOption = { country: Country; currency: string; isDefault: boolean };
+type CountryOption = { country: Country; currency: string; exchangeRateFromSar: number; isDefault: boolean };
 
 function SubmitButton() {
   const { pending } = useFormStatus();
@@ -39,27 +39,21 @@ export function RegisterForm({ plans, countries, initialCountry }: { plans: Publ
   useCaptureReferral();
   const [state, formAction] = useFormState(registerTenant, { error: null });
   const [country, setCountry] = useState<Country>(initialCountry);
+  const countryOption = countries.find((c) => c.country === country) ?? countries[0] ?? { country, currency: "SAR", exchangeRateFromSar: 1, isDefault: true };
 
-  // الباقات المعروضة تتغيّر حسب الدولة المختارة — باقة بلا سعر محدَّد لتلك الدولة تُخفى تماماً
-  // (لا تحويل عملة تلقائي مُخترَع، راجع lib/planPricing.ts).
+  // كل باقة لها سعر الآن دائماً (تحويل تلقائي بسعر صرف الدولة، أو سعر يدوي مخصَّص — راجع lib/planPricing.ts).
   const availablePlans = useMemo(
-    () =>
-      plans
-        .map((p) => ({ plan: p, price: resolvePlanPrice(p, country) }))
-        .filter((x): x is { plan: PublicPlan; price: number } => x.price !== null),
-    [plans, country]
+    () => plans.map((p) => ({ plan: p, price: resolvePlanPrice(p, countryOption) })),
+    [plans, countryOption]
   );
   const [selectedPlan, setSelectedPlan] = useState<string>(() => availablePlans.find((p) => p.plan.isPopular)?.plan.key ?? availablePlans[0]?.plan.key ?? "");
 
   function handleCountryChange(next: Country) {
     setCountry(next);
-    const nextAvailable = plans.map((p) => ({ plan: p, price: resolvePlanPrice(p, next) })).filter((x) => x.price !== null);
-    if (!nextAvailable.some((x) => x.plan.key === selectedPlan)) {
-      setSelectedPlan(nextAvailable.find((x) => x.plan.isPopular)?.plan.key ?? nextAvailable[0]?.plan.key ?? "");
-    }
+    // selectedPlan يبقى نفسه دائماً الآن (كل باقة مُسعَّرة لكل دولة) — لا حاجة لإعادة اختيار افتراضي.
   }
 
-  const currency = countries.find((c) => c.country === country)?.currency ?? "SAR";
+  const currency = countryOption.currency;
 
   return (
     <AuthShell>
@@ -118,7 +112,7 @@ export function RegisterForm({ plans, countries, initialCountry }: { plans: Publ
           <div>
             <label className="label-field mb-2">اختر باقتك</label>
             {availablePlans.length === 0 ? (
-              <p className="text-sm text-slate-400">لا توجد باقات مُسعَّرة لهذه الدولة بعد — تواصل مع الدعم.</p>
+              <p className="text-sm text-slate-400">لا توجد باقات متاحة حالياً.</p>
             ) : (
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 {availablePlans.map(({ plan, price }) => (

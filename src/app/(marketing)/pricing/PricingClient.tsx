@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { resolvePlanPrice } from "@/lib/planPricing";
-import { CURRENCY_SYMBOLS, COUNTRY_LABELS_AR, COUNTRY_TO_CURRENCY } from "@/lib/currency";
+import { CURRENCY_SYMBOLS, COUNTRY_LABELS_AR } from "@/lib/currency";
 import { useCountry } from "@/components/marketing/CountryContext";
 
 type PublicPlan = {
@@ -23,14 +23,12 @@ export function PricingClient({ plans }: { plans: PublicPlan[] }) {
   const [annual, setAnnual] = useState(false);
   // الدولة مصدرها الآن السياق المشترك (زر 🌍 في الشريط العلوي) — لا حالة محلية منفصلة هنا، فتبقى
   // متزامنة مع أي صفحة تسويقية أخرى تلقائياً بدل مبدّل مستقل بهذه الصفحة وحدها.
-  const { country } = useCountry();
-  const currency = COUNTRY_TO_CURRENCY[country];
-  const currencySymbol = CURRENCY_SYMBOLS[currency] ?? currency;
+  const { country, currentCountryOption } = useCountry();
+  const currencySymbol = CURRENCY_SYMBOLS[currentCountryOption.currency] ?? currentCountryOption.currency;
 
-  // باقة بلا سعر محدَّد لهذه الدولة تُخفى تماماً — لا تحويل عملة تلقائي مُخترَع (راجع lib/planPricing.ts).
-  const visiblePlans = plans
-    .map((plan) => ({ plan, price: resolvePlanPrice(plan, country) }))
-    .filter((x): x is { plan: PublicPlan; price: number } => x.price !== null);
+  // كل باقة لها سعر الآن دائماً (تحويل تلقائي بسعر صرف الدولة، أو سعر يدوي مخصَّص إن وُجد — راجع
+  // lib/planPricing.ts) — لا إخفاء لباقات "غير مُسعَّرة" بعد الآن.
+  const visiblePlans = plans.map((plan) => ({ plan, price: resolvePlanPrice(plan, currentCountryOption) }));
 
   // "الأكثر طلباً" علم حقيقي من Plan.isPopular (يُضبط من Super Admin) — لم يعد استنتاجاً بصرياً
   // بموضع الباقة في المصفوفة كما كان سابقاً (راجع DECISIONS.md).
@@ -57,7 +55,7 @@ export function PricingClient({ plans }: { plans: PublicPlan[] }) {
       </div>
 
       {visiblePlans.length === 0 ? (
-        <p className="mt-12 text-center text-slate-400">لا توجد باقات مُسعَّرة لهذه الدولة بعد — تواصل مع الدعم.</p>
+        <p className="mt-12 text-center text-slate-400">لا توجد باقات متاحة حالياً.</p>
       ) : (
         /* موبايل: شريط أفقي قابل للسحب يُظهر بطاقتين فقط في العرض مع Scroll Snap (لا تكديس صفوف فوق
            بعضها) — بدءاً من lg يتحول لشبكة عادية بكل الباقات ظاهرة معاً بلا سحب.

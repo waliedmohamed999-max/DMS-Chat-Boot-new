@@ -8,7 +8,7 @@ import { getPlatformSettings } from "@/lib/platformSettings";
 import { slugify } from "@/lib/slug";
 import { checkTenantRateLimit } from "@/lib/rateLimit";
 import { resolveReferralAffiliateId } from "@/lib/affiliates/referralCapture";
-import { resolvePlanPrice } from "@/lib/planPricing";
+import { getCountryConfig } from "@/lib/billing/countryConfig";
 import { z } from "zod";
 
 const registerSchema = z.object({
@@ -56,9 +56,10 @@ export async function registerTenant(
 
   const plan = await superAdminDb.plan.findUnique({ where: { key: parsed.data.planKey, isActive: true } });
   if (!plan) return { error: "الباقة المختارة لم تعد متاحة" };
-  if (resolvePlanPrice(plan, parsed.data.country) === null) {
-    return { error: "هذه الباقة غير متاحة بعد لدولتك المختارة" };
-  }
+  // كل باقة لها سعر تلقائي لكل دولة الآن (راجع lib/planPricing.ts) — التحقق المتبقي هنا هو فقط أن
+  // الدولة نفسها لا تزال مُفعَّلة (قد يُعطِّلها مالك المنصة لاحقاً حتى لو أُرسل طلب بها فعلياً).
+  const countryConfig = await getCountryConfig(parsed.data.country);
+  if (!countryConfig.isActive) return { error: "هذه الدولة غير متاحة حالياً للتسجيل" };
   const platformSettings = await getPlatformSettings();
 
   let slug = slugify(parsed.data.storeName);

@@ -8,7 +8,7 @@ import { checkTenantRateLimit } from "@/lib/rateLimit";
 import { sendEmail } from "@/lib/email/send";
 import { partnerApplicationReceivedEmail } from "@/lib/email/partnerTemplates";
 import { resolveReferralAffiliateId } from "@/lib/affiliates/referralCapture";
-import { resolvePlanPrice } from "@/lib/planPricing";
+import { getCountryConfig } from "@/lib/billing/countryConfig";
 
 const applySchema = z.object({
   activityType: z.string().min(2, "اختر نوع النشاط"),
@@ -86,8 +86,11 @@ export async function submitPartnerApplication(formData: FormData): Promise<Subm
   if (!plan) {
     return { success: false, error: "الباقة المختارة لم تعد متاحة، يرجى اختيار باقة أخرى." };
   }
-  if (resolvePlanPrice(plan, data.country) === null) {
-    return { success: false, error: "هذه الباقة غير متاحة بعد لدولتك المختارة." };
+  // كل باقة لها سعر تلقائي لكل دولة الآن (راجع lib/planPricing.ts) — يبقى فقط التحقق من أن الدولة
+  // نفسها لا تزال مُفعَّلة.
+  const countryConfig = await getCountryConfig(data.country);
+  if (!countryConfig.isActive) {
+    return { success: false, error: "هذه الدولة غير متاحة حالياً." };
   }
 
   // يُقرأ الآن (جلسة/كوكي المتقدّم نفسه) لا وقت الموافقة لاحقاً (متصفح مالك المنصة، بلا كوكي إحالة

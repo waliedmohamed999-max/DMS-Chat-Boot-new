@@ -1,9 +1,8 @@
 import type { Country } from "@prisma/client";
 
-// سعر باقة لدولة غير السعودية — priceMonthlySar (على الباقة نفسها) يبقى سعر السعودية الأساسي بلا
-// تغيير. غياب مفتاح دولة هنا يعني أن الباقة غير مُسعَّرة/غير معروضة لتلك الدولة بعد عمداً — لا
-// تحويل عملة تلقائي مُخترَع أبداً، فقط إخفاء حتى يحدد مالك المنصة السعر الحقيقي (راجع
-// resolvePlanPrice أدناه وDECISIONS.md).
+// سعر يدوي مخصَّص لباقة بعينها في دولة بعينها — override اختياري فوق التحويل التلقائي بسعر الصرف
+// (مثال: تسعير نفسي مقصود لسوق معين، لا يطابق التحويل الحسابي المباشر). غياب المفتاح يعني الاعتماد
+// على التحويل التلقائي (راجع resolvePlanPrice) بدل إخفاء الباقة كما كان سابقاً.
 export type PlanPricingJson = Partial<Record<"AE" | "EG", { amount: number }>>;
 
 export function parsePlanPricing(raw: unknown): PlanPricingJson {
@@ -20,12 +19,18 @@ export function parsePlanPricing(raw: unknown): PlanPricingJson {
 }
 
 /**
- * سعر باقة فعلي لدولة معينة — السعودية ترجع priceMonthlySar مباشرة دائماً (الأساس، دوماً موجود).
- * الإمارات/مصر ترجعان null إن لم تُسعَّر الباقة لتلك الدولة بعد — المستدعي مسؤول عن إخفاء/رفض
- * الباقة في تلك الحالة بدل افتراض سعر خاطئ (لا تحويل عملة تلقائي في هذه الجولة).
+ * سعر باقة فعلي لدولة معينة. السعودية: priceMonthlySar مباشرة دائماً (الأساس). أي دولة أخرى:
+ * سعر يدوي مخصَّص من pricingJson إن وُجد، وإلا priceMonthlySar × سعر صرف تلك الدولة
+ * (CountryConfig.exchangeRateFromSar، قابل للتعديل من admin/countries) مُقرَّباً لأقرب وحدة صحيحة.
+ * يرجع رقماً دائماً — لا مزيد من إخفاء الباقات لعدم التسعير (كل باقة لها سعر محوَّل تلقائياً الآن).
  */
-export function resolvePlanPrice(plan: { priceMonthlySar: number; pricingJson: unknown }, country: Country): number | null {
-  if (country === "SA") return plan.priceMonthlySar;
+export function resolvePlanPrice(
+  plan: { priceMonthlySar: number; pricingJson: unknown },
+  countryConfig: { country: Country; exchangeRateFromSar: number }
+): number {
+  if (countryConfig.country === "SA") return plan.priceMonthlySar;
   const pricing = parsePlanPricing(plan.pricingJson);
-  return pricing[country]?.amount ?? null;
+  const override = pricing[countryConfig.country as "AE" | "EG"]?.amount;
+  if (override !== undefined) return override;
+  return Math.round(plan.priceMonthlySar * countryConfig.exchangeRateFromSar);
 }

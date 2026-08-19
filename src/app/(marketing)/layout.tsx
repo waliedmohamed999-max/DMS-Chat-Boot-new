@@ -4,7 +4,7 @@ import { Footer } from "@/components/marketing/Footer";
 import { FloatingWhatsAppButton } from "@/components/marketing/FloatingWhatsAppButton";
 import { CountryProvider, type Country } from "@/components/marketing/CountryContext";
 import { getPlatformSettings } from "@/lib/platformSettings";
-import { getCountryConfigs } from "@/lib/billing/countryConfig";
+import { getCountryConfigs, toPublicCountryOptions } from "@/lib/billing/countryConfig";
 
 // يقرأ إعدادات حقيقية من القاعدة (رقم الدعم لزر واتساب العائم) لكل صفحة تحت هذا التخطيط — بدون
 // هذا السطر يحاول Next.js توليد الصفحات الفرعية (about/privacy/services/terms/vision) بشكل ثابت
@@ -15,9 +15,7 @@ export const dynamic = "force-dynamic";
 
 export default async function MarketingLayout({ children }: { children: React.ReactNode }) {
   const [settings, countryConfigs] = await Promise.all([getPlatformSettings(), getCountryConfigs()]);
-  const countries = countryConfigs
-    .filter((c) => c.isActive)
-    .map((c) => ({ country: c.country, currency: c.currency, isDefault: c.isDefault }));
+  const countries = toPublicCountryOptions(countryConfigs);
   const defaultCountry = countries.find((c) => c.isDefault)?.country ?? "SA";
 
   // كوكي dms_country يُقرأ هنا (Server Component) قبل أول رسم — يمنع "flash" لدولة خاطئة قبل أن

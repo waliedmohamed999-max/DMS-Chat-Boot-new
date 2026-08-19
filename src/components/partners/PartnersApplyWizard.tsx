@@ -19,7 +19,7 @@ type PublicPlan = {
   maxMessagesPerMonth: number;
 };
 
-type CountryOption = { country: Country; currency: string; isDefault: boolean };
+type CountryOption = { country: Country; currency: string; exchangeRateFromSar: number; isDefault: boolean };
 
 const ACTIVITY_TYPES = [
   "متجر إلكتروني", "مطعم أو كافيه", "عيادة أو مركز طبي", "صالون أو مركز تجميل",
@@ -46,7 +46,8 @@ const STEPS = ["نوع النشاط", "بيانات العمل", "اختر با�
 export function PartnersApplyWizard({ plans, countries, initialCountry }: { plans: PublicPlan[]; countries: CountryOption[]; initialCountry: Country }) {
   useCaptureReferral();
   const [step, setStep] = useState(0);
-  const defaultPlanKey = plans.find((p) => resolvePlanPrice(p, initialCountry) !== null)?.key ?? "";
+  const initialCountryOption = countries.find((c) => c.country === initialCountry) ?? countries[0] ?? { country: initialCountry, currency: "SAR", exchangeRateFromSar: 1, isDefault: true };
+  const defaultPlanKey = plans[0]?.key ?? "";
   const [form, setForm] = useState<FormState>({
     activityType: "", storeName: "", ownerName: "", email: "", phone: "", city: "", country: initialCountry,
     password: "", confirmPassword: "",
@@ -61,19 +62,13 @@ export function PartnersApplyWizard({ plans, countries, initialCountry }: { plan
     setForm((f) => ({ ...f, [key]: value }));
   }
 
-  // الباقات المعروضة تتغيّر حسب الدولة المختارة — باقة بلا سعر لتلك الدولة تُخفى تماماً (بدون
-  // تحويل عملة تلقائي، راجع lib/planPricing.ts).
-  const availablePlans = plans
-    .map((p) => ({ plan: p, price: resolvePlanPrice(p, form.country) }))
-    .filter((x): x is { plan: PublicPlan; price: number } => x.price !== null);
+  const countryOption = countries.find((c) => c.country === form.country) ?? initialCountryOption;
+  // كل باقة لها سعر الآن دائماً (تحويل تلقائي بسعر صرف الدولة، أو سعر يدوي مخصَّص — راجع lib/planPricing.ts).
+  const availablePlans = plans.map((p) => ({ plan: p, price: resolvePlanPrice(p, countryOption) }));
 
   function handleCountryChange(next: Country) {
-    const nextAvailable = plans.map((p) => ({ plan: p, price: resolvePlanPrice(p, next) })).filter((x) => x.price !== null);
-    setForm((f) => ({
-      ...f,
-      country: next,
-      planKey: nextAvailable.some((x) => x.plan.key === f.planKey) ? f.planKey : (nextAvailable[0]?.plan.key ?? ""),
-    }));
+    // planKey يبقى نفسه دائماً (كل باقة مُسعَّرة لكل دولة الآن) — فقط الدولة والسعر المعروض يتغيّران.
+    setForm((f) => ({ ...f, country: next }));
   }
 
   function validateStep(): string | null {
@@ -152,7 +147,7 @@ export function PartnersApplyWizard({ plans, countries, initialCountry }: { plan
   }
 
   const selectedPlanEntry = availablePlans.find((x) => x.plan.key === form.planKey);
-  const selectedCurrency = CURRENCY_SYMBOLS[countries.find((c) => c.country === form.country)?.currency ?? "SAR"];
+  const selectedCurrency = CURRENCY_SYMBOLS[countryOption.currency] ?? countryOption.currency;
 
   return (
     <div className="card mx-auto max-w-lg p-6">
@@ -269,7 +264,7 @@ export function PartnersApplyWizard({ plans, countries, initialCountry }: { plan
       {step === 2 && (
         <div className="space-y-2">
           <label className="label-field">اختر الباقة المناسبة لك</label>
-          {availablePlans.length === 0 && <p className="text-sm text-slate-400">لا توجد باقات مُسعَّرة لهذه الدولة بعد — تواصل مع الدعم.</p>}
+          {availablePlans.length === 0 && <p className="text-sm text-slate-400">لا توجد باقات متاحة حالياً.</p>}
           {availablePlans.map(({ plan, price }) => (
             <label
               key={plan.key}
@@ -285,7 +280,7 @@ export function PartnersApplyWizard({ plans, countries, initialCountry }: { plan
                     حتى {plan.maxUsers} مستخدمين · {plan.maxWhatsappNumbers} رقم واتساب · {plan.maxMessagesPerMonth.toLocaleString("ar-SA")} رسالة/شهر
                   </p>
                 </div>
-                <p className="text-lg font-bold text-wa-400" dir="ltr">{price} {CURRENCY_SYMBOLS[countries.find((c) => c.country === form.country)?.currency ?? "SAR"]}</p>
+                <p className="text-lg font-bold text-wa-400" dir="ltr">{price} {selectedCurrency}</p>
               </div>
             </label>
           ))}

@@ -3,12 +3,14 @@
 import { createContext, useContext, useEffect, useState } from "react";
 
 export type Country = "SA" | "AE" | "EG";
-export type CountryOption = { country: Country; currency: string; isDefault: boolean };
+export type CountryOption = { country: Country; currency: string; exchangeRateFromSar: number; isDefault: boolean };
 
 type CountryContextValue = {
   country: Country;
   setCountry: (c: Country) => void;
   countries: CountryOption[];
+  /** إعداد الدولة المختارة حالياً (نفس عنصر countries المطابق) — راحة لتفادي بحث متكرر بكل مكوّن. */
+  currentCountryOption: CountryOption;
 };
 
 const CountryContext = createContext<CountryContextValue | null>(null);
@@ -61,7 +63,9 @@ export function CountryProvider({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  return <CountryContext.Provider value={{ country, setCountry, countries }}>{children}</CountryContext.Provider>;
+  const currentCountryOption = countries.find((c) => c.country === country) ?? countries[0] ?? { country, currency: "SAR", exchangeRateFromSar: 1, isDefault: true };
+
+  return <CountryContext.Provider value={{ country, setCountry, countries, currentCountryOption }}>{children}</CountryContext.Provider>;
 }
 
 export function useCountry(): CountryContextValue {

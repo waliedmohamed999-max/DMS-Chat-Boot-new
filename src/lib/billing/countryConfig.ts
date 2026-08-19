@@ -4,10 +4,12 @@ import type { Country } from "@prisma/client";
 // نفس مبدأ platformSettings.ts (صف عام، لا tenantId، بلا RLS) لكن صف واحد **لكل دولة** بدل صف
 // وحيد للمنصة كلها — القيم الافتراضية هنا تُزرَع مرة واحدة فقط عند أول استدعاء (idempotent upsert،
 // نفس أسلوب ensureChartOfAccounts في lib/accounting/chartOfAccounts.ts).
-const DEFAULT_CONFIGS: { country: Country; currency: string; currencyLabel: string; vatRateBps: number; isDefault: boolean }[] = [
-  { country: "SA", currency: "SAR", currencyLabel: "ريال سعودي", vatRateBps: 1500, isDefault: true },
-  { country: "AE", currency: "AED", currencyLabel: "درهم إماراتي", vatRateBps: 500, isDefault: false },
-  { country: "EG", currency: "EGP", currencyLabel: "جنيه مصري", vatRateBps: 1400, isDefault: false },
+// أسعار الصرف تقريبية وقت الكتابة (الدرهم مربوط تقريباً بالدولار كالريال، والجنيه المصري عائم
+// ويتغيّر فعلياً بمرور الوقت) — قابلة للتعديل فوراً من admin/countries، هذه فقط بداية معقولة.
+const DEFAULT_CONFIGS: { country: Country; currency: string; currencyLabel: string; vatRateBps: number; exchangeRateFromSar: number; isDefault: boolean }[] = [
+  { country: "SA", currency: "SAR", currencyLabel: "ريال سعودي", vatRateBps: 1500, exchangeRateFromSar: 1, isDefault: true },
+  { country: "AE", currency: "AED", currencyLabel: "درهم إماراتي", vatRateBps: 500, exchangeRateFromSar: 0.98, isDefault: false },
+  { country: "EG", currency: "EGP", currencyLabel: "جنيه مصري", vatRateBps: 1400, exchangeRateFromSar: 13.3, isDefault: false },
 ];
 
 export type CountryConfigData = {
@@ -15,6 +17,7 @@ export type CountryConfigData = {
   currency: string;
   currencyLabel: string;
   vatRateBps: number;
+  exchangeRateFromSar: number;
   isDefault: boolean;
   isActive: boolean;
 };
@@ -43,4 +46,14 @@ export async function getCountryConfig(country: Country): Promise<CountryConfigD
   const config = await rawDb.countryConfig.findUnique({ where: { country } });
   if (!config) throw new Error(`لا يوجد إعداد دولة لـ ${country}`);
   return config;
+}
+
+/** الشكل المختصر المُمرَّر لمكوّنات العميل (زر 🌍، نماذج التسجيل...) — يُستخرَج من CountryConfigData
+ * الكاملة مرة واحدة هنا بدل تكرار نفس .filter/.map في كل صفحة تحتاج قائمة الدول. */
+export type PublicCountryOption = { country: Country; currency: string; exchangeRateFromSar: number; isDefault: boolean };
+
+export function toPublicCountryOptions(configs: CountryConfigData[]): PublicCountryOption[] {
+  return configs
+    .filter((c) => c.isActive)
+    .map((c) => ({ country: c.country, currency: c.currency, exchangeRateFromSar: c.exchangeRateFromSar, isDefault: c.isDefault }));
 }
