@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { requireTenantSession } from "@/lib/session";
 import { withTenant } from "@/lib/db";
-import { hasPermission } from "@/lib/rbac";
+import { hasEffectivePermission } from "@/lib/rbac";
 import { buildOrderListWhere, type OrderListSearchParams } from "@/lib/orders/filters";
 import { ORDER_STATUS_LABELS_AR, ORDER_STATUSES_ORDERED } from "@/lib/orders/labels";
 import { OrdersTable } from "./OrdersTable";
@@ -18,15 +18,15 @@ export default async function OrdersPage({ searchParams }: { searchParams: Searc
   const session = await requireTenantSession();
   const tenantId = session.user.tenantId;
 
-  if (!hasPermission(session.user.role, "orders.view")) {
+  if (!hasEffectivePermission(session.user.permissions, "orders.view")) {
     return (
       <div className="card p-8 text-center text-slate-400">
         ليس لديك صلاحية عرض الطلبات. تواصل مع صاحب الحساب أو المدير.
       </div>
     );
   }
-  const canManageOrders = hasPermission(session.user.role, "orders.manage");
-  const canManageCampaigns = hasPermission(session.user.role, "campaigns.manage");
+  const canManageOrders = hasEffectivePermission(session.user.permissions, "orders.manage");
+  const canManageCampaigns = hasEffectivePermission(session.user.permissions, "campaigns.manage");
 
   // نفس طريقة تحقق integrations/page.tsx بالضبط: تكامل بحالة CONNECTED فعلياً، وليس مجرد صف Integration
   // موجود بأي حالة (DISCONNECTED افتراضياً لكل تكامل غير مربوط بعد).

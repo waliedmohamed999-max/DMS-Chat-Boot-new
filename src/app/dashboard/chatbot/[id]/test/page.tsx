@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { requireTenantSession } from "@/lib/session";
 import { withTenant, rawDb } from "@/lib/db";
-import { hasPermission } from "@/lib/rbac";
+import { hasEffectivePermission } from "@/lib/rbac";
 import { ChatbotTestOnlyPanel } from "@/components/dashboard/ChatbotTestOnlyPanel";
 import { getConnectedPhoneNumber } from "@/lib/integrations/registry";
 import type { FlowGraph } from "@/lib/chatbot/types";
@@ -10,7 +10,7 @@ import type { FlowGraph } from "@/lib/chatbot/types";
 export default async function ChatbotFlowTestOnlyPage({ params }: { params: { id: string } }) {
   const session = await requireTenantSession();
 
-  if (!hasPermission(session.user.role, "chatbot.test")) {
+  if (!hasEffectivePermission(session.user.permissions, "chatbot.test")) {
     redirect(`/dashboard/no-access?from=${encodeURIComponent("اختبار الأتمتة")}`);
   }
 

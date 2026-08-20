@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requireTenantSession } from "@/lib/session";
 import { withTenant, rawDb } from "@/lib/db";
-import { hasPermission } from "@/lib/rbac";
+import { hasEffectivePermission } from "@/lib/rbac";
 import { getTenantCampaignLimits, isUnlimited } from "@/lib/campaigns/limits";
 import { suggestBestSendHour } from "@/lib/campaigns/bestSendTime";
 import { CampaignWizard, type CampaignWizardInitialValues } from "@/components/dashboard/CampaignWizard";
@@ -18,7 +18,7 @@ export default async function NewCampaignPage({
   const session = await requireTenantSession();
   const tenantId = session.user.tenantId;
 
-  if (!hasPermission(session.user.role, "campaigns.manage")) {
+  if (!hasEffectivePermission(session.user.permissions, "campaigns.manage")) {
     redirect(`/dashboard/no-access?from=${encodeURIComponent("إنشاء حملة")}`);
   }
 

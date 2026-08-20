@@ -8,7 +8,7 @@ import { getIntegrationAdapter } from "@/lib/integrations/registry";
 import { isSandboxMode } from "@/lib/integrations/types";
 import { createOAuthState } from "@/lib/integrations/oauthState";
 import { withTenant } from "@/lib/db";
-import { requirePermission } from "@/lib/rbac";
+import { requireEffectivePermission } from "@/lib/rbac";
 import { writeAuditLog } from "@/lib/audit";
 import { connectMetaManually, subscribeMetaWebhook } from "@/lib/integrations/meta/connection";
 
@@ -20,7 +20,7 @@ import { connectMetaManually, subscribeMetaWebhook } from "@/lib/integrations/me
  */
 export async function connectIntegration(provider: IntegrationProvider) {
   const session = await requireTenantSession();
-  requirePermission(session.user.role, "integrations.manage");
+  requireEffectivePermission(session.user.permissions, "integrations.manage");
 
   const adapter = getIntegrationAdapter(provider);
 
@@ -40,7 +40,7 @@ export async function connectIntegration(provider: IntegrationProvider) {
 
 export async function disconnectIntegration(provider: IntegrationProvider) {
   const session = await requireTenantSession();
-  requirePermission(session.user.role, "integrations.manage");
+  requireEffectivePermission(session.user.permissions, "integrations.manage");
 
   const adapter = getIntegrationAdapter(provider);
   await adapter.disconnect(session.user.tenantId);
@@ -58,7 +58,7 @@ export async function disconnectIntegration(provider: IntegrationProvider) {
 
 export async function connectMetaManualAction(input: { wabaId: string; phoneNumberId: string; accessToken: string }): Promise<{ success: boolean; error?: string }> {
   const session = await requireTenantSession();
-  requirePermission(session.user.role, "integrations.manage");
+  requireEffectivePermission(session.user.permissions, "integrations.manage");
 
   const result = await connectMetaManually(session.user.tenantId, input);
 
@@ -75,7 +75,7 @@ export async function connectMetaManualAction(input: { wabaId: string; phoneNumb
 
 export async function resubscribeWebhookAction(): Promise<{ success: boolean; error?: string }> {
   const session = await requireTenantSession();
-  requirePermission(session.user.role, "integrations.manage");
+  requireEffectivePermission(session.user.permissions, "integrations.manage");
 
   try {
     await subscribeMetaWebhook(session.user.tenantId);
@@ -88,7 +88,7 @@ export async function resubscribeWebhookAction(): Promise<{ success: boolean; er
 
 export async function resyncIntegration(provider: IntegrationProvider) {
   const session = await requireTenantSession();
-  requirePermission(session.user.role, "integrations.manage");
+  requireEffectivePermission(session.user.permissions, "integrations.manage");
 
   if (provider === IntegrationProvider.ZID || provider === IntegrationProvider.SALLA) {
     const adapter = getIntegrationAdapter(provider);

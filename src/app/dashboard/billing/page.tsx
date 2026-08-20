@@ -1,7 +1,12 @@
 import { notFound } from "next/navigation";
 import { requireTenantSession } from "@/lib/session";
 import { withTenant, rawDb } from "@/lib/db";
-import { hasPermission } from "@/lib/rbac";
+// billing.manage تبقى فحصاً دورياً عمداً (NON_CUSTOMIZABLE_PERMISSIONS — راجع lib/rbac.ts):
+// لو استُخدمت hasEffectivePermission هنا، أي مدير (ADMIN) لديه أي تخصيص صلاحيات فردي (حتى لغرض
+// مختلف تماماً) كان سيفقد billing.manage بصمت، لأن resolveEffectivePermissions تستبدل صلاحيات
+// الدور بالكامل بالمصفوفة المخصَّصة (لا تدمج)، وbilling.manage لا يمكن أن يظهر في تلك المصفوفة
+// أصلاً (مرفوضة من updateUserPermissions). billing.view وحدها قابلة للتخصيص فتستخدم effective.
+import { hasPermission, hasEffectivePermission } from "@/lib/rbac";
 import { parseChatbotLimits, DEFAULT_STARTER_CHATBOT_LIMITS } from "@/lib/planLimits";
 import { parseCampaignLimits, DEFAULT_STARTER_CAMPAIGN_LIMITS } from "@/lib/campaigns/limits";
 import { requestCustomPlan } from "./actions";
@@ -17,7 +22,7 @@ import { getCountryConfig } from "@/lib/billing/countryConfig";
 
 export default async function BillingPage() {
   const session = await requireTenantSession();
-  if (!hasPermission(session.user.role, "billing.view")) notFound();
+  if (!hasEffectivePermission(session.user.permissions, "billing.view")) notFound();
   const canManage = hasPermission(session.user.role, "billing.manage");
   const tenantId = session.user.tenantId;
 

@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { Prisma } from "@prisma/client";
 import { requireTenantSession } from "@/lib/session";
 import { withTenant } from "@/lib/db";
-import { requirePermission } from "@/lib/rbac";
+import { requireEffectivePermission } from "@/lib/rbac";
 import { writeAuditLog } from "@/lib/audit";
 import { checkTenantRateLimit } from "@/lib/rateLimit";
 import {
@@ -31,7 +31,7 @@ const createContactSchema = z.object({
 
 export async function createContact(formData: FormData) {
   const session = await requireTenantSession();
-  requirePermission(session.user.role, "contacts.manage");
+  requireEffectivePermission(session.user.permissions, "contacts.manage");
 
   const parsed = createContactSchema.safeParse({
     name: formData.get("name"),
@@ -76,7 +76,7 @@ const updateContactSchema = z.object({
 /** تعديل البيانات الأساسية لجهة اتصال (لا يشمل رقم الجوال عمداً — هو المعرّف الفريد لهوية واتساب نفسها). */
 export async function updateContact(contactId: string, formData: FormData) {
   const session = await requireTenantSession();
-  requirePermission(session.user.role, "contacts.manage");
+  requireEffectivePermission(session.user.permissions, "contacts.manage");
 
   const parsed = updateContactSchema.safeParse({
     name: formData.get("name"),
@@ -103,7 +103,7 @@ export async function updateContact(contactId: string, formData: FormData) {
 
 export async function updateContactStage(contactId: string, stage: "LEAD" | "CONTACTED" | "CUSTOMER" | "REPEAT") {
   const session = await requireTenantSession();
-  requirePermission(session.user.role, "contacts.manage");
+  requireEffectivePermission(session.user.permissions, "contacts.manage");
 
   await withTenant(session.user.tenantId, async (tx) => {
     await tx.contact.update({
@@ -119,7 +119,7 @@ export async function updateContactStage(contactId: string, stage: "LEAD" | "CON
 /** null = "غير محدد" (لم تُطلَب الموافقة بعد) — قيمة مختلفة صراحة عن false ("رفض الموافقة"). */
 export async function updateContactOptIn(contactId: string, optIn: boolean | null) {
   const session = await requireTenantSession();
-  requirePermission(session.user.role, "contacts.manage");
+  requireEffectivePermission(session.user.permissions, "contacts.manage");
 
   await withTenant(session.user.tenantId, (tx) =>
     tx.contact.update({
@@ -139,7 +139,7 @@ export async function updateContactOptIn(contactId: string, optIn: boolean | nul
 
 export async function addTagToContact(contactId: string, tagName: string) {
   const session = await requireTenantSession();
-  requirePermission(session.user.role, "contacts.manage");
+  requireEffectivePermission(session.user.permissions, "contacts.manage");
   const name = tagName.trim();
   if (!name) throw new Error("اسم الوسم مطلوب");
 
@@ -161,7 +161,7 @@ export async function addTagToContact(contactId: string, tagName: string) {
 
 export async function removeTagFromContact(contactId: string, tagId: string) {
   const session = await requireTenantSession();
-  requirePermission(session.user.role, "contacts.manage");
+  requireEffectivePermission(session.user.permissions, "contacts.manage");
 
   await withTenant(session.user.tenantId, (tx) =>
     tx.contactTag.deleteMany({ where: { contactId, tagId } })
@@ -172,7 +172,7 @@ export async function removeTagFromContact(contactId: string, tagId: string) {
 
 export async function deleteContact(contactId: string) {
   const session = await requireTenantSession();
-  requirePermission(session.user.role, "contacts.delete");
+  requireEffectivePermission(session.user.permissions, "contacts.delete");
 
   await withTenant(session.user.tenantId, async (tx) => {
     await tx.contact.delete({ where: { id: contactId, tenantId: session.user.tenantId } });
@@ -190,7 +190,7 @@ export async function deleteContact(contactId: string) {
 
 export async function bulkDeleteContacts(contactIds: string[]) {
   const session = await requireTenantSession();
-  requirePermission(session.user.role, "contacts.delete");
+  requireEffectivePermission(session.user.permissions, "contacts.delete");
   if (contactIds.length === 0) return { deletedCount: 0 };
 
   const { count } = await withTenant(session.user.tenantId, (tx) =>
@@ -209,7 +209,7 @@ export async function bulkDeleteContacts(contactIds: string[]) {
 
 export async function bulkTagContacts(contactIds: string[], tagName: string) {
   const session = await requireTenantSession();
-  requirePermission(session.user.role, "contacts.manage");
+  requireEffectivePermission(session.user.permissions, "contacts.manage");
   const name = tagName.trim();
   if (!name || contactIds.length === 0) throw new Error("اختر جهات اتصال واسم وسم صالح");
 
@@ -238,7 +238,7 @@ export async function bulkTagContacts(contactIds: string[], tagName: string) {
  */
 export async function bulkAddToCampaignAudience(contactIds: string[]) {
   const session = await requireTenantSession();
-  requirePermission(session.user.role, "campaigns.manage");
+  requireEffectivePermission(session.user.permissions, "campaigns.manage");
   if (contactIds.length === 0) throw new Error("اختر جهات اتصال أولاً");
 
   const tagName = `جمهور مُحدَّد يدوياً ${new Date().toLocaleString("ar-SA", { dateStyle: "medium", timeStyle: "short" })}`;
@@ -260,7 +260,7 @@ export type { ImportPreviewResult, CommitImportResult };
 /** الخطوة 1: يحلّل الملف ويعرض معاينة (بلا أي كتابة على القاعدة بعد) — بند 3 في البرومنت. */
 export async function previewContactImport(formData: FormData): Promise<ImportPreviewResult> {
   const session = await requireTenantSession();
-  requirePermission(session.user.role, "contacts.manage");
+  requireEffectivePermission(session.user.permissions, "contacts.manage");
 
   const rateLimit = await checkTenantRateLimit(session.user.tenantId, "bulk-import", 5, 3600);
   if (!rateLimit.allowed) {
@@ -278,7 +278,7 @@ export async function previewContactImport(formData: FormData): Promise<ImportPr
 /** الخطوة 2: يؤكد الاستيراد فعلياً بعد مراجعة المعاينة، باستراتيجية معالجة تكرار مختارة صراحة. */
 export async function confirmContactImport(sessionId: string, duplicateStrategy: DuplicateStrategy): Promise<CommitImportResult> {
   const session = await requireTenantSession();
-  requirePermission(session.user.role, "contacts.manage");
+  requireEffectivePermission(session.user.permissions, "contacts.manage");
 
   const result = await commitContactImport(session.user.tenantId, session.user.id, sessionId, duplicateStrategy, "IMPORT");
   if (!result.success) return result;
@@ -299,7 +299,7 @@ const UNDO_IMPORT_WINDOW_MINUTES = 10;
  * موجودة مسبقاً وتم تحديثها فقط، إذ لا نملك نسخة سابقة من بياناتها لاستعادتها). متاح لفترة قصيرة فقط. */
 export async function undoImportBatch(batchId: string) {
   const session = await requireTenantSession();
-  requirePermission(session.user.role, "contacts.manage");
+  requireEffectivePermission(session.user.permissions, "contacts.manage");
   const tenantId = session.user.tenantId;
 
   const batch = await withTenant(tenantId, (tx) => tx.contactImportBatch.findUnique({ where: { id: batchId, tenantId } }));

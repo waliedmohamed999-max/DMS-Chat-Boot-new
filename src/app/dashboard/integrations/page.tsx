@@ -1,6 +1,6 @@
 import { requireTenantSession } from "@/lib/session";
 import { withTenant } from "@/lib/db";
-import { hasPermission } from "@/lib/rbac";
+import { hasEffectivePermission } from "@/lib/rbac";
 import { PROVIDER_LABELS_AR, PROVIDER_ICONS } from "@/lib/integrations/registry";
 import { IntegrationProvider } from "@prisma/client";
 import { connectIntegration, disconnectIntegration, resyncIntegration } from "./actions";
@@ -21,7 +21,7 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
   const session = await requireTenantSession();
   const tenantId = session.user.tenantId;
 
-  if (!hasPermission(session.user.role, "integrations.manage")) {
+  if (!hasEffectivePermission(session.user.permissions, "integrations.manage")) {
     return <div className="card p-8 text-center text-slate-400">ليس لديك صلاحية إدارة التكاملات. هذا المسار محصور بصاحب الحساب والمدير.</div>;
   }
 

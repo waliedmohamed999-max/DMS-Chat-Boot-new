@@ -2,7 +2,7 @@
 
 import { withTenant } from "@/lib/db";
 import { requireTenantSession } from "@/lib/session";
-import { requirePermission } from "@/lib/rbac";
+import { requireEffectivePermission } from "@/lib/rbac";
 import { writeAuditLog } from "@/lib/audit";
 import { computeWindowState } from "@/lib/inbox/windowState";
 import { sendTemplateReply } from "@/app/dashboard/inbox/actions";
@@ -20,7 +20,7 @@ export type OrderSendRoute =
  */
 export async function getOrderContactSendRoute(orderId: string): Promise<OrderSendRoute> {
   const session = await requireTenantSession();
-  requirePermission(session.user.role, "orders.manage");
+  requireEffectivePermission(session.user.permissions, "orders.manage");
   const tenantId = session.user.tenantId;
 
   return withTenant(tenantId, async (tx) => {
@@ -42,7 +42,7 @@ export type QuickSendResult = { success: true; conversationId: string } | { succ
  * الحقيقي (فرض القالب المعتمد + الحد المعدلي + تحديث العدادات) بدل تكرار منطقها هنا. */
 export async function quickSendOrderTemplate(orderId: string, templateId: string): Promise<QuickSendResult> {
   const session = await requireTenantSession();
-  requirePermission(session.user.role, "orders.manage");
+  requireEffectivePermission(session.user.permissions, "orders.manage");
   const tenantId = session.user.tenantId;
 
   const order = await withTenant(tenantId, (tx) =>

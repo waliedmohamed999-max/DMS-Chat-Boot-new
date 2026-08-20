@@ -1,9 +1,10 @@
 import { notFound } from "next/navigation";
 import { requireTenantSession } from "@/lib/session";
 import { withTenant } from "@/lib/db";
-import { ROLE_LABELS_AR, hasPermission } from "@/lib/rbac";
-import { inviteTeamMember, changeUserRole, toggleUserActive } from "./actions";
+import { ROLE_LABELS_AR, hasPermission, resolveEffectivePermissions } from "@/lib/rbac";
+import { inviteTeamMember, changeUserRole, toggleUserActive, updateUserPermissions } from "./actions";
 import { InviteTeamMemberForm } from "@/components/dashboard/InviteTeamMemberForm";
+import { PermissionsEditor } from "@/components/dashboard/PermissionsEditor";
 
 export default async function SettingsPage() {
   const session = await requireTenantSession();
@@ -51,6 +52,13 @@ export default async function SettingsPage() {
                           {u.isActive ? "نشط" : "معطّل"}
                         </button>
                       </form>
+                      <PermissionsEditor
+                        userId={u.id}
+                        userName={u.name}
+                        initialPermissions={resolveEffectivePermissions(u)}
+                        isCustomized={u.customPermissionsJson !== null}
+                        updateUserPermissions={updateUserPermissions}
+                      />
                     </>
                   )}
                 </div>

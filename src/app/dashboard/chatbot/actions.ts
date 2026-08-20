@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireTenantSession } from "@/lib/session";
 import { withTenant } from "@/lib/db";
-import { requirePermission } from "@/lib/rbac";
+import { requireEffectivePermission } from "@/lib/rbac";
 import { writeAuditLog } from "@/lib/audit";
 import { getTenantChatbotLimits, isNodeTypeAllowed, isUnlimited } from "@/lib/planLimits";
 import { FLOW_TEMPLATES } from "@/lib/chatbot/templates";
@@ -13,7 +13,7 @@ import type { FlowGraph } from "@/lib/chatbot/types";
 
 export async function createFlowFromTemplate(templateId: string, name: string) {
   const session = await requireTenantSession();
-  requirePermission(session.user.role, "chatbot.edit");
+  requireEffectivePermission(session.user.permissions, "chatbot.edit");
 
   const template = FLOW_TEMPLATES.find((t) => t.id === templateId);
   if (!template) throw new Error("قالب غير موجود");
@@ -52,7 +52,7 @@ export async function createFlowFromTemplate(templateId: string, name: string) {
 /** ينسخ تدفقاً موجوداً كمسودة جديدة — تسهيل تعديل نسخة بديلة بدل التعديل المباشر في تدفق منشور شغّال. */
 export async function duplicateFlow(flowId: string) {
   const session = await requireTenantSession();
-  requirePermission(session.user.role, "chatbot.edit");
+  requireEffectivePermission(session.user.permissions, "chatbot.edit");
   const tenantId = session.user.tenantId;
 
   const limits = await getTenantChatbotLimits(tenantId);
@@ -83,7 +83,7 @@ export async function duplicateFlow(flowId: string) {
 
 export async function saveFlowGraph(flowId: string, graph: FlowGraph) {
   const session = await requireTenantSession();
-  requirePermission(session.user.role, "chatbot.edit");
+  requireEffectivePermission(session.user.permissions, "chatbot.edit");
 
   const limits = await getTenantChatbotLimits(session.user.tenantId);
 
@@ -108,7 +108,7 @@ export async function saveFlowGraph(flowId: string, graph: FlowGraph) {
 
 export async function recordTestRun(flowId: string, nodeTraversal: Record<string, number>) {
   const session = await requireTenantSession();
-  requirePermission(session.user.role, "chatbot.test");
+  requireEffectivePermission(session.user.permissions, "chatbot.test");
 
   await withTenant(session.user.tenantId, async (tx) => {
     const flow = await tx.chatbotFlow.findUniqueOrThrow({ where: { id: flowId, tenantId: session.user.tenantId } });
@@ -129,7 +129,7 @@ export async function recordTestRun(flowId: string, nodeTraversal: Record<string
 
 export async function togglePublish(flowId: string, publish: boolean) {
   const session = await requireTenantSession();
-  requirePermission(session.user.role, "chatbot.publish");
+  requireEffectivePermission(session.user.permissions, "chatbot.publish");
 
   await withTenant(session.user.tenantId, async (tx) => {
     const flow = await tx.chatbotFlow.findUniqueOrThrow({ where: { id: flowId, tenantId: session.user.tenantId } });
@@ -163,7 +163,7 @@ export async function deleteFlow(flowId: string) {
 
   // المدير يقدر يحذف المسودات فقط — حذف تدفق منشور فعلياً محصور بصاحب الحساب.
   const requiredPermission = flow.status === "PUBLISHED" ? "chatbot.delete_published" : "chatbot.delete_draft";
-  requirePermission(session.user.role, requiredPermission);
+  requireEffectivePermission(session.user.permissions, requiredPermission);
 
   await withTenant(session.user.tenantId, async (tx) => {
     await tx.chatbotFlow.delete({ where: { id: flowId, tenantId: session.user.tenantId } });

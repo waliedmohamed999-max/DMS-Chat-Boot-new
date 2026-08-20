@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireTenantSession } from "@/lib/session";
-import { requirePermission } from "@/lib/rbac";
+import { requireEffectivePermission } from "@/lib/rbac";
 import { consumeOAuthState } from "@/lib/integrations/oauthState";
 import { zidAdapter } from "@/lib/integrations/zid/adapter";
 import { writeAuditLog } from "@/lib/audit";
@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
 
   const session = await requireTenantSession();
   try {
-    requirePermission(session.user.role, "integrations.manage");
+    requireEffectivePermission(session.user.permissions, "integrations.manage");
   } catch {
     return NextResponse.redirect(`${baseUrl}/dashboard/integrations?zid_error=no_permission`);
   }

@@ -3,8 +3,8 @@ import { redirect } from "next/navigation";
 import { authOptions } from "@/lib/auth";
 import { getActiveImpersonation } from "@/lib/impersonation";
 import { getPlatformSession } from "@/lib/platformAuth";
-import { superAdminDb, rawDb } from "@/lib/db";
-import { isPlatformRole } from "@/lib/rbac";
+import { superAdminDb, withTenant } from "@/lib/db";
+import { isPlatformRole, resolveEffectivePermissions, type Permission } from "@/lib/rbac";
 
 export type ImpersonationInfo = { active: true; superAdminName: string; tenantName: string } | { active: false };
 
@@ -24,6 +24,10 @@ export async function getCurrentSession() {
           email: targetUser.email,
           role: targetUser.role,
           tenantId: targetUser.tenantId,
+          // يمرَّر صراحة (وليس افتراضاً) — فريق الدعم يجب أن يرى أثناء الانتحال بالضبط نفس صلاحيات
+          // العضو الفعلية المخصَّصة، لا صلاحيات دوره الافتراضية فقط، وإلا يفقد الانتحال غرضه (تشخيص
+          // ما يراه المستخدم الحقيقي فعلياً).
+          customPermissionsJson: targetUser.customPermissionsJson,
           impersonation: { active: true, superAdminName: impersonation.superAdminName, tenantName: impersonation.tenantName } as ImpersonationInfo,
         },
       };
@@ -47,7 +51,7 @@ export async function requireTenantSession() {
   const typedSession = session as typeof session & {
     user: {
       id: string; role: "OWNER" | "ADMIN" | "AGENT"; tenantId: string; name?: string | null; email?: string | null;
-      impersonation: ImpersonationInfo;
+      impersonation: ImpersonationInfo; permissions: Permission[];
     };
   };
 
@@ -57,10 +61,33 @@ export async function requireTenantSession() {
   // لكل صفحة/action تاجر — بدل الاعتماد فقط على حالة الدخول اللحظية. جلسات الانتحال مستثناة عمداً
   // (فريق الدعم يحتاج الدخول فعلياً لتاجر معلَّق للتحقيق، بنفس مبدأ استثناء وضع الصيانة في
   // dashboard/layout.tsx).
+  //
+  // نفس المشكلة بالضبط موجودة لصلاحيات العضو المخصَّصة (customPermissionsJson): لو الـOwner غيّر
+  // صلاحيات موظف، الموظف لن يرى التغيير حتى ينتهي الـJWT (حتى 7 أيام) بدون هذا الفحص الحي. الاستعلام
+  // الحي الوحيد أدناه يحل المشكلتين معاً (تعليق التاجر + دور/صلاحيات قديمة في الـJWT) بدل استعلامين منفصلين.
   if (!typedSession.user.impersonation.active) {
-    const tenant = await rawDb.tenant.findUnique({ where: { id: typedSession.user.tenantId }, select: { status: true } });
-    if (!tenant || tenant.status === "SUSPENDED") redirect("/login?reason=tenant_suspended");
-    if (tenant.status === "CANCELLED") redirect("/login?reason=tenant_cancelled");
+    // User جدول خاضع لـRLS فعلياً (راجع prisma/postgres-rls.sql) — استعلام عبر rawDb مباشرة بلا
+    // withTenant() كان سيُرجع null دائماً (app.current_tenant_id غير مضبوط)، فيُطرَد كل مستخدم فوراً
+    // من /login. tenantId معروف بالفعل هنا (typedSession.user.tenantId)، فيُستخدَم withTenant() به.
+    const freshUser = await withTenant(typedSession.user.tenantId, (tx) =>
+      tx.user.findUnique({
+        where: { id: typedSession.user.id },
+        select: { role: true, customPermissionsJson: true, tenant: { select: { status: true } } },
+      })
+    );
+    if (!freshUser?.tenant) redirect("/login");
+    if (freshUser.tenant.status === "SUSPENDED") redirect("/login?reason=tenant_suspended");
+    if (freshUser.tenant.status === "CANCELLED") redirect("/login?reason=tenant_cancelled");
+
+    // يحل نفس مشكلة تعليق التاجر: الدور المخزّن في الـJWT قد يكون قديم لو الـOwner غيّر دور هذا
+    // العضو مؤخراً (changeUserRole) — نستخدم القيمة الحية من القاعدة هنا فقط لغرض حساب الصلاحيات
+    // وعرض الدور، دون التأثير على أي منطق آخر يعتمد على typedSession.user.role.
+    typedSession.user.role = freshUser.role as "OWNER" | "ADMIN" | "AGENT";
+    typedSession.user.permissions = resolveEffectivePermissions(freshUser);
+  } else {
+    // فرع الانتحال: targetUser مجلوب بالفعل حياً بالكامل من superAdminDb (بلا select)، فيحمل
+    // customPermissionsJson تلقائياً بعد الـmigration — يكفي حساب الصلاحيات منه مباشرة.
+    typedSession.user.permissions = resolveEffectivePermissions(typedSession.user);
   }
 
   return typedSession;

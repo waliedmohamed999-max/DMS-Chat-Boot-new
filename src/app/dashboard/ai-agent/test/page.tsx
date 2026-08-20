@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requireTenantSession } from "@/lib/session";
 import { withTenant } from "@/lib/db";
-import { hasPermission } from "@/lib/rbac";
+import { hasEffectivePermission } from "@/lib/rbac";
 import { getTenantChatbotLimits, isNodeTypeAllowed } from "@/lib/planLimits";
 import { TestChatPanel } from "./TestChatPanel";
 
@@ -10,7 +10,7 @@ export default async function AiAgentTestPage() {
   const session = await requireTenantSession();
   const tenantId = session.user.tenantId;
 
-  if (!hasPermission(session.user.role, "chatbot.test")) {
+  if (!hasEffectivePermission(session.user.permissions, "chatbot.test")) {
     redirect(`/dashboard/no-access?from=${encodeURIComponent("تجربة الموظف الذكي")}`);
   }
 

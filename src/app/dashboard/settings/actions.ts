@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import bcrypt from "bcryptjs";
 import { requireTenantSession } from "@/lib/session";
 import { withTenant } from "@/lib/db";
-import { requirePermission } from "@/lib/rbac";
+import { Prisma } from "@prisma/client";
+import { requirePermission, TENANT_PERMISSION_LABELS_AR, NON_CUSTOMIZABLE_PERMISSIONS } from "@/lib/rbac";
 import { writeAuditLog } from "@/lib/audit";
 import { checkTenantRateLimit } from "@/lib/rateLimit";
 import { z } from "zod";
@@ -71,7 +72,10 @@ export async function changeUserRole(userId: string, role: "ADMIN" | "AGENT") {
   requirePermission(session.user.role, "team.manage");
 
   await withTenant(session.user.tenantId, async (tx) => {
-    await tx.user.update({ where: { id: userId, tenantId: session.user.tenantId }, data: { role } });
+    // تغيير الدور يصفّر أي تخصيص صلاحيات سابق — تفادياً لحالة "تخصيص مبني على دور قديم" مربكة وغير
+    // آمنة (مثال: تخصيص AGENT كان يمنحه orders.manage فقط، ثم يُرقَّى لـADMIN فيرث نفس المصفوفة
+    // الضيقة القديمة بدل صلاحيات ADMIN الكاملة الافتراضية).
+    await tx.user.update({ where: { id: userId, tenantId: session.user.tenantId }, data: { role, customPermissionsJson: Prisma.JsonNull } });
   });
 
   await writeAuditLog({
@@ -88,6 +92,54 @@ export async function toggleUserActive(userId: string, isActive: boolean) {
 
   await withTenant(session.user.tenantId, async (tx) => {
     await tx.user.update({ where: { id: userId, tenantId: session.user.tenantId }, data: { isActive } });
+  });
+
+  revalidatePath("/dashboard/settings");
+}
+
+const permissionsUpdateSchema = z.object({
+  permissions: z.array(z.string()).nullable(),
+});
+
+/**
+ * تخصيص صلاحيات فردي لعضو فريق فوق افتراضي دوره (customPermissionsJson). permissions = null يعني
+ * "رجوع لصلاحيات الدور الافتراضية" (يمسح التخصيص). فحص دوري عمداً (requirePermission على
+ * session.user.role وليس effective) — من يملك حق التخصيص نفسه لا يتغير بأي تخصيص، تفادياً لحلقة
+ * تصعيد صلاحيات ذاتي (راجع تعليق NON_CUSTOMIZABLE_PERMISSIONS في lib/rbac.ts).
+ */
+export async function updateUserPermissions(userId: string, permissions: string[] | null) {
+  const session = await requireTenantSession();
+  requirePermission(session.user.role, "team.manage");
+
+  const parsed = permissionsUpdateSchema.safeParse({ permissions });
+  if (!parsed.success) throw new Error("بيانات غير صالحة");
+
+  await withTenant(session.user.tenantId, async (tx) => {
+    const target = await tx.user.findUnique({ where: { id: userId, tenantId: session.user.tenantId } });
+    if (!target) throw new Error("العضو غير موجود");
+    if (target.role === "OWNER") throw new Error("لا يمكن تخصيص صلاحيات صاحب الحساب");
+
+    if (parsed.data.permissions) {
+      // فحص خادمي حقيقي (وليس ثقة بالواجهة) — يرفض أي صلاحية غير معروفة أو منتمية لـ
+      // NON_CUSTOMIZABLE_PERMISSIONS حتى لو تجاوز الطالب الواجهة واستدعى هذا الـaction مباشرة بحمولة يدوية.
+      const allowed = new Set(Object.keys(TENANT_PERMISSION_LABELS_AR));
+      for (const p of parsed.data.permissions) {
+        if (!allowed.has(p) || (NON_CUSTOMIZABLE_PERMISSIONS as string[]).includes(p)) {
+          throw new Error("صلاحية غير صالحة");
+        }
+      }
+    }
+
+    await tx.user.update({
+      where: { id: userId },
+      data: { customPermissionsJson: parsed.data.permissions ? JSON.stringify(parsed.data.permissions) : Prisma.JsonNull },
+    });
+  });
+
+  await writeAuditLog({
+    tenantId: session.user.tenantId, userId: session.user.id,
+    action: "team.permissions_change", targetType: "User", targetId: userId,
+    metaJson: { permissions: parsed.data.permissions },
   });
 
   revalidatePath("/dashboard/settings");

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { requireTenantSession } from "@/lib/session";
 import { withTenant } from "@/lib/db";
-import { hasPermission } from "@/lib/rbac";
+import { hasEffectivePermission } from "@/lib/rbac";
 import { resubmitTemplateRedirect, deleteSupersededTemplate } from "./actions";
 
 const STATUS_LABELS: Record<string, { label: string; className: string }> = {
@@ -22,7 +22,7 @@ const CATEGORY_LABELS_AR: Record<string, string> = {
 export default async function TemplatesPage() {
   const session = await requireTenantSession();
   const tenantId = session.user.tenantId;
-  const canManage = hasPermission(session.user.role, "campaigns.manage");
+  const canManage = hasEffectivePermission(session.user.permissions, "campaigns.manage");
 
   if (!canManage) {
     return <div className="card p-8 text-center text-slate-400">ليس لديك صلاحية إدارة قوالب الرسائل. هذا المسار محصور بصاحب الحساب والمدير.</div>;

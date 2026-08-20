@@ -2,14 +2,14 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requireTenantSession } from "@/lib/session";
 import { withTenant } from "@/lib/db";
-import { hasPermission } from "@/lib/rbac";
+import { hasEffectivePermission } from "@/lib/rbac";
 import { getTenantChatbotLimits, isUnlimited } from "@/lib/planLimits";
 import { FLOW_TEMPLATES } from "@/lib/chatbot/templates";
 import { TemplateGallery } from "@/components/dashboard/TemplateGallery";
 
 export default async function NewChatbotFlowPage() {
   const session = await requireTenantSession();
-  if (!hasPermission(session.user.role, "chatbot.edit")) {
+  if (!hasEffectivePermission(session.user.permissions, "chatbot.edit")) {
     redirect(`/dashboard/no-access?from=${encodeURIComponent("إنشاء تدفق شات بوت")}`);
   }
 

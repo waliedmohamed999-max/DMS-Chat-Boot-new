@@ -2,7 +2,7 @@
 
 import qrcode from "qrcode";
 import { requireTenantSession } from "@/lib/session";
-import { requirePermission } from "@/lib/rbac";
+import { requireEffectivePermission } from "@/lib/rbac";
 import { writeAuditLog } from "@/lib/audit";
 import { whatsappQrStartQueue } from "@/lib/integrations/whatsappQr/queue";
 import { getQrStatus } from "@/lib/integrations/whatsappQr/redisStatus";
@@ -17,7 +17,7 @@ export type WhatsappQrTrialStatus = {
 /** يرسل أمر "ابدأ" لعملية العامل (لا ينتظر الاتصال الفعلي — العميل يستطلع الحالة بعدها بـgetWhatsappQrStatusAction). */
 export async function startWhatsappQrTrialAction(): Promise<void> {
   const session = await requireTenantSession();
-  requirePermission(session.user.role, "integrations.manage");
+  requireEffectivePermission(session.user.permissions, "integrations.manage");
 
   await whatsappQrStartQueue.add("start", { tenantId: session.user.tenantId });
 
@@ -32,7 +32,7 @@ export async function startWhatsappQrTrialAction(): Promise<void> {
 
 export async function getWhatsappQrStatusAction(): Promise<WhatsappQrTrialStatus> {
   const session = await requireTenantSession();
-  requirePermission(session.user.role, "integrations.manage");
+  requireEffectivePermission(session.user.permissions, "integrations.manage");
 
   const status = await getQrStatus(session.user.tenantId);
   if (!status) return { state: "disconnected" };

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { requireTenantSession } from "@/lib/session";
 import { withTenant } from "@/lib/db";
-import { hasPermission } from "@/lib/rbac";
+import { hasEffectivePermission } from "@/lib/rbac";
 import { getTenantChatbotLimits, isUnlimited } from "@/lib/planLimits";
 import { PLAN_TIER_LABELS_AR } from "@/lib/planLimits";
 import { NODE_TYPES } from "@/lib/chatbot/nodeTypes";
@@ -27,7 +27,7 @@ function summarizeNodes(nodes: FlowGraph["nodes"]): string {
 export default async function ChatbotPage() {
   const session = await requireTenantSession();
   const tenantId = session.user.tenantId;
-  const canEdit = hasPermission(session.user.role, "chatbot.edit");
+  const canEdit = hasEffectivePermission(session.user.permissions, "chatbot.edit");
 
   const [flows, limits, waIntegration, tenant, connectedPhoneNumber] = await Promise.all([
     withTenant(tenantId, (tx) => tx.chatbotFlow.findMany({ where: { tenantId }, orderBy: { updatedAt: "desc" } })),

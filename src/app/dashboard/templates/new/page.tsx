@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requireTenantSession } from "@/lib/session";
 import { withTenant, rawDb } from "@/lib/db";
-import { hasPermission } from "@/lib/rbac";
+import { hasEffectivePermission } from "@/lib/rbac";
 import { TemplateBuilder } from "@/components/dashboard/TemplateBuilder";
 import { createTemplate } from "../actions";
 
@@ -10,7 +10,7 @@ export default async function NewTemplatePage({ searchParams }: { searchParams: 
   const session = await requireTenantSession();
   const tenantId = session.user.tenantId;
 
-  if (!hasPermission(session.user.role, "campaigns.manage")) {
+  if (!hasEffectivePermission(session.user.permissions, "campaigns.manage")) {
     redirect(`/dashboard/no-access?from=${encodeURIComponent("إنشاء قالب رسالة")}`);
   }
 

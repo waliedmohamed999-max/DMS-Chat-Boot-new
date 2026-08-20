@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requireTenantSession } from "@/lib/session";
 import { withTenant } from "@/lib/db";
-import { hasPermission } from "@/lib/rbac";
+import { hasEffectivePermission } from "@/lib/rbac";
 import { RateButtons } from "./RateButtons";
 
 const LOW_CONFIDENCE_THRESHOLD = 40;
@@ -11,7 +11,7 @@ export default async function AiAgentReviewsPage() {
   const session = await requireTenantSession();
   const tenantId = session.user.tenantId;
 
-  if (!hasPermission(session.user.role, "chatbot.edit")) {
+  if (!hasEffectivePermission(session.user.permissions, "chatbot.edit")) {
     redirect(`/dashboard/no-access?from=${encodeURIComponent("مراجعة جودة الموظف الذكي")}`);
   }
 

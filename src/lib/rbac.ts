@@ -154,6 +154,56 @@ export function requirePermission(role: UserRole, permission: Permission): void 
   }
 }
 
+// تُرجع مصفوفة صلاحيات الدور الافتراضية — بديل تصدير ROLE_PERMISSIONS مباشرة (يبقى private) عشان
+// نمنع أي كود خارجي من تعديلها بالغلط بالإشارة.
+export function getRoleDefaultPermissions(role: UserRole): Permission[] {
+  return ROLE_PERMISSIONS[role] ?? [];
+}
+
+// الصلاحيات المستبعدة عمداً من التخصيص الفردي مهما كان — فتح إحداهما لموظف عادي يفتح مسار تصعيد
+// صلاحيات ذاتي (موظف يمنح نفسه صلاحيات أكتر)، لأن صفحة الإعدادات وكل إجراءات الفريق/الفوترة الفعلية
+// محمية بفحص دوري ثابت (hasPermission/requirePermission على session.user.role)، وليس بالصلاحيات
+// الفعلية. تبقى هاتين دايماً تابعتين لقيمة الدور فقط، بلا استثناء، حتى لو الطلب جاي من Owner نفسه.
+export const NON_CUSTOMIZABLE_PERMISSIONS: Permission[] = ["team.manage", "billing.manage"];
+
+// تحسب الصلاحيات الفعلية لمستخدم تاجر واحد. الأدوار الداخلية للمنصة (platform.*) والـOWNER لا
+// يُخصَّصان أبداً — OWNER لازم يحتفظ بكل صلاحيات حسابه دايماً بلا استثناء (فرض خادمي، ليس فقط UI).
+export function resolveEffectivePermissions(user: {
+  role: UserRole;
+  customPermissionsJson?: unknown;
+}): Permission[] {
+  if (isPlatformRole(user.role) || user.role === "OWNER") {
+    return getRoleDefaultPermissions(user.role);
+  }
+  const custom = parseCustomPermissions(user.customPermissionsJson);
+  return custom ?? getRoleDefaultPermissions(user.role);
+}
+
+// يتحقق إن الـJSON المخزّن فعلاً مصفوفة نصوص كل عنصر فيها Permission معروف (Partial<Record> في
+// TENANT_PERMISSION_LABELS_AR) — أي قيمة غير متوقعة (JSON تالف، صلاحية platform.* متسرّبة، نص عشوائي)
+// تُرفض بصمت وتُرجع null (= رجوع آمن لصلاحيات الدور الافتراضية) بدل رمي استثناء يكسر تحميل الصفحة.
+function parseCustomPermissions(raw: unknown): Permission[] | null {
+  try {
+    const arr = typeof raw === "string" ? JSON.parse(raw) : raw;
+    if (!Array.isArray(arr)) return null;
+    const known = new Set(Object.keys(TENANT_PERMISSION_LABELS_AR));
+    const filtered = arr.filter((p): p is Permission => typeof p === "string" && known.has(p));
+    return filtered.length === arr.length ? (filtered as Permission[]) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function hasEffectivePermission(permissions: Permission[], permission: Permission): boolean {
+  return permissions.includes(permission);
+}
+
+export function requireEffectivePermission(permissions: Permission[], permission: Permission): void {
+  if (!permissions.includes(permission)) {
+    throw new Error(`الصلاحية "${permission}" غير متاحة لك حالياً`);
+  }
+}
+
 export const ROLE_LABELS_AR: Record<UserRole, string> = {
   SUPER_ADMIN: "مالك المنصة",
   PLATFORM_SUPPORT: "فريق الدعم الفني",

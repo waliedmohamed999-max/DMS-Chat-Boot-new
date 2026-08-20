@@ -3,7 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { requireTenantSession } from "@/lib/session";
 import { withTenant, rawDb } from "@/lib/db";
-import { requirePermission } from "@/lib/rbac";
+// billing.manage تبقى فحصاً دورياً (requirePermission على session.user.role) عمداً في كل نقاط
+// استدعائها بهذا الملف — NON_CUSTOMIZABLE_PERMISSIONS (راجع lib/rbac.ts). billing.view وحدها
+// قابلة للتخصيص فتستخدم requireEffectivePermission.
+import { requirePermission, requireEffectivePermission } from "@/lib/rbac";
 import { getPaymentProvider, type MockCardInput } from "@/lib/billing/payment-provider";
 import { calculateProration, type ProrationPreview } from "@/lib/billing/proration";
 import { checkDowngradeAllowed } from "@/lib/billing/downgradeCheck";
@@ -24,7 +27,7 @@ export type PlanChangePreview =
 /** معاينة تغيير الباقة بلا أي تنفيذ فعلي — تُستدعى من نافذة التأكيد قبل الترقية/التخفيض (بند ج). */
 export async function previewPlanChange(planId: string): Promise<PlanChangePreview> {
   const session = await requireTenantSession();
-  requirePermission(session.user.role, "billing.view");
+  requireEffectivePermission(session.user.permissions, "billing.view");
   const tenantId = session.user.tenantId;
 
   const [tenant, subscription, targetPlan] = await Promise.all([

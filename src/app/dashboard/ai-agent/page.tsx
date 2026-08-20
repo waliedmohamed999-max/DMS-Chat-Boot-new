@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { requireTenantSession } from "@/lib/session";
 import { withTenant } from "@/lib/db";
-import { hasPermission } from "@/lib/rbac";
+import { hasEffectivePermission } from "@/lib/rbac";
 import { getTenantChatbotLimits, isNodeTypeAllowed, isUnlimited } from "@/lib/planLimits";
 import { updateAiAgentConfig } from "./actions";
 import type { FaqItem } from "@/lib/ai/aiAgentConfig";
@@ -16,7 +16,7 @@ export default async function AiAgentSettingsPage() {
   const session = await requireTenantSession();
   const tenantId = session.user.tenantId;
 
-  if (!hasPermission(session.user.role, "chatbot.edit")) {
+  if (!hasEffectivePermission(session.user.permissions, "chatbot.edit")) {
     return (
       <div className="card p-8 text-center text-slate-400">
         ليس لديك صلاحية إعداد الموظف الذكي — هذه الصفحة محصورة بمالك الحساب والمدير.

@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { requireTenantSession } from "@/lib/session";
 import { withTenant } from "@/lib/db";
-import { hasPermission } from "@/lib/rbac";
+import { hasEffectivePermission } from "@/lib/rbac";
 import {
   markResolved, assignConversation, transferConversation, takeOverFromBot, addInternalNote, simulateIncomingMessage,
 } from "../actions";
@@ -26,7 +26,7 @@ const ORDER_STATUS_LABELS: Record<string, string> = {
 export default async function ConversationThreadPage({ params }: { params: { id: string } }) {
   const session = await requireTenantSession();
   const tenantId = session.user.tenantId;
-  const canAssign = hasPermission(session.user.role, "inbox.assign");
+  const canAssign = hasEffectivePermission(session.user.permissions, "inbox.assign");
 
   const [conversation, teamMembers, quickReplies, approvedTemplates, sandbox] = await withTenant(tenantId, async (tx) => {
     return Promise.all([

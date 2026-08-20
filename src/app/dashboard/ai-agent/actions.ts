@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireTenantSession } from "@/lib/session";
-import { requirePermission } from "@/lib/rbac";
+import { requireEffectivePermission } from "@/lib/rbac";
 import { withTenant } from "@/lib/db";
 import { writeAuditLog } from "@/lib/audit";
 import { generateAiEmployeeReply, type ChatHistoryMessage } from "@/lib/ai/generateReply";
@@ -27,7 +27,7 @@ function parseFaqItems(raw: string): { question: string; answer: string }[] {
 
 export async function updateAiAgentConfig(formData: FormData) {
   const session = await requireTenantSession();
-  requirePermission(session.user.role, "chatbot.edit");
+  requireEffectivePermission(session.user.permissions, "chatbot.edit");
   const tenantId = session.user.tenantId;
 
   // بوابة الباقة تُفرَض هنا أيضاً على مستوى الخادم (وليس فقط إخفاء الصفحة في الواجهة) — نفس دفاع
@@ -78,7 +78,7 @@ export type TestMessageResult =
  */
 export async function sendTestMessage(history: ChatHistoryMessage[], message: string): Promise<TestMessageResult> {
   const session = await requireTenantSession();
-  requirePermission(session.user.role, "chatbot.test");
+  requireEffectivePermission(session.user.permissions, "chatbot.test");
   const tenantId = session.user.tenantId;
 
   // نفس بوابة الباقة الخادمية المفروضة في updateAiAgentConfig — دفاع ضد استدعاء مباشر لهذا الإجراء
@@ -106,7 +106,7 @@ export async function sendTestMessage(history: ChatHistoryMessage[], message: st
 
 export async function rateAiReplyLog(logId: string, rating: "HELPFUL" | "INACCURATE") {
   const session = await requireTenantSession();
-  requirePermission(session.user.role, "chatbot.edit");
+  requireEffectivePermission(session.user.permissions, "chatbot.edit");
   const tenantId = session.user.tenantId;
 
   // RLS (وليس شرط where يدوي) هو من يضمن أن logId ينتمي فعلاً لهذا التاجر — صف من تاجر آخر غير مرئي

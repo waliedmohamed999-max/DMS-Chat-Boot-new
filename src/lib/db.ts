@@ -47,10 +47,19 @@ export async function withTenant<T>(
   if (!TENANT_ID_PATTERN.test(tenantId)) {
     throw new Error(`tenantId غير صالح الصيغة: "${tenantId}" — رُفض قبل استخدامه في عزل RLS.`);
   }
-  return rawDb.$transaction(async (tx) => {
-    await tx.$executeRawUnsafe(`SET LOCAL app.current_tenant_id = '${tenantId}'`);
-    return fn(tx);
-  });
+  return rawDb.$transaction(
+    async (tx) => {
+      await tx.$executeRawUnsafe(`SET LOCAL app.current_tenant_id = '${tenantId}'`);
+      return fn(tx);
+    },
+    // maxWait الافتراضي (2000ms) قريب جداً من زمن إنشاء أول اتصال فعلي فعلياً بعد أي إعادة تحميل
+    // للعملية (محرك Prisma "بارد" — لوحظ ~2.1 ثانية محلياً خلف Docker)، فيفشل أول استعلام بعد كل
+    // hot-reload بصمت برسالة "Unable to start a transaction in the given time" رغم أن الاستعلام نفسه
+    // صحيح تماماً (نفس النمط بالضبط سينطبق إنتاجياً لو استيقظت قاعدة بيانات مُدارة من سكون). هامش أوسع
+    // هنا لا يُبطئ الحالة الشائعة إطلاقاً (تنتهي المعاملة الحقيقية خلال مللي ثوانٍ قليلة عادة)، فقط يمنح
+    // مهلة كافية للحالة الباردة النادرة بدل فشل فوري.
+    { maxWait: 10000, timeout: 15000 }
+  );
 }
 
 declare global {

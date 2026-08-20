@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { requireTenantSession } from "@/lib/session";
 import { withTenant, rawDb } from "@/lib/db";
-import { hasPermission } from "@/lib/rbac";
+import { hasEffectivePermission } from "@/lib/rbac";
 import { getTenantChatbotLimits } from "@/lib/planLimits";
 import { ChatbotFlowBuilder } from "@/components/dashboard/ChatbotFlowBuilder";
 import { ChatbotFlowEditor } from "@/components/dashboard/ChatbotFlowEditor";
@@ -19,7 +19,7 @@ export default async function ChatbotFlowPage({
 }) {
   const session = await requireTenantSession();
 
-  if (!hasPermission(session.user.role, "chatbot.edit")) {
+  if (!hasEffectivePermission(session.user.permissions, "chatbot.edit")) {
     redirect(`/dashboard/no-access?from=${encodeURIComponent("محرر الأتمتة")}`);
   }
 
@@ -42,7 +42,7 @@ export default async function ChatbotFlowPage({
     storeName: tenant.name,
     connectedPhoneNumber,
     allowedNodeTypes: limits.allowedNodeTypes,
-    canPublish: hasPermission(session.user.role, "chatbot.publish"),
+    canPublish: hasEffectivePermission(session.user.permissions, "chatbot.publish"),
     canDelete: canDeleteFlow(session.user.role, flow.status),
     initialTestRunCount: flow.testRunCount,
   };

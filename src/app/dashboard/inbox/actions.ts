@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireTenantSession } from "@/lib/session";
 import { withTenant } from "@/lib/db";
-import { requirePermission } from "@/lib/rbac";
+import { requireEffectivePermission } from "@/lib/rbac";
 import { writeAuditLog } from "@/lib/audit";
 import { checkTenantRateLimit } from "@/lib/rateLimit";
 import { resolveWhatsappAdapter } from "@/lib/integrations/registry";
@@ -57,7 +57,7 @@ async function sendOutboundMessage(
 
 export async function sendReply(conversationId: string, formData: FormData) {
   const session = await requireTenantSession();
-  requirePermission(session.user.role, "inbox.reply");
+  requireEffectivePermission(session.user.permissions, "inbox.reply");
   const tenantId = session.user.tenantId;
 
   // بلا هذا الحد، جلسة موظف مخترَقة/مسيئة كانت تقدر تُغرق الإرسال الفعلي عبر واتساب بلا أي عائق —
@@ -96,7 +96,7 @@ export async function sendReply(conversationId: string, formData: FormData) {
 
 export async function sendTemplateReply(conversationId: string, templateId: string) {
   const session = await requireTenantSession();
-  requirePermission(session.user.role, "inbox.reply");
+  requireEffectivePermission(session.user.permissions, "inbox.reply");
   const tenantId = session.user.tenantId;
 
   const rateLimit = await checkTenantRateLimit(tenantId, "inbox-send", 60, 10);
@@ -121,7 +121,7 @@ export async function sendTemplateReply(conversationId: string, templateId: stri
 
 export async function markResolved(conversationId: string) {
   const session = await requireTenantSession();
-  requirePermission(session.user.role, "inbox.reply");
+  requireEffectivePermission(session.user.permissions, "inbox.reply");
 
   await withTenant(session.user.tenantId, async (tx) => {
     await tx.conversation.update({
@@ -136,7 +136,7 @@ export async function markResolved(conversationId: string) {
 
 export async function assignConversation(conversationId: string, agentUserId: string) {
   const session = await requireTenantSession();
-  requirePermission(session.user.role, "inbox.assign");
+  requireEffectivePermission(session.user.permissions, "inbox.assign");
   const tenantId = session.user.tenantId;
 
   const agent = await withTenant(tenantId, (tx) => tx.user.findUniqueOrThrow({ where: { id: agentUserId, tenantId } }));
@@ -156,7 +156,7 @@ export async function assignConversation(conversationId: string, agentUserId: st
 
 export async function transferConversation(conversationId: string, toUserId: string) {
   const session = await requireTenantSession();
-  requirePermission(session.user.role, "inbox.assign");
+  requireEffectivePermission(session.user.permissions, "inbox.assign");
   const tenantId = session.user.tenantId;
 
   const [fromConvo, toUser] = await withTenant(tenantId, async (tx) => {
@@ -180,7 +180,7 @@ export async function transferConversation(conversationId: string, toUserId: str
 
 export async function takeOverFromBot(conversationId: string) {
   const session = await requireTenantSession();
-  requirePermission(session.user.role, "inbox.reply");
+  requireEffectivePermission(session.user.permissions, "inbox.reply");
   const tenantId = session.user.tenantId;
 
   await withTenant(tenantId, (tx) =>
@@ -197,7 +197,7 @@ export async function takeOverFromBot(conversationId: string) {
 
 export async function addInternalNote(conversationId: string, formData: FormData) {
   const session = await requireTenantSession();
-  requirePermission(session.user.role, "inbox.reply");
+  requireEffectivePermission(session.user.permissions, "inbox.reply");
   const tenantId = session.user.tenantId;
 
   const body = String(formData.get("body") ?? "").trim();
@@ -212,7 +212,7 @@ export async function addInternalNote(conversationId: string, formData: FormData
 
 export async function createQuickReply(formData: FormData) {
   const session = await requireTenantSession();
-  requirePermission(session.user.role, "inbox.reply");
+  requireEffectivePermission(session.user.permissions, "inbox.reply");
   const tenantId = session.user.tenantId;
 
   const shortcut = String(formData.get("shortcut") ?? "").trim().replace(/^\/+/, "");
@@ -228,7 +228,7 @@ export async function createQuickReply(formData: FormData) {
 
 export async function deleteQuickReply(quickReplyId: string) {
   const session = await requireTenantSession();
-  requirePermission(session.user.role, "inbox.reply");
+  requireEffectivePermission(session.user.permissions, "inbox.reply");
   const tenantId = session.user.tenantId;
 
   await withTenant(tenantId, (tx) => tx.quickReply.delete({ where: { id: quickReplyId, tenantId } }));
@@ -239,7 +239,7 @@ export async function deleteQuickReply(quickReplyId: string) {
 /** أداة اختبار Sandbox فقط: تحاكي وصول رسالة عميل حقيقية عبر نفس مسار معالجة الـwebhook الفعلي. */
 export async function simulateIncomingMessage(contactPhoneE164: string, contactName: string, kind: SimulatedMessageKind) {
   const session = await requireTenantSession();
-  requirePermission(session.user.role, "inbox.reply");
+  requireEffectivePermission(session.user.permissions, "inbox.reply");
 
   if (!(await isSandboxMode())) {
     throw new Error("محاكاة الرسائل الواردة متاحة فقط في وضع Sandbox.");

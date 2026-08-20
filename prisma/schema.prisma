@@ -108,6 +108,11 @@ model User {
   role         UserRole
   isActive     Boolean   @default(true)
   lastLoginAt  DateTime? // لرصد مؤشرات تسرب التجار (تجار لم يسجلوا دخول منذ فترة)
+  // تخصيص صلاحيات فردي فوق افتراضي الدور (OWNER/ADMIN/AGENT) — مصفوفة نصوص JSON من Permission
+  // معروفة (راجع lib/rbac.ts::resolveEffectivePermissions/parseCustomPermissions). null = لا تخصيص،
+  // يُستخدَم افتراضي الدور كما هو الآن بلا أي تغيير سلوك (متوافق خلفياً بالكامل). فارغة دائماً لأدوار
+  // المنصة الداخلية (platform.*) وOWNER — لا تُخصَّص هذه أبداً (فرض خادمي في resolveEffectivePermissions).
+  customPermissionsJson Json?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 

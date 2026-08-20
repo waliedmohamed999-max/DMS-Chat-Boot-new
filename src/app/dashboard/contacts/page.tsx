@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { requireTenantSession } from "@/lib/session";
 import { withTenant } from "@/lib/db";
-import { hasPermission } from "@/lib/rbac";
+import { hasEffectivePermission } from "@/lib/rbac";
 import { createContact } from "./actions";
 import { ImportContactsForm } from "./ImportContactsForm";
 import { ContactsTable } from "./ContactsTable";
@@ -26,8 +26,8 @@ type SearchParams = ContactListSearchParams & { page?: string };
 export default async function ContactsPage({ searchParams }: { searchParams: SearchParams }) {
   const session = await requireTenantSession();
   const tenantId = session.user.tenantId;
-  const canExport = hasPermission(session.user.role, "contacts.export");
-  const canDelete = hasPermission(session.user.role, "contacts.delete");
+  const canExport = hasEffectivePermission(session.user.permissions, "contacts.export");
+  const canDelete = hasEffectivePermission(session.user.permissions, "contacts.delete");
 
   const tab: Tab = (["all", "campaign", "import", "manual", "store"] as const).includes(searchParams.tab as Tab)
     ? (searchParams.tab as Tab)

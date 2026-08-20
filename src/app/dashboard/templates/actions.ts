@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireTenantSession } from "@/lib/session";
 import { withTenant } from "@/lib/db";
-import { requirePermission } from "@/lib/rbac";
+import { requireEffectivePermission } from "@/lib/rbac";
 import { writeAuditLog } from "@/lib/audit";
 import { submitTemplateForApproval, type TemplateButtonInput } from "@/lib/integrations/meta/templates";
 import { z } from "zod";
@@ -35,7 +35,7 @@ function parseButtons(raw: string | undefined): TemplateButtonInput[] {
 
 export async function createTemplate(formData: FormData) {
   const session = await requireTenantSession();
-  requirePermission(session.user.role, "campaigns.manage");
+  requireEffectivePermission(session.user.permissions, "campaigns.manage");
   const tenantId = session.user.tenantId;
 
   const parsed = templateSchema.safeParse({
@@ -103,7 +103,7 @@ export async function createTemplate(formData: FormData) {
 /** يفتح المعالج بنفس محتوى قالب مرفوض/معلَّق لتعديله وإعادة إرساله — القوالب لا تُعدَّل في واتساب مباشرة. */
 export async function resubmitTemplateRedirect(templateId: string) {
   const session = await requireTenantSession();
-  requirePermission(session.user.role, "campaigns.manage");
+  requireEffectivePermission(session.user.permissions, "campaigns.manage");
 
   const template = await withTenant(session.user.tenantId, (tx) =>
     tx.messageTemplate.findUniqueOrThrow({ where: { id: templateId, tenantId: session.user.tenantId } })
@@ -118,7 +118,7 @@ export async function resubmitTemplateRedirect(templateId: string) {
 /** يحذف القالب القديم المرفوض/المعلَّق فعلياً عند إعادة الإرسال بنفس الاسم (القيد الفريد tenantId+name+language). */
 export async function deleteSupersededTemplate(templateId: string) {
   const session = await requireTenantSession();
-  requirePermission(session.user.role, "campaigns.manage");
+  requireEffectivePermission(session.user.permissions, "campaigns.manage");
 
   await withTenant(session.user.tenantId, async (tx) => {
     const template = await tx.messageTemplate.findUniqueOrThrow({ where: { id: templateId, tenantId: session.user.tenantId } });

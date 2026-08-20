@@ -1,6 +1,6 @@
 import { requireTenantSession } from "@/lib/session";
 import { rawDb, withTenant } from "@/lib/db";
-import { ROLE_LABELS_AR, hasPermission, type Permission } from "@/lib/rbac";
+import { ROLE_LABELS_AR, hasEffectivePermission, type Permission } from "@/lib/rbac";
 import { Sidebar, type NavItem } from "@/components/layout/Sidebar";
 import { Topbar } from "@/components/layout/Topbar";
 import { BottomTabBar } from "@/components/layout/BottomTabBar";
@@ -97,7 +97,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const isSandbox = !(waIntegration?.status === "CONNECTED" && !waIntegration.isSandbox);
 
   const activeAnnouncement = await getApplicableAnnouncement(tenant.id);
-  const allowedNavItems = NAV_ITEMS.filter((item) => !item.requires || hasPermission(session.user.role, item.requires));
+  const allowedNavItems = NAV_ITEMS.filter((item) => !item.requires || hasEffectivePermission(session.user.permissions, item.requires));
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-navy-900">

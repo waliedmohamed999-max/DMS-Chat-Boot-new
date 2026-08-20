@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import ExcelJS from "exceljs";
 import { requireTenantSession } from "@/lib/session";
 import { withTenant } from "@/lib/db";
-import { requirePermission } from "@/lib/rbac";
+import { requireEffectivePermission } from "@/lib/rbac";
 import { writeAuditLog } from "@/lib/audit";
 import { buildContactListWhere, type ContactListSearchParams } from "@/lib/contacts/filters";
 import { STAGE_LABELS_AR, CONTACT_SOURCE_LABELS_AR } from "@/lib/contacts/stages";
@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
   // نفس صلاحية contacts.manage العامة المتاحة للموظفين أيضاً. 403 صريح بدل ترك الاستثناء يتحوّل
   // لخطأ 500 عام (يعمل أمنياً في الحالتين، لكن 403 هو المعنى الصحيح فعلياً هنا).
   try {
-    requirePermission(session.user.role, "contacts.export");
+    requireEffectivePermission(session.user.permissions, "contacts.export");
   } catch {
     return NextResponse.json({ error: "لا تملك صلاحية تصدير جهات الاتصال." }, { status: 403 });
   }

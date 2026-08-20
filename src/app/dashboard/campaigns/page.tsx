@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { requireTenantSession } from "@/lib/session";
 import { withTenant } from "@/lib/db";
-import { hasPermission } from "@/lib/rbac";
+import { hasEffectivePermission } from "@/lib/rbac";
 import { getTenantCampaignLimits, isUnlimited } from "@/lib/campaigns/limits";
 import { setTriggeredCampaignActive, runTriggerScanNow } from "./actions";
 import type { CampaignStatus, Prisma } from "@prisma/client";
@@ -38,9 +38,9 @@ export default async function CampaignsPage({
 }) {
   const session = await requireTenantSession();
   const tenantId = session.user.tenantId;
-  const canManage = hasPermission(session.user.role, "campaigns.manage");
+  const canManage = hasEffectivePermission(session.user.permissions, "campaigns.manage");
 
-  if (!hasPermission(session.user.role, "campaigns.view")) {
+  if (!hasEffectivePermission(session.user.permissions, "campaigns.view")) {
     return <div className="card p-8 text-center text-slate-400">ليس لديك صلاحية عرض الحملات.</div>;
   }
 

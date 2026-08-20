@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireTenantSession } from "@/lib/session";
 import { withTenant } from "@/lib/db";
-import { requirePermission } from "@/lib/rbac";
+import { requireEffectivePermission } from "@/lib/rbac";
 import { writeAuditLog } from "@/lib/audit";
 import { enqueueCampaignSend } from "@/lib/queue/campaignQueue";
 import { getTenantCampaignLimits, isUnlimited } from "@/lib/campaigns/limits";
@@ -32,7 +32,7 @@ export type CreateCampaignInput = {
 /** يُستدعى مباشرة من معالج إنشاء الحملة (خطوة الجمهور) لعرض عدد المستلمين الفعلي فوراً قبل الإرسال. */
 export async function previewAudienceCount(input: { audienceType: "ALL" | "SEGMENT"; filter: SegmentFilter }): Promise<number> {
   const session = await requireTenantSession();
-  requirePermission(session.user.role, "campaigns.view");
+  requireEffectivePermission(session.user.permissions, "campaigns.view");
   const tenantId = session.user.tenantId;
   return withTenant(tenantId, (tx) => tx.contact.count({ where: resolveAudienceWhere(tenantId, input.audienceType, input.filter) }));
 }
@@ -48,7 +48,7 @@ export type ImportCampaignAudienceResult =
  */
 export async function importCampaignAudienceFromExcel(formData: FormData): Promise<ImportCampaignAudienceResult> {
   const session = await requireTenantSession();
-  requirePermission(session.user.role, "campaigns.manage");
+  requireEffectivePermission(session.user.permissions, "campaigns.manage");
 
   const rateLimit = await checkTenantRateLimit(session.user.tenantId, "bulk-import", 5, 3600);
   if (!rateLimit.allowed) {
@@ -77,7 +77,7 @@ const TRIGGER_ABANDONED_CART_LOOKBACK_DAYS = 30;
 /** يُستدعى من خطوة "الحدث المُشغِّل" في المعالج لعرض عدد المرشحين المطابقين حالياً (تقديري وليس نهائياً — الحملة الآلية مستمرة). */
 export async function previewTriggerMatchCount(triggerEvent: TriggerEvent, config: { inactiveDays?: number }): Promise<number> {
   const session = await requireTenantSession();
-  requirePermission(session.user.role, "campaigns.view");
+  requireEffectivePermission(session.user.permissions, "campaigns.view");
   const tenantId = session.user.tenantId;
 
   return withTenant(tenantId, async (tx) => {
@@ -93,7 +93,7 @@ export async function previewTriggerMatchCount(triggerEvent: TriggerEvent, confi
 
 export async function createCampaign(input: CreateCampaignInput): Promise<{ campaignId: string }> {
   const session = await requireTenantSession();
-  requirePermission(session.user.role, "campaigns.manage");
+  requireEffectivePermission(session.user.permissions, "campaigns.manage");
   const tenantId = session.user.tenantId;
 
   const name = input.name.trim();
@@ -218,7 +218,7 @@ export async function createCampaign(input: CreateCampaignInput): Promise<{ camp
 
 export async function setTriggeredCampaignActive(campaignId: string, active: boolean) {
   const session = await requireTenantSession();
-  requirePermission(session.user.role, "campaigns.manage");
+  requireEffectivePermission(session.user.permissions, "campaigns.manage");
   const tenantId = session.user.tenantId;
 
   await withTenant(tenantId, async (tx) => {
@@ -239,7 +239,7 @@ export async function setTriggeredCampaignActive(campaignId: string, active: boo
 /** يفحص حملة آلية بعينها الآن فوراً بدل انتظار الفحص الدوري — لأغراض تجربة فورية وتحقق فعلي. */
 export async function runTriggerScanNow(campaignId: string) {
   const session = await requireTenantSession();
-  requirePermission(session.user.role, "campaigns.manage");
+  requireEffectivePermission(session.user.permissions, "campaigns.manage");
 
   await scanTriggeredCampaigns(session.user.tenantId, campaignId);
 
@@ -249,7 +249,7 @@ export async function runTriggerScanNow(campaignId: string) {
 
 export async function retryFailedRecipients(campaignId: string) {
   const session = await requireTenantSession();
-  requirePermission(session.user.role, "campaigns.manage");
+  requireEffectivePermission(session.user.permissions, "campaigns.manage");
   const tenantId = session.user.tenantId;
 
   const contactIds = await withTenant(tenantId, async (tx) => {
@@ -273,7 +273,7 @@ export async function retryFailedRecipients(campaignId: string) {
 
 export async function duplicateCampaign(campaignId: string) {
   const session = await requireTenantSession();
-  requirePermission(session.user.role, "campaigns.manage");
+  requireEffectivePermission(session.user.permissions, "campaigns.manage");
 
   const campaign = await withTenant(session.user.tenantId, (tx) =>
     tx.campaign.findUniqueOrThrow({ where: { id: campaignId, tenantId: session.user.tenantId } })
