@@ -17,3 +17,15 @@ export function internalStaffInviteEmail(input: { to: string; name: string; role
     html: `<p>مرحباً ${escapeHtml(input.name)}،</p><p>تمت دعوتك للانضمام لفريق منصة DMS بدور "${escapeHtml(input.roleLabel)}".</p><p>أكمل إعداد حسابك (تحديد كلمة مرور) عبر الرابط التالي خلال 7 أيام:</p><p><a href="${setupUrl}">${setupUrl}</a></p><p>بعد إكمال الإعداد يمكنك تسجيل الدخول مباشرة.</p>`,
   };
 }
+
+/** يصل عند إعادة تعيين كلمة مرور عضو في فريق المنصة الداخلي قسراً (admin/team) — يوضّح أن كلمة
+ * المرور القديمة أُبطلت فعلاً فوراً، خلافاً لدعوة عضو جديد. */
+export function internalStaffPasswordResetEmail(input: { to: string; name: string; setupToken: string }): EmailInput {
+  const setupUrl = `${baseUrl()}/partners/setup/${input.setupToken}`;
+  return {
+    to: input.to,
+    subject: "تم إبطال كلمة مرور حسابك في منصة DMS",
+    text: `مرحباً ${input.name}،\n\nتم إبطال كلمة مرور حسابك الحالية بواسطة مالك المنصة. حدِّد كلمة مرور جديدة عبر الرابط التالي خلال 7 أيام:\n${setupUrl}\n\nلو لم تطلب هذا الإجراء، تواصل مع مالك المنصة فوراً.`,
+    html: `<p>مرحباً ${escapeHtml(input.name)}،</p><p>تم إبطال كلمة مرور حسابك الحالية بواسطة مالك المنصة. حدِّد كلمة مرور جديدة عبر الرابط التالي خلال 7 أيام:</p><p><a href="${setupUrl}">${setupUrl}</a></p><p>لو لم تطلب هذا الإجراء، تواصل مع مالك المنصة فوراً.</p>`,
+  };
+}

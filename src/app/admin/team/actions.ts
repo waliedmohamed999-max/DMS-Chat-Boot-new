@@ -7,7 +7,7 @@ import { requireSuperAdminSession } from "@/lib/session";
 import { requirePermission, ROLE_LABELS_AR, PLATFORM_PERMISSION_LABELS_AR, NON_CUSTOMIZABLE_PLATFORM_PERMISSIONS } from "@/lib/rbac";
 import { superAdminDb } from "@/lib/db";
 import { sendEmail } from "@/lib/email/send";
-import { internalStaffInviteEmail } from "@/lib/email/internalStaffTemplates";
+import { internalStaffInviteEmail, internalStaffPasswordResetEmail } from "@/lib/email/internalStaffTemplates";
 import { checkTenantRateLimit } from "@/lib/rateLimit";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
@@ -298,11 +298,7 @@ export async function forceResetInternalStaffPassword(userId: string): Promise<T
       });
     });
 
-    await sendEmail(internalStaffInviteEmail({ to: target.email, name: target.name, roleLabel: ROLE_LABELS_AR[target.role], setupToken: rawSetupToken }));
-    // ملاحظة: internalStaffInviteEmail نصّها الحالي مكتوب لدعوة جديدة ("أُنشئ لك حساب...") — استخدامها
-    // هنا لإعادة تعيين كلمة مرور رسالة مقبولة وظيفياً (نفس رابط/آلية الإعداد بالضبط) لكنها غير دقيقة
-    // الصياغة لهذا السياق تحديداً؛ قالب منفصل internalStaffPasswordResetEmail بنفس البنية تحسين نصي
-    // لاحق، وليس حرجاً لعمل الميزة.
+    await sendEmail(internalStaffPasswordResetEmail({ to: target.email, name: target.name, setupToken: rawSetupToken }));
 
     revalidatePath("/admin/team");
     return { success: true };
