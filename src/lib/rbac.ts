@@ -39,7 +39,8 @@ export type Permission =
   | "platform.team.manage"
   | "platform.audit_log.view"
   | "platform.settings.manage"
-  | "platform.leads.view" // رسائل نموذج "تواصل معنا" في الموقع التسويقي العام
+  | "platform.leads.view" // رسائل نموذج "تواصل معنا" في الموقع التسويقي
+  | "platform.chats.view" // جلسات شات الموقع التسويقي العام (Widget بلا تسجيل دخول) + تولّي المحادثة كموظف بشري العام
   | "platform.content.manage" // تعديل محتوى الصفحة الرئيسية للموقع التسويقي (admin/content)
   | "platform.manage_tenants" // مظلة عامة قديمة، تبقى لتوافق الكود السابق (تعادل مجموع صلاحيات التجار أعلاه)
   | "platform.view_revenue"
@@ -72,6 +73,7 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     "platform.view_revenue",
     "platform.billing.manage",
     "platform.leads.view",
+    "platform.chats.view",
     "platform.affiliates.manage",
   ],
   // فريق الدعم الفني الداخلي: مراجعة + تعليق/تفعيل، بدون حذف أو تعديل باقات أو فوترة.
@@ -84,6 +86,7 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     "platform.merchants.notes",
     "platform.health.view",
     "platform.leads.view",
+    "platform.chats.view",
   ],
   // فريق مالي داخلي: إيرادات وفواتير فقط، بدون أي وصول لبيانات محادثات/تفاصيل التجار التشغيلية
   PLATFORM_BILLING: ["platform.view_revenue"],
@@ -254,6 +257,7 @@ export const PLATFORM_PERMISSION_LABELS_AR: Partial<Record<Permission, string>> 
   "platform.settings.manage": "إعدادات المنصة العامة",
   "platform.content.manage": "تعديل محتوى الصفحة الرئيسية للموقع",
   "platform.leads.view": "عرض رسائل تواصل الموقع",
+  "platform.chats.view": "عرض جلسات شات الموقع العام وتولّيها",
   "platform.view_revenue": "عرض الإيرادات والفوترة",
   "platform.billing.manage": "إجراءات مالية فعلية (استرداد، إعادة تحصيل، دليل الحسابات)",
   "platform.affiliates.manage": "إدارة برنامج التسويق بالعمولة",

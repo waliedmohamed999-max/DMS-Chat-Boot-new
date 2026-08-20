@@ -17,8 +17,9 @@ export type AiReplyResult =
   | { kind: "reply"; text: string; confidence: number; model: string; usage: TokenUsage; usedTool: string | null };
 
 /** الأداة النهائية الإلزامية — النموذج يستخدمها دائماً لإرسال ردّه الفعلي مع تقييم ثقته وقراره بالتحويل،
- * بدل الاعتماد على تحليل نص حر أو JSON mode منفصل (بند 6 في البرومنت: مؤشر ثقة لكل رد). */
-const RESPOND_TOOL: OpenAI.Chat.Completions.ChatCompletionTool = {
+ * بدل الاعتماد على تحليل نص حر أو JSON mode منفصل (بند 6 في البرومنت: مؤشر ثقة لكل رد). مُصدَّرة
+ * لإعادة استخدامها في generatePlatformChatReply.ts (نفس العقد بالضبط، بلا نسخة ثانية). */
+export const RESPOND_TOOL: OpenAI.Chat.Completions.ChatCompletionTool = {
   type: "function",
   function: {
     name: "respond_to_customer",

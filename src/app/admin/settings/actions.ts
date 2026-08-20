@@ -27,6 +27,8 @@ export async function updatePlatformSettings(formData: FormData) {
   const sellerVatNumber = String(formData.get("sellerVatNumber") ?? "").trim() || null;
   const sellerAddress = String(formData.get("sellerAddress") ?? "").trim() || null;
   const aiModel = String(formData.get("aiModel") ?? "gpt-4o-mini").trim() || "gpt-4o-mini";
+  const platformChatEnabled = formData.get("platformChatEnabled") === "on";
+  const platformChatVoiceReplyEnabled = formData.get("platformChatVoiceReplyEnabled") === "on";
 
   // السر لا يُعاد عرضه أبداً في النموذج (لا يُملأ الحقل بالقيمة الحالية) — يُحدَّث فقط لو أُدخِلت
   // قيمة جديدة فعلياً، تفادياً لإعادة كتابة قيمة فارغة فوق سرّ حقيقي محفوظ لمجرد حفظ النموذج.
@@ -40,14 +42,14 @@ export async function updatePlatformSettings(formData: FormData) {
     update: {
       integrationsMode, maintenanceMode, maintenanceMessage, supportEmail, supportPhone, defaultTrialDays, termsVersion,
       vatRateBps, defaultCurrency, metaAppId, emailProviderName, smsProviderName,
-      sellerLegalName, sellerVatNumber, sellerAddress, aiModel,
+      sellerLegalName, sellerVatNumber, sellerAddress, aiModel, platformChatEnabled, platformChatVoiceReplyEnabled,
       ...(encryptedMetaAppSecret ? { encryptedMetaAppSecret } : {}),
       ...(encryptedOpenAiApiKey ? { encryptedOpenAiApiKey } : {}),
     },
     create: {
       id: "singleton", integrationsMode, maintenanceMode, maintenanceMessage, supportEmail, supportPhone, defaultTrialDays, termsVersion,
       vatRateBps, defaultCurrency, metaAppId, emailProviderName, smsProviderName, encryptedMetaAppSecret,
-      sellerLegalName, sellerVatNumber, sellerAddress, aiModel, encryptedOpenAiApiKey,
+      sellerLegalName, sellerVatNumber, sellerAddress, aiModel, encryptedOpenAiApiKey, platformChatEnabled, platformChatVoiceReplyEnabled,
     },
   });
 
@@ -56,7 +58,7 @@ export async function updatePlatformSettings(formData: FormData) {
       userId: session.user.id, action: "platform.settings_update", targetType: "PlatformSettings",
       metaJson: {
         integrationsMode, maintenanceMode, vatRateBps, defaultCurrency, metaAppSecretChanged: !!encryptedMetaAppSecret,
-        aiModel, openAiApiKeyChanged: !!encryptedOpenAiApiKey,
+        aiModel, openAiApiKeyChanged: !!encryptedOpenAiApiKey, platformChatEnabled, platformChatVoiceReplyEnabled,
       },
     },
   });

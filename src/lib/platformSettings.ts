@@ -24,6 +24,8 @@ export type PlatformSettingsData = {
   sellerAddress: string | null;
   openAiApiKey: string | null;
   aiModel: string;
+  platformChatEnabled: boolean;
+  platformChatVoiceReplyEnabled: boolean;
 };
 
 /** يجلب إعدادات المنصة العامة، وينشئ الصف الافتراضي تلقائياً إن لم يوجد بعد (أول تشغيل). */
@@ -53,6 +55,8 @@ export async function getPlatformSettings(): Promise<PlatformSettingsData> {
     sellerAddress: row.sellerAddress,
     openAiApiKey: row.encryptedOpenAiApiKey ? decryptSecret(row.encryptedOpenAiApiKey) : (process.env.OPENAI_API_KEY || null),
     aiModel: row.aiModel || process.env.OPENAI_MODEL || "gpt-4o-mini",
+    platformChatEnabled: row.platformChatEnabled,
+    platformChatVoiceReplyEnabled: row.platformChatVoiceReplyEnabled,
   };
 }
 

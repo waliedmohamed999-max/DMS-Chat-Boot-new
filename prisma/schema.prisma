@@ -126,6 +126,7 @@ model User {
   accountSetupTokens    AccountSetupToken[]
   contactImportBatches  ContactImportBatch[]
   assignedLeads         ContactMessage[]
+  assignedChatSessions  PlatformChatSession[]
 
   @@index([tenantId])
 }
@@ -1126,6 +1127,51 @@ model ContactMessage {
   @@index([status])
 }
 
+// ========================= شات المنصة العام (Widget تسويقي، بلا تسجيل دخول) =========================
+
+enum PlatformChatSessionStatus {
+  OPEN // الموظف الذكي يرد تلقائياً
+  HANDED_OFF // حُوِّلت لفريق الدعم البشري (يدوياً من admin/chats أو تلقائياً عند طلب صريح/اعتراض)
+  CLOSED
+}
+
+enum PlatformChatSenderType {
+  VISITOR
+  AI
+  STAFF
+}
+
+model PlatformChatSession {
+  id           String                    @id @default(cuid())
+  status       PlatformChatSessionStatus @default(OPEN)
+  // يُلتقَطان اختيارياً من الزائر عند بدء الجلسة (بلا تسجيل دخول) — null دائماً إن لم يُدخلهما.
+  visitorName  String?
+  visitorEmail String?
+  assignedToUserId String?
+  assignedTo       User?   @relation(fields: [assignedToUserId], references: [id], onDelete: SetNull)
+  lastMessageAt DateTime @default(now())
+  createdAt     DateTime @default(now())
+
+  messages PlatformChatMessage[]
+
+  @@index([status])
+  @@index([lastMessageAt])
+}
+
+model PlatformChatMessage {
+  id         String                  @id @default(cuid())
+  sessionId  String
+  session    PlatformChatSession     @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  senderType PlatformChatSenderType
+  text       String
+  // true لو أصل الرسالة تسجيل صوتي مُفرَّغ عبر Whisper (النص المفرَّغ هو المصدر الدائم الوحيد —
+  // لا يُخزَّن أي ملف صوتي إطلاقاً، راجع DECISIONS.md).
+  wasVoice   Boolean                 @default(false)
+  createdAt  DateTime                @default(now())
+
+  @@index([sessionId, createdAt])
+}
+
 model PlatformSettings {
   // صف وحيد ثابت المعرّف — لا يوجد أكثر من إعداد عام واحد للمنصة بأكملها.
   id                     String   @id @default("singleton")
@@ -1164,6 +1210,12 @@ model PlatformSettings {
   // تماماً. متغير البيئة OPENAI_API_KEY يبقى احتياطاً دفاعياً فقط إن لم يُضبَط من اللوحة بعد.
   encryptedOpenAiApiKey  String?
   aiModel                String   @default("gpt-4o-mini")
+  // فقاعة شات عامة في الموقع التسويقي (بلا تسجيل دخول) — تستخدم نفس مفتاح OpenAI/aiModel أعلاه.
+  // مُعطَّلة افتراضياً حتى تُفعَّل عمداً (أول نقطة تستدعي LLM من مصدر عام بالكامل، راجع DECISIONS.md).
+  platformChatEnabled           Boolean  @default(false)
+  // لو مفعَّلة: كل رد نصي من الموظف الذكي في الشات العام يُولَّد له أيضاً مقطع صوتي عبر TTS (بلا تخزين
+  // على الخادم — يُبَث مباشرة للمتصفح). مُعطَّلة افتراضياً (تكلفة إضافية فعلية لكل رد).
+  platformChatVoiceReplyEnabled Boolean  @default(false)
   updatedAt              DateTime @updatedAt
 }
 

@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { Navbar } from "@/components/marketing/Navbar";
 import { Footer } from "@/components/marketing/Footer";
 import { FloatingWhatsAppButton } from "@/components/marketing/FloatingWhatsAppButton";
+import { ChatWidget } from "@/components/marketing/ChatWidget";
 import { CountryProvider, type Country } from "@/components/marketing/CountryContext";
 import { getPlatformSettings } from "@/lib/platformSettings";
 import { getCountryConfigs, toPublicCountryOptions } from "@/lib/billing/countryConfig";
@@ -32,6 +33,7 @@ export default async function MarketingLayout({ children }: { children: React.Re
         <main>{children}</main>
         <Footer />
         <FloatingWhatsAppButton phone={settings.supportPhone} />
+        <ChatWidget enabled={settings.platformChatEnabled} />
       </div>
     </CountryProvider>
   );

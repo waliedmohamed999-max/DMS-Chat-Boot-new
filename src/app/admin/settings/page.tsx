@@ -124,6 +124,21 @@ export default async function GlobalSettingsPage() {
         </div>
 
         <div className="border-t border-white/5 pt-5">
+          <h2 className="mb-3 text-sm font-semibold text-white">شات الموقع التسويقي العام (بلا تسجيل دخول)</h2>
+          <p className="mb-3 text-xs text-slate-500">فقاعة شات تظهر لكل زوار الموقع التسويقي، تستخدم نفس مفتاح OpenAI/النموذج أعلاه.</p>
+          <div className="space-y-2">
+            <label className="flex items-center gap-2 text-sm text-slate-200">
+              <input type="checkbox" name="platformChatEnabled" defaultChecked={settings.platformChatEnabled} />
+              تفعيل فقاعة الشات في الموقع التسويقي
+            </label>
+            <label className="flex items-center gap-2 text-sm text-slate-200">
+              <input type="checkbox" name="platformChatVoiceReplyEnabled" defaultChecked={settings.platformChatVoiceReplyEnabled} />
+              توليد رد صوتي (TTS) إضافي لكل رد نصي — تكلفة إضافية فعلية لكل رسالة
+            </label>
+          </div>
+        </div>
+
+        <div className="border-t border-white/5 pt-5">
           <h2 className="mb-3 text-sm font-semibold text-white">تطبيق Meta على مستوى المنصة (Embedded Signup)</h2>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>

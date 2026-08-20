@@ -9,6 +9,7 @@ const ALL_NAV_ITEMS: (NavItem & { requires?: Permission })[] = [
   { href: "/admin/approvals", label: "مركز الموافقات", icon: "✅", requires: "platform.approvals.review" },
   { href: "/admin/tenants", label: "التجار المشتركون", icon: "🏬", requires: "platform.merchants.view" },
   { href: "/admin/leads", label: "رسائل التواصل", icon: "📩", requires: "platform.leads.view" },
+  { href: "/admin/chats", label: "شات الموقع المباشر", icon: "💬", requires: "platform.chats.view" },
   { href: "/admin/health", label: "صحة المنصة", icon: "🩺", requires: "platform.health.view" },
   { href: "/admin/billing", label: "الإيرادات والفوترة", icon: "💰", requires: "platform.view_revenue" },
   { href: "/admin/plans", label: "حدود الباقات", icon: "🧩", requires: "platform.plans.manage" },
