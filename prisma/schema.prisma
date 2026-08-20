@@ -1038,6 +1038,8 @@ model Product {
   priceSar       Int
   stockQty       Int                 @default(0)
   imageUrl       String?
+  description    String?
+  categoryName   String?
   updatedAt      DateTime            @updatedAt
 
   @@unique([tenantId, externalSource, externalId])

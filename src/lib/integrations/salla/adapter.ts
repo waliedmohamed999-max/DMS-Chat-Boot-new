@@ -1,6 +1,6 @@
 import { IntegrationProvider } from "@prisma/client";
 import type { IntegrationAdapter, SendMessageResult, SyncResult } from "@/lib/integrations/types";
-import { SANDBOX_SALLA_ORDERS, sandboxAccountIdFor } from "@/lib/integrations/fixtures";
+import { SANDBOX_SALLA_ORDERS, SANDBOX_SALLA_PRODUCTS, sandboxAccountIdFor } from "@/lib/integrations/fixtures";
 import { encryptSecret, decryptSecret, verifyHmacSignature } from "@/lib/crypto";
 import { withTenant } from "@/lib/db";
 
@@ -146,6 +146,7 @@ export const sallaAdapter: IntegrationAdapter = {
   async syncOrders(tenantId: string): Promise<SyncResult> {
     if (!hasRealSallaCredentials()) {
       let ordersSynced = 0;
+      let productsSynced = 0;
       await withTenant(tenantId, async (tx) => {
         for (const [i, order] of SANDBOX_SALLA_ORDERS.entries()) {
           const contact = await tx.contact.upsert({
@@ -163,12 +164,23 @@ export const sallaAdapter: IntegrationAdapter = {
           });
           ordersSynced++;
         }
+        for (const p of SANDBOX_SALLA_PRODUCTS) {
+          await tx.product.upsert({
+            where: { tenantId_externalSource_externalId: { tenantId, externalSource: "SALLA", externalId: p.id } },
+            update: { name: p.name, priceSar: p.priceSar, stockQty: p.stockQty, categoryName: p.categoryName, description: p.description },
+            create: {
+              tenantId, externalSource: "SALLA", externalId: p.id, name: p.name, priceSar: p.priceSar,
+              stockQty: p.stockQty, categoryName: p.categoryName, description: p.description,
+            },
+          });
+          productsSynced++;
+        }
         await tx.integration.update({
           where: { tenantId_provider: { tenantId, provider: IntegrationProvider.SALLA } },
           data: { lastSyncedAt: new Date() },
         });
       });
-      return { ordersSynced, productsSynced: 0 };
+      return { ordersSynced, productsSynced };
     }
 
     // وضع Live: جلب حقيقي مُرقَّم الصفحات من REST API الحقيقي لسلة.
@@ -232,12 +244,32 @@ export const sallaAdapter: IntegrationAdapter = {
       await withTenant(tenantId, async (tx) => {
         for (const product of products) {
           const price = (product.price as { amount?: number } | undefined)?.amount ?? 0;
+          // سلة تُعيد description كنص HTML مباشر — يُخزَّن كما هو (النموذج قادر على قراءة نص فيه
+          // وسوم HTML بسيطة بلا مشكلة، لا داعي لتنظيفه الآن).
+          const description = typeof product.description === "string" ? product.description : null;
+
+          const categoriesRaw = product.categories;
+          const categoryName =
+            Array.isArray(categoriesRaw) && categoriesRaw.length > 0
+              ? ((categoriesRaw[0] as Record<string, unknown>)?.name as string | undefined) ?? null
+              : null;
+
+          const imagesRaw = product.images;
+          const imageUrl =
+            Array.isArray(imagesRaw) && imagesRaw.length > 0
+              ? ((imagesRaw[0] as Record<string, unknown>)?.url as string | undefined) ?? null
+              : null;
+
           await tx.product.upsert({
             where: { tenantId_externalSource_externalId: { tenantId, externalSource: "SALLA", externalId: String(product.id) } },
-            update: { name: String(product.name ?? "منتج بلا اسم"), priceSar: Math.round(price), stockQty: Number(product.quantity ?? 0) },
+            update: {
+              name: String(product.name ?? "منتج بلا اسم"), priceSar: Math.round(price), stockQty: Number(product.quantity ?? 0),
+              description, categoryName, imageUrl,
+            },
             create: {
               tenantId, externalSource: "SALLA", externalId: String(product.id),
               name: String(product.name ?? "منتج بلا اسم"), priceSar: Math.round(price), stockQty: Number(product.quantity ?? 0),
+              description, categoryName, imageUrl,
             },
           });
           productsSynced++;

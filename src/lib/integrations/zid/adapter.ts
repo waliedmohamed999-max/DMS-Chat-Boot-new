@@ -1,6 +1,6 @@
 import { IntegrationProvider } from "@prisma/client";
 import type { IntegrationAdapter, SendMessageResult, SyncResult } from "@/lib/integrations/types";
-import { SANDBOX_ZID_ORDERS, sandboxAccountIdFor } from "@/lib/integrations/fixtures";
+import { SANDBOX_ZID_ORDERS, SANDBOX_ZID_PRODUCTS, sandboxAccountIdFor } from "@/lib/integrations/fixtures";
 import { encryptSecret, decryptSecret, verifyHmacSignature } from "@/lib/crypto";
 import { withTenant } from "@/lib/db";
 
@@ -167,6 +167,7 @@ export const zidAdapter: IntegrationAdapter = {
   async syncOrders(tenantId: string): Promise<SyncResult> {
     if (!hasRealZidCredentials()) {
       let ordersSynced = 0;
+      let productsSynced = 0;
       await withTenant(tenantId, async (tx) => {
         for (const [i, order] of SANDBOX_ZID_ORDERS.entries()) {
           const contact = await tx.contact.upsert({
@@ -184,12 +185,23 @@ export const zidAdapter: IntegrationAdapter = {
           });
           ordersSynced++;
         }
+        for (const p of SANDBOX_ZID_PRODUCTS) {
+          await tx.product.upsert({
+            where: { tenantId_externalSource_externalId: { tenantId, externalSource: "ZID", externalId: p.id } },
+            update: { name: p.name, priceSar: p.priceSar, stockQty: p.stockQty, categoryName: p.categoryName, description: p.description },
+            create: {
+              tenantId, externalSource: "ZID", externalId: p.id, name: p.name, priceSar: p.priceSar,
+              stockQty: p.stockQty, categoryName: p.categoryName, description: p.description,
+            },
+          });
+          productsSynced++;
+        }
         await tx.integration.update({
           where: { tenantId_provider: { tenantId, provider: IntegrationProvider.ZID } },
           data: { lastSyncedAt: new Date() },
         });
       });
-      return { ordersSynced, productsSynced: 0 };
+      return { ordersSynced, productsSynced };
     }
 
     // وضع Live: جلب حقيقي مُرقَّم الصفحات من REST API الحقيقي لزد.
@@ -252,12 +264,42 @@ export const zidAdapter: IntegrationAdapter = {
       await withTenant(tenantId, async (tx) => {
         for (const product of products) {
           const name = typeof product.name === "object" ? (product.name as Record<string, string>)?.ar ?? (product.name as Record<string, string>)?.en : String(product.name ?? "");
+          // description بنفس بنية name اللغوية {ar, en} — بيانات API خارجية غير موثوق ببنيتها الكاملة
+          // دائماً (نفس حذر توثيق زد الموصوف في verifyWebhookSignature)، فكل استخراج دفاعي إلى null.
+          const description =
+            typeof product.description === "object"
+              ? (product.description as Record<string, string> | null)?.ar ?? (product.description as Record<string, string> | null)?.en ?? null
+              : (product.description as string | undefined) ?? null;
+
+          const categoriesRaw = product.categories ?? product.category;
+          let categoryName: string | null = null;
+          if (Array.isArray(categoriesRaw) && categoriesRaw.length > 0) {
+            const first = categoriesRaw[0] as Record<string, unknown>;
+            categoryName = typeof first?.name === "object" ? ((first.name as Record<string, string>)?.ar ?? (first.name as Record<string, string>)?.en ?? null) : (first?.name as string | undefined) ?? null;
+          } else if (categoriesRaw && typeof categoriesRaw === "object") {
+            const cat = categoriesRaw as Record<string, unknown>;
+            categoryName = typeof cat?.name === "object" ? ((cat.name as Record<string, string>)?.ar ?? (cat.name as Record<string, string>)?.en ?? null) : (cat?.name as string | undefined) ?? null;
+          }
+
+          const imagesRaw = product.images ?? (product.product as Record<string, unknown> | undefined)?.image;
+          let imageUrl: string | null = null;
+          if (Array.isArray(imagesRaw) && imagesRaw.length > 0) {
+            const first = imagesRaw[0] as Record<string, unknown> | string;
+            imageUrl = typeof first === "string" ? first : ((first?.url as string | undefined) ?? null);
+          } else if (typeof imagesRaw === "string") {
+            imageUrl = imagesRaw;
+          }
+
           await tx.product.upsert({
             where: { tenantId_externalSource_externalId: { tenantId, externalSource: "ZID", externalId: String(product.id) } },
-            update: { name: name || "منتج بلا اسم", priceSar: Math.round(Number(product.price ?? 0)), stockQty: Number(product.quantity ?? 0) },
+            update: {
+              name: name || "منتج بلا اسم", priceSar: Math.round(Number(product.price ?? 0)), stockQty: Number(product.quantity ?? 0),
+              description, categoryName, imageUrl,
+            },
             create: {
               tenantId, externalSource: "ZID", externalId: String(product.id),
               name: name || "منتج بلا اسم", priceSar: Math.round(Number(product.price ?? 0)), stockQty: Number(product.quantity ?? 0),
+              description, categoryName, imageUrl,
             },
           });
           productsSynced++;

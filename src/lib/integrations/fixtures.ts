@@ -18,6 +18,18 @@ export const SANDBOX_SALLA_ORDERS = [
   { id: "salla-4501", customerName: "عميل تجريبي 3", total: 120, status: "SHIPPED" },
 ];
 
+// منتجات تجريبية عامة (المنصة متعددة القطاعات، ليست مخصصة لتاجر بعينه) — تصنيفان، كل تصنيف فيه
+// منتجان بفروق حجم/سعر واضحة يمكّن اختبار اقتراح "الحجم الأكبر" في الموظف الذكي الاستشاري.
+export const SANDBOX_ZID_PRODUCTS = [
+  { id: "zid-p1", name: "منتج تجريبي أ - عبوة صغيرة", priceSar: 45, stockQty: 30, categoryName: "الفئة التجريبية أ", description: "وصف تجريبي للمنتج أ، عبوة صغيرة مناسبة للاستخدام الفردي." },
+  { id: "zid-p2", name: "منتج تجريبي أ - عبوة كبيرة", priceSar: 80, stockQty: 15, categoryName: "الفئة التجريبية أ", description: "وصف تجريبي للمنتج أ، عبوة كبيرة اقتصادية توفّر أكثر للاستخدام العائلي." },
+  { id: "zid-p3", name: "منتج تجريبي ب", priceSar: 60, stockQty: 20, categoryName: "الفئة التجريبية ب", description: "وصف تجريبي لمنتج من فئة مختلفة تماماً، مناسب كهدية." },
+];
+
+export const SANDBOX_SALLA_PRODUCTS = [
+  { id: "salla-p1", name: "منتج تجريبي ج - الحجم القياسي", priceSar: 55, stockQty: 25, categoryName: "الفئة التجريبية ج", description: "وصف تجريبي، الحجم القياسي الأكثر مبيعاً." },
+];
+
 export function sandboxAccountIdFor(provider: string): string {
   return `sandbox-${provider.toLowerCase()}-${Math.random().toString(36).slice(2, 8)}`;
 }

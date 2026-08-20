@@ -13,7 +13,7 @@ export const AI_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     function: {
       name: "get_product_price",
       description:
-        "يبحث عن منتج حقيقي في كتالوج المتجر بالاسم (أو جزء منه) ويعيد سعره الفعلي ومدى توفره في المخزون. يجب استدعاؤها دائماً قبل ذكر أي سعر أو حالة توفر لأي منتج — لا تخمين إطلاقاً.",
+        "يبحث عن منتج حقيقي بالاسم (أو جزء منه) ويعيد سعره الفعلي، توفره، وصفه، تصنيفه، ومنتجات أخرى ذات صلة من نفس التصنيف (لاقتراحها كبديل أو رفع قيمة السلة). استخدمها دائماً قبل ذكر أي سعر أو توفر، وكمصدر وحيد لأي اقتراح منتج بديل — لا تقترح منتجاً لم يعده هذا الاستدعاء إطلاقاً.",
       parameters: {
         type: "object",
         properties: { productName: { type: "string", description: "اسم المنتج أو جزء منه كما ذكره العميل" } },
@@ -58,9 +58,20 @@ export async function executeAiTool(
       orderBy: { updatedAt: "desc" },
     });
     if (!product) return JSON.stringify({ found: false });
+
+    const related = product.categoryName
+      ? await tx.product.findMany({
+          where: { tenantId, categoryName: product.categoryName, id: { not: product.id }, stockQty: { gt: 0 } },
+          orderBy: [{ stockQty: "desc" }, { priceSar: "asc" }],
+          take: 3,
+        })
+      : [];
+
     return JSON.stringify({
       found: true, name: product.name, priceSar: product.priceSar,
       inStock: product.stockQty > 0, stockQty: product.stockQty,
+      description: product.description, category: product.categoryName,
+      relatedProducts: related.map((r) => ({ name: r.name, priceSar: r.priceSar, inStock: r.stockQty > 0 })),
     });
   }
 

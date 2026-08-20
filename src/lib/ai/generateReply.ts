@@ -8,7 +8,7 @@ import { checkTenantRateLimit } from "@/lib/rateLimit";
 
 const AI_REPLY_RATE_LIMIT = 20; // 20 استدعاء ذكاء اصطناعي كحد أقصى لكل تاجر كل دقيقة
 const AI_REPLY_RATE_WINDOW_SECONDS = 60;
-const MAX_TOOL_ITERATIONS = 4; // حد أقصى لدورات استدعاء الأدوات لمنع حلقة استدعاء لا نهائية
+const MAX_TOOL_ITERATIONS = 6; // حد أقصى لدورات استدعاء الأدوات لمنع حلقة استدعاء لا نهائية — محادثة بيع فيها مقارنة منتجين + اعتراض + رد نهائي قد تحتاج دورات أكتر من رد خدمة عملاء بسيط
 
 export type TokenUsage = { promptTokens: number; completionTokens: number; totalTokens: number };
 
