@@ -1,0 +1,13 @@
+node_modules
+.next
+.git
+.claude
+.smoke-shots
+backups
+*.log
+npm-debug.log*
+.env
+.env.local
+.env.docker
+.env.production
+tsconfig.tsbuildinfo

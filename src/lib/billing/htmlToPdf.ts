@@ -18,6 +18,10 @@ async function getBrowser(): Promise<Browser> {
   global.__pdfBrowser = await puppeteer.launch({
     headless: true,
     args: ["--no-sandbox", "--disable-setuid-sandbox"], // ضروري في أغلب بيئات الحاويات/الخوادم الافتراضية
+    // في صورة الإنتاج (Dockerfile) نستخدم Chromium النظامي المُثبَّت عبر apt بدل تحميل Puppeteer
+    // الداخلي (PUPPETEER_SKIP_DOWNLOAD=true) — أضمن توافقاً للمكتبات المشتركة ويوفّر حجم الصورة.
+    // بلا هذا المتغيّر (مثال: التطوير المحلي) يبقى السلوك القديم كما هو (Chromium المُدمَج مع الحزمة).
+    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
   });
   return global.__pdfBrowser;
 }

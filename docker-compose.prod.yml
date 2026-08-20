@@ -1,0 +1,88 @@
+# تشغيل: docker compose -f docker-compose.prod.yml up -d --build
+# يقرأ docker compose تلقائياً ملف ".env" (بلا لاحقة) في نفس المجلد لقيم ${POSTGRES_PASSWORD}/${DOMAIN}
+# أدناه — هذا منفصل عن ".env.production" اللي بيحمّل متغيرات التطبيق نفسه لخدمتي app/worker.
+# راجع VPS_DEPLOY.md للخطوات الكاملة من الصفر (تجهيز VPS → أول تشغيل → قواعد التحقق).
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: wasel_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: wa_crm
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: wa_crm
+    volumes:
+      - wasel_pg_data:/var/lib/postgresql/data
+    # لا نفتح أي منفذ على الإنترنت هنا عمداً — فقط شبكة Docker الداخلية بين الخدمات. لو احتجت وصولاً
+    # مؤقتاً من جهازك لفحص القاعدة، استخدم "docker compose exec postgres psql -U wa_crm -d wa_crm"
+    # بدل فتح منفذ عام.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wa_crm -d wa_crm"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: wasel_redis
+    restart: unless-stopped
+    volumes:
+      - wasel_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build: .
+    container_name: wasel_app
+    restart: unless-stopped
+    env_file: .env.production
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: npm run start
+    expose:
+      - "3000"
+    # بلا "ports:" — لا نكشف 3000 مباشرة للإنترنت، Caddy هو الباب الوحيد (80/443) عبر الشبكة الداخلية.
+
+  worker:
+    build: .
+    container_name: wasel_worker
+    restart: unless-stopped
+    env_file: .env.production
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    # عملية خلفية بحتة (BullMQ: إرسال الحملات، الشات بوت، دورة حياة الاشتراك، مزامنة العمولات،
+    # جلسات WhatsApp QR) — هذه بالظبط الخدمة اللي فشلت على استضافة Serverless (Vercel) سابقاً لأنها
+    # لازم تفضل شغالة باستمرار، مش تنفّذ وتقفل. لا expose ولا ports إطلاقاً.
+    command: npx tsx src/lib/queue/worker.ts
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: wasel_caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - wasel_caddy_data:/data
+      - wasel_caddy_config:/config
+    depends_on:
+      - app
+
+volumes:
+  wasel_pg_data:
+  wasel_redis_data:
+  wasel_caddy_data:
+  wasel_caddy_config:
