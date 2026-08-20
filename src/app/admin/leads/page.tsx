@@ -1,7 +1,7 @@
 import { requireSuperAdminSession } from "@/lib/session";
 import { hasEffectivePermission } from "@/lib/rbac";
 import { superAdminDb } from "@/lib/db";
-import { LeadControls } from "./LeadControls";
+import { LeadsList } from "./LeadsList";
 
 export default async function LeadsPage() {
   const session = await requireSuperAdminSession();
@@ -13,11 +13,26 @@ export default async function LeadsPage() {
     );
   }
 
-  const [messages, staff] = await Promise.all([
+  const [messages, staff, totalCount] = await Promise.all([
     superAdminDb.contactMessage.findMany({ orderBy: { createdAt: "desc" }, take: 100, include: { assignedTo: true } }),
     superAdminDb.user.findMany({ where: { tenantId: null }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    superAdminDb.contactMessage.count(),
   ]);
   const pendingCount = messages.filter((m) => m.status === "NEW").length;
+
+  const serialized = messages.map((m) => ({
+    id: m.id,
+    name: m.name,
+    email: m.email,
+    phone: m.phone,
+    activityType: m.activityType,
+    inquiryType: m.inquiryType,
+    message: m.message,
+    status: m.status,
+    assignedToUserId: m.assignedToUserId,
+    assignedTo: m.assignedTo ? { id: m.assignedTo.id, name: m.assignedTo.name } : null,
+    createdAt: m.createdAt.toISOString(),
+  }));
 
   return (
     <div className="space-y-6">
@@ -28,31 +43,13 @@ export default async function LeadsPage() {
         </p>
       </div>
 
-      <div className="space-y-3">
-        {messages.map((m) => (
-          <div key={m.id} className={`card p-5 ${m.status === "CLOSED" || m.status === "CONVERTED" ? "opacity-60" : ""}`}>
-            <div className="mb-2 flex items-center justify-between">
-              <div>
-                <p className="font-semibold text-white">{m.name}</p>
-                <p className="text-xs text-slate-500">
-                  {m.activityType} · {new Date(m.createdAt).toLocaleString("ar-SA")}
-                  {m.assignedTo && <span> · معيَّنة لـ{m.assignedTo.name}</span>}
-                </p>
-              </div>
-              <span className="badge bg-accent-500/10 text-accent-400">{m.inquiryType}</span>
-            </div>
-            <div className="mb-2 flex gap-4 text-sm text-slate-400" dir="ltr">
-              <span>{m.email}</span>
-              <span>{m.phone}</span>
-            </div>
-            <p className="mb-3 rounded-lg bg-navy-900 p-3 text-sm text-slate-300">{m.message}</p>
-            <LeadControls id={m.id} status={m.status} assignedToUserId={m.assignedToUserId} staff={staff} />
-          </div>
-        ))}
-        {messages.length === 0 && (
-          <div className="card p-8 text-center text-slate-500">لا توجد رسائل تواصل بعد.</div>
-        )}
-      </div>
+      <LeadsList messages={serialized} staff={staff} />
+
+      {totalCount > messages.length && (
+        <p className="text-center text-xs text-slate-500">
+          تُعرض آخر {messages.length} رسالة من أصل {totalCount} — استخدم البحث أعلاه لإيجاد رسائل أقدم.
+        </p>
+      )}
     </div>
   );
 }

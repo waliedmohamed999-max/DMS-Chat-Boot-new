@@ -16,9 +16,17 @@ import {
   partnerApplicationRejectedEmail,
   partnerApplicationNeedsInfoEmail,
 } from "@/lib/email/partnerTemplates";
+import { tenantApprovalNeedsInfoEmail, tenantApprovalRejectedEmail } from "@/lib/email/tenantApprovalTemplates";
+import { APPROVAL_TYPE_LABELS } from "@/lib/approvalTypeLabels";
 import { getVatRateBps, computeVatAmount } from "@/lib/billing/vat";
 import { postInvoicePaymentEntry } from "@/lib/accounting/postings";
 import { COUNTRY_TO_CURRENCY } from "@/lib/currency";
+
+// AFFILIATE_APPLICATION غير مغطاة في APPROVAL_TYPE_LABELS (بلا tenantId أبداً، لا تصل هذا المسار
+// عملياً) — احتياط بسيط يعرض نوع الطلب الخام بدل تعطّل الإرسال لو وصلها نوع غير متوقَّع مستقبلاً.
+function typeLabelFor(type: string): string {
+  return (APPROVAL_TYPE_LABELS as Record<string, { label: string; icon: string }>)[type]?.label ?? type;
+}
 
 async function loadRequest(requestId: string) {
   return superAdminDb.approvalRequest.findUniqueOrThrow({ where: { id: requestId }, include: { tenant: true } });
@@ -191,6 +199,13 @@ export async function rejectRequest(requestId: string, formData: FormData) {
   if (request.type === "PARTNER_APPLICATION" && request.applicantEmail) {
     const payload = request.payloadJson as { ownerName?: string } | null;
     await sendEmail(partnerApplicationRejectedEmail({ to: request.applicantEmail, ownerName: payload?.ownerName ?? "", reason }));
+  } else if (request.tenantId) {
+    // بقية الأنواع (NEW_TENANT/WHATSAPP_VERIFICATION/MESSAGE_TEMPLATE/CUSTOM_PLAN) مرتبطة بتينانت
+    // له حساب OWNER فعلي بالفعل — كان القرار يُتخذ بلا أي إشعار له إطلاقاً قبل هذا التعديل.
+    const owner = await superAdminDb.user.findFirst({ where: { tenantId: request.tenantId, role: "OWNER" }, select: { email: true, name: true } });
+    if (owner) {
+      await sendEmail(tenantApprovalRejectedEmail({ to: owner.email, ownerName: owner.name, typeLabel: typeLabelFor(request.type), reason }));
+    }
   }
 
   await superAdminDb.auditLog.create({
@@ -216,6 +231,13 @@ export async function requestMoreInfo(requestId: string, formData: FormData) {
   if (request.type === "PARTNER_APPLICATION" && request.applicantEmail) {
     const payload = request.payloadJson as { ownerName?: string } | null;
     await sendEmail(partnerApplicationNeedsInfoEmail({ to: request.applicantEmail, ownerName: payload?.ownerName ?? "", message, referenceId: request.id }));
+  } else if (request.tenantId) {
+    // نفس فجوة rejectRequest بالضبط: بقية الأنواع مرتبطة بتينانت له OWNER فعلي، وكان "طلب معلومات
+    // إضافية" يتم بصمت بلا أي إشعار له قبل هذا التعديل.
+    const owner = await superAdminDb.user.findFirst({ where: { tenantId: request.tenantId, role: "OWNER" }, select: { email: true, name: true } });
+    if (owner) {
+      await sendEmail(tenantApprovalNeedsInfoEmail({ to: owner.email, ownerName: owner.name, typeLabel: typeLabelFor(request.type), message }));
+    }
   }
 
   await superAdminDb.auditLog.create({

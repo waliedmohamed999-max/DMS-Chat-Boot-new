@@ -11,10 +11,12 @@ import {
   requestMoreInfo,
 } from "@/app/admin/approvals/actions";
 import { COUNTRY_TO_CURRENCY, CURRENCY_SYMBOLS } from "@/lib/currency";
+import { APPROVAL_TYPE_LABELS, type ApprovalRequestTypeLabel } from "@/lib/approvalTypeLabels";
+import { timeSinceAr } from "@/lib/timeSinceAr";
 
-type ApprovalRequestSummary = {
+export type ApprovalRequestSummary = {
   id: string;
-  type: "NEW_TENANT" | "CUSTOM_PLAN" | "WHATSAPP_VERIFICATION" | "MESSAGE_TEMPLATE" | "PARTNER_APPLICATION";
+  type: ApprovalRequestTypeLabel;
   status: "PENDING" | "NEEDS_INFO";
   payloadJson: unknown;
   applicantEmail: string | null;
@@ -23,19 +25,13 @@ type ApprovalRequestSummary = {
   tenant: { id: string; name: string; slug: string; country: "SA" | "AE" | "EG" } | null;
 };
 
-const TYPE_LABELS: Record<ApprovalRequestSummary["type"], { label: string; icon: string }> = {
-  NEW_TENANT: { label: "تسجيل تاجر جديد", icon: "🏬" },
-  CUSTOM_PLAN: { label: "طلب باقة مخصصة", icon: "🧩" },
-  WHATSAPP_VERIFICATION: { label: "تحقق ربط واتساب", icon: "📱" },
-  MESSAGE_TEMPLATE: { label: "قالب رسالة جديد", icon: "📝" },
-  PARTNER_APPLICATION: { label: "طلب انضمام شريك", icon: "🤝" },
-};
-
 export function ApprovalCard({ request }: { request: ApprovalRequestSummary }) {
   const [mode, setMode] = useState<"idle" | "reject" | "info" | "custom_plan">("idle");
   const [isPending, startTransition] = useTransition();
-  const meta = TYPE_LABELS[request.type];
+  const meta = APPROVAL_TYPE_LABELS[request.type];
   const payload = (request.payloadJson ?? {}) as Record<string, string>;
+  const waitingHours = (Date.now() - new Date(request.createdAt).getTime()) / (3600 * 1000);
+  const isOverdue = waitingHours > 48;
 
   function approve() {
     startTransition(async () => {
@@ -58,9 +54,15 @@ export function ApprovalCard({ request }: { request: ApprovalRequestSummary }) {
             </p>
           </div>
         </div>
-        {request.status === "NEEDS_INFO" && (
-          <span className="badge bg-warning-500/10 text-warning-500">بانتظار رد التاجر</span>
-        )}
+        <div className="flex flex-col items-end gap-1">
+          {request.status === "NEEDS_INFO" && (
+            <span className="badge bg-warning-500/10 text-warning-500">بانتظار رد التاجر</span>
+          )}
+          <span className={`text-xs ${isOverdue ? "font-medium text-danger-500" : "text-slate-500"}`}>
+            {isOverdue && "⚠️ "}
+            {timeSinceAr(request.createdAt)}
+          </span>
+        </div>
       </div>
 
       {request.type === "NEW_TENANT" && (

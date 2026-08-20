@@ -2,10 +2,10 @@
 
 import Link from "next/link";
 import { useTransition } from "react";
-import { setLeadStatus, assignLead } from "./actions";
+import { setLeadStatus, assignLead, markLeadHandled } from "./actions";
 import type { ContactMessageStatus } from "@prisma/client";
 
-const STATUS_LABELS_AR: Record<ContactMessageStatus, string> = {
+export const STATUS_LABELS_AR: Record<ContactMessageStatus, string> = {
   NEW: "جديدة",
   FOLLOWED_UP: "تمت المتابعة",
   CONVERTED: "تحوَّلت لتاجر",
@@ -42,6 +42,16 @@ export function LeadControls({
         </select>
       )}
       {status === "CONVERTED" && <span className="badge bg-success-500/10 text-success-500">{STATUS_LABELS_AR.CONVERTED}</span>}
+
+      {status === "NEW" && (
+        <button
+          onClick={() => startTransition(() => markLeadHandled(id))}
+          disabled={isPending}
+          className="btn-secondary text-xs"
+        >
+          ✅ تمت المتابعة
+        </button>
+      )}
 
       <select
         defaultValue={assignedToUserId ?? ""}
