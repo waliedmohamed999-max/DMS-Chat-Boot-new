@@ -4,7 +4,7 @@ import { COUNTRY_TO_CURRENCY } from "@/lib/currency";
 import { getCountryConfigs } from "@/lib/billing/countryConfig";
 import type { Country } from "@prisma/client";
 
-const MONTH_LABELS_AR = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"];
+export const MONTH_LABELS_AR = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"];
 
 // كل مبلغ هنا Record<عملة, رقم> — لا يُجمَع مبلغان بعملتين مختلفتين في رقم واحد أبداً (نفس مبدأ
 // دفتر القيود في lib/accounting/balances.ts). تاجر إماراتي مشترك بباقة "النمو" يُحسَب بسعرها

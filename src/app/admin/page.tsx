@@ -4,6 +4,9 @@ import { requireSuperAdminSession } from "@/lib/session";
 import { hasEffectivePermission } from "@/lib/rbac";
 import { TENANT_STATUS_LABELS_AR, TENANT_STATUS_BADGE_CLASS, TENANT_STATUS_BAR_CLASS } from "@/lib/tenantStatus";
 import { formatMoney } from "@/lib/currency";
+import { computeRevenueSummary, MONTH_LABELS_AR } from "@/lib/admin/revenueAnalytics";
+import { BarChart } from "@/components/admin/BarChart";
+import { DonutChart } from "@/components/admin/DonutChart";
 
 export default async function AdminOverviewPage() {
   const session = await requireSuperAdminSession();
@@ -13,8 +16,21 @@ export default async function AdminOverviewPage() {
   const canViewAuditLog = hasEffectivePermission(session.user.permissions, "platform.audit_log.view");
   const canManageSettings = hasEffectivePermission(session.user.permissions, "platform.settings.manage");
   const canSendAnnouncements = hasEffectivePermission(session.user.permissions, "platform.announcements.send");
+  const canViewHealth = hasEffectivePermission(session.user.permissions, "platform.health.view");
 
-  const [tenantsCount, activeSubs, invoicesPaid, tenantsByStatus, pendingApprovalsCount, recentActivity] = await Promise.all([
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const sixMonthsAgoStart = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+  const last6Months = Array.from({ length: 6 }, (_, i) => {
+    const d = new Date(now.getFullYear(), now.getMonth() - 5 + i, 1);
+    return { key: `${d.getFullYear()}-${d.getMonth()}`, label: MONTH_LABELS_AR[d.getMonth()] ?? "", date: d };
+  });
+
+  const [
+    tenantsCount, activeSubs, invoicesPaid, tenantsByStatus, pendingApprovalsCount, recentActivity,
+    tenantsCreated6mo, revenueSummary, metaConnectedCount, metaTotalCount, webhookTotal, webhookFailed,
+    aiRepliesTodayCount, aiHandoffsTodayCount,
+  ] = await Promise.all([
     superAdminDb.tenant.count(),
     superAdminDb.subscription.count({ where: { status: "ACTIVE" } }),
     // مجموع لكل عملة على حدة — لا يُدمَج أبداً في رقم واحد (نفس مبدأ صفحة الإيرادات التفصيلية).
@@ -24,10 +40,30 @@ export default async function AdminOverviewPage() {
     canViewAuditLog
       ? superAdminDb.auditLog.findMany({ include: { user: true, tenant: true }, orderBy: { createdAt: "desc" }, take: 8 })
       : [],
+    canViewMerchants ? superAdminDb.tenant.findMany({ select: { createdAt: true }, where: { createdAt: { gte: sixMonthsAgoStart } } }) : [],
+    canViewRevenue ? computeRevenueSummary() : null,
+    canViewHealth ? superAdminDb.integration.count({ where: { provider: "META_WHATSAPP", status: "CONNECTED" } }) : 0,
+    canViewHealth ? superAdminDb.integration.count({ where: { provider: "META_WHATSAPP" } }) : 0,
+    canViewHealth ? superAdminDb.webhookLog.count() : 0,
+    canViewHealth ? superAdminDb.webhookLog.count({ where: { signatureValid: false } }) : 0,
+    canViewMerchants ? superAdminDb.aiReplyLog.count({ where: { createdAt: { gte: todayStart } } }) : 0,
+    canViewMerchants ? superAdminDb.aiReplyLog.count({ where: { createdAt: { gte: todayStart }, handoffTriggered: true } }) : 0,
   ]);
 
   const suspendedCount = tenantsByStatus.find((s) => s.status === "SUSPENDED")?._count ?? 0;
   const totalForBar = tenantsByStatus.reduce((sum, s) => sum + s._count, 0) || 1;
+
+  const tenantGrowthCounts = new Map<string, number>(last6Months.map((m) => [m.key, 0]));
+  for (const t of tenantsCreated6mo) {
+    const key = `${t.createdAt.getFullYear()}-${t.createdAt.getMonth()}`;
+    if (tenantGrowthCounts.has(key)) tenantGrowthCounts.set(key, (tenantGrowthCounts.get(key) ?? 0) + 1);
+  }
+  const tenantGrowthTrend = last6Months.map((m) => ({ label: m.label, amountSar: tenantGrowthCounts.get(m.key) ?? 0 }));
+
+  const planDonutData = revenueSummary?.planDistribution.map((p) => ({ label: p.name, value: p.count })) ?? [];
+
+  const webhookFailureRate = webhookTotal > 0 ? Math.round((webhookFailed / webhookTotal) * 100) : 0;
+  const aiHandoffRateToday = aiRepliesTodayCount > 0 ? Math.round((aiHandoffsTodayCount / aiRepliesTodayCount) * 100) : null;
 
   return (
     <div className="space-y-6">
@@ -92,6 +128,65 @@ export default async function AdminOverviewPage() {
               <Link href="/admin/settings" className="btn-secondary text-sm">🛠️ إعدادات المنصة العامة</Link>
             )}
           </div>
+        </div>
+      )}
+
+      {(canViewMerchants || canViewRevenue) && (
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          {canViewMerchants && (
+            <div className="card p-5">
+              <h2 className="mb-4 font-semibold text-white">نمو التجار — آخر 6 أشهر</h2>
+              <BarChart data={tenantGrowthTrend} />
+            </div>
+          )}
+          {canViewRevenue && (
+            <div className="card p-5">
+              <h2 className="mb-4 font-semibold text-white">توزيع الباقات</h2>
+              <DonutChart data={planDonutData} />
+            </div>
+          )}
+        </div>
+      )}
+
+      {(canViewHealth || canViewMerchants) && (
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          {canViewHealth && (
+            <Link href="/admin/health" className="card p-5 transition hover:bg-white/5">
+              <div className="mb-3 flex items-center justify-between">
+                <h2 className="font-semibold text-white">صحة المنصة</h2>
+                <span className="text-sm text-accent-400 hover:underline">التفاصيل الكاملة ←</span>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <p className="text-xs text-slate-400">اتصال واتساب</p>
+                  <p className="mt-1 font-bold text-white" dir="ltr">{metaConnectedCount} / {metaTotalCount}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-400">فشل Webhooks</p>
+                  <p className={`mt-1 font-bold ${webhookFailureRate > 10 ? "text-danger-500" : "text-white"}`}>{webhookFailureRate}%</p>
+                </div>
+              </div>
+            </Link>
+          )}
+          {canViewMerchants && (
+            <div className="card p-5">
+              <h2 className="mb-3 font-semibold text-white">🤖 الموظف الذكي عبر المنصة</h2>
+              {aiRepliesTodayCount === 0 ? (
+                <p className="text-sm text-slate-500">لا نشاط اليوم.</p>
+              ) : (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <p className="text-xs text-slate-400">ردود اليوم عبر كل التجار</p>
+                    <p className="mt-1 font-bold text-white" dir="ltr">{aiRepliesTodayCount}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-400">نسبة التحويل لموظف بشري</p>
+                    <p className="mt-1 font-bold text-warning-500" dir="ltr">{aiHandoffRateToday}%</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
