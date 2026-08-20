@@ -1,11 +1,11 @@
 import { requireSuperAdminSession } from "@/lib/session";
-import { hasPermission } from "@/lib/rbac";
+import { hasEffectivePermission } from "@/lib/rbac";
 import { superAdminDb } from "@/lib/db";
 import { LeadControls } from "./LeadControls";
 
 export default async function LeadsPage() {
   const session = await requireSuperAdminSession();
-  if (!hasPermission(session.user.role, "platform.leads.view")) {
+  if (!hasEffectivePermission(session.user.permissions, "platform.leads.view")) {
     return (
       <div className="card p-8 text-center text-slate-400">
         ليس لديك صلاحية عرض رسائل التواصل. هذه الصفحة محصورة بفريق الدعم الفني ومالك المنصة.

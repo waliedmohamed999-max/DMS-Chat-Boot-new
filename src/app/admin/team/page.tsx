@@ -6,6 +6,7 @@ import {
   PLATFORM_PERMISSION_LABELS_AR,
   TENANT_PERMISSION_LABELS_AR,
   ALL_ROLES_ORDERED,
+  resolveEffectivePermissions,
   type Permission,
 } from "@/lib/rbac";
 import { superAdminDb } from "@/lib/db";
@@ -14,6 +15,10 @@ import { ToggleActiveButton } from "./ToggleActiveButton";
 import { RoleSelect } from "./RoleSelect";
 import { RemoveStaffButton } from "./RemoveStaffButton";
 import { ResendSetupLinkButton } from "./ResendSetupLinkButton";
+import { PlatformPermissionsEditor } from "./PlatformPermissionsEditor";
+import { EditStaffProfileForm } from "./EditStaffProfileForm";
+import { ForceResetPasswordButton } from "./ForceResetPasswordButton";
+import { updateInternalStaffPermissions } from "./actions";
 
 export default async function InternalTeamPage() {
   const session = await requireSuperAdminSession();
@@ -83,13 +88,24 @@ export default async function InternalTeamPage() {
                       </div>
                     )}
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     {u.role === "SUPER_ADMIN" ? (
                       <span className="badge bg-white/5 text-slate-300">{ROLE_LABELS_AR[u.role]}</span>
                     ) : (
                       <RoleSelect userId={u.id} currentRole={u.role as "PLATFORM_SUPPORT" | "PLATFORM_BILLING"} />
                     )}
                     {u.role !== "SUPER_ADMIN" && <ToggleActiveButton userId={u.id} isActive={u.isActive} />}
+                    {u.role !== "SUPER_ADMIN" && (
+                      <PlatformPermissionsEditor
+                        userId={u.id}
+                        userName={u.name}
+                        initialPermissions={resolveEffectivePermissions(u)}
+                        isCustomized={u.customPermissionsJson !== null}
+                        updateInternalStaffPermissions={updateInternalStaffPermissions}
+                      />
+                    )}
+                    {(u.role !== "SUPER_ADMIN" || isSelf) && <EditStaffProfileForm userId={u.id} name={u.name} email={u.email} />}
+                    {u.role !== "SUPER_ADMIN" && <ForceResetPasswordButton userId={u.id} />}
                     {u.role !== "SUPER_ADMIN" && !isSelf && <RemoveStaffButton userId={u.id} name={u.name} />}
                   </div>
                 </div>
@@ -194,6 +210,10 @@ export default async function InternalTeamPage() {
             </tbody>
           </table>
         </div>
+        <p className="mt-3 text-xs text-slate-500">
+          هذا الجدول يعرض صلاحيات الدور الافتراضية — الصلاحيات الفعلية لكل عضو قد تكون مخصَّصة، راجع زر
+          "تخصيص الصلاحيات" الخاص به في قائمة الأعضاء أعلاه.
+        </p>
       </div>
     </div>
   );

@@ -1,13 +1,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireSuperAdminSession } from "@/lib/session";
-import { hasPermission } from "@/lib/rbac";
+import { hasEffectivePermission } from "@/lib/rbac";
 import { superAdminDb } from "@/lib/db";
 import { TenantDetailTabs } from "@/components/admin/TenantDetailTabs";
 
 export default async function TenantDetailLayout({ children, params }: { children: React.ReactNode; params: { id: string } }) {
   const session = await requireSuperAdminSession();
-  if (!hasPermission(session.user.role, "platform.merchants.view")) {
+  if (!hasEffectivePermission(session.user.permissions, "platform.merchants.view")) {
     return (
       <div className="card p-8 text-center text-slate-400">
         ليس لديك صلاحية عرض تفاصيل التجار. هذه الصفحة محصورة بفريق الدعم الفني ومالك المنصة.

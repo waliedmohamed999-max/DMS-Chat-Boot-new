@@ -1,11 +1,11 @@
 import { requireSuperAdminSession } from "@/lib/session";
-import { hasPermission } from "@/lib/rbac";
+import { hasEffectivePermission } from "@/lib/rbac";
 import { getPlatformSettings } from "@/lib/platformSettings";
 import { updatePlatformSettings } from "./actions";
 
 export default async function GlobalSettingsPage() {
   const session = await requireSuperAdminSession();
-  if (!hasPermission(session.user.role, "platform.settings.manage")) {
+  if (!hasEffectivePermission(session.user.permissions, "platform.settings.manage")) {
     return (
       <div className="card p-8 text-center text-slate-400">
         ليس لديك صلاحية تعديل إعدادات المنصة العامة. هذه الصفحة محصورة بمالك المنصة.

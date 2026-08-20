@@ -1,11 +1,11 @@
 import { requireSuperAdminSession } from "@/lib/session";
-import { hasPermission } from "@/lib/rbac";
+import { hasEffectivePermission } from "@/lib/rbac";
 import { superAdminDb } from "@/lib/db";
 import { createAnnouncement } from "./actions";
 
 export default async function AnnouncementsPage() {
   const session = await requireSuperAdminSession();
-  if (!hasPermission(session.user.role, "platform.announcements.send")) {
+  if (!hasEffectivePermission(session.user.permissions, "platform.announcements.send")) {
     return (
       <div className="card p-8 text-center text-slate-400">
         ليس لديك صلاحية إرسال إعلانات للتجار. هذه الصفحة محصورة بمالك المنصة.

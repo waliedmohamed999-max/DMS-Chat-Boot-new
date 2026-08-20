@@ -1,5 +1,5 @@
 import { requireSuperAdminSession } from "@/lib/session";
-import { hasPermission } from "@/lib/rbac";
+import { hasEffectivePermission } from "@/lib/rbac";
 import { superAdminDb } from "@/lib/db";
 import { buildJournalWhere, type LedgerSearchParams } from "@/lib/admin/ledgerFilters";
 import { Pagination } from "@/components/admin/Pagination";
@@ -17,7 +17,7 @@ type SearchParams = LedgerSearchParams & { page?: string };
 
 export default async function LedgerPage({ searchParams }: { searchParams: SearchParams }) {
   const session = await requireSuperAdminSession();
-  if (!hasPermission(session.user.role, "platform.view_revenue")) {
+  if (!hasEffectivePermission(session.user.permissions, "platform.view_revenue")) {
     return (
       <div className="card p-8 text-center text-slate-400">
         ليس لديك صلاحية عرض دفتر القيود. هذه الصفحة محصورة بمالك المنصة والفريق المالي.

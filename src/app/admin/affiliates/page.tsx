@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { requireSuperAdminSession } from "@/lib/session";
-import { hasPermission } from "@/lib/rbac";
+import { hasEffectivePermission } from "@/lib/rbac";
 import { rawDb } from "@/lib/db";
 import { TIER_LABELS_AR, TIER_RATE_PERCENT } from "@/lib/affiliates/tiers";
 import { approveAffiliate, rejectAffiliate, markPayoutPaid, markPayoutFailed } from "./actions";
@@ -15,7 +15,7 @@ const STATUS_BADGE: Record<string, string> = {
 
 export default async function AdminAffiliatesPage() {
   const session = await requireSuperAdminSession();
-  if (!hasPermission(session.user.role, "platform.affiliates.manage")) {
+  if (!hasEffectivePermission(session.user.permissions, "platform.affiliates.manage")) {
     return <div className="card p-8 text-center text-slate-400">ليس لديك صلاحية إدارة برنامج التسويق بالعمولة.</div>;
   }
 

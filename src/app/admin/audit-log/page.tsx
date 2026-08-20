@@ -1,5 +1,5 @@
 import { requireSuperAdminSession } from "@/lib/session";
-import { hasPermission } from "@/lib/rbac";
+import { hasEffectivePermission } from "@/lib/rbac";
 import { superAdminDb } from "@/lib/db";
 import { buildAuditLogWhere, type AuditLogSearchParams } from "@/lib/admin/auditLogFilters";
 import { Pagination } from "@/components/admin/Pagination";
@@ -10,7 +10,7 @@ type SearchParams = AuditLogSearchParams & { page?: string };
 
 export default async function PlatformAuditLogPage({ searchParams }: { searchParams: SearchParams }) {
   const session = await requireSuperAdminSession();
-  if (!hasPermission(session.user.role, "platform.audit_log.view")) {
+  if (!hasEffectivePermission(session.user.permissions, "platform.audit_log.view")) {
     return (
       <div className="card p-8 text-center text-slate-400">
         ليس لديك صلاحية عرض سجل التدقيق الشامل. هذه الصفحة محصورة بمالك المنصة.

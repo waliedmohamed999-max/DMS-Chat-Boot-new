@@ -1,5 +1,5 @@
 import { requireSuperAdminSession } from "@/lib/session";
-import { hasPermission, ROLE_LABELS_AR, type Permission } from "@/lib/rbac";
+import { hasEffectivePermission, ROLE_LABELS_AR, type Permission } from "@/lib/rbac";
 import { Sidebar, type NavItem } from "@/components/layout/Sidebar";
 import { Topbar } from "@/components/layout/Topbar";
 import { platformLogout } from "@/app/admin-login/actions";
@@ -23,7 +23,7 @@ const ALL_NAV_ITEMS: (NavItem & { requires?: Permission })[] = [
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const session = await requireSuperAdminSession();
-  const navItems = ALL_NAV_ITEMS.filter((item) => !item.requires || hasPermission(session.user.role, item.requires));
+  const navItems = ALL_NAV_ITEMS.filter((item) => !item.requires || hasEffectivePermission(session.user.permissions, item.requires));
 
   return (
     <div className="flex h-screen overflow-hidden bg-navy-900">

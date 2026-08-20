@@ -1,5 +1,5 @@
 import { requireSuperAdminSession } from "@/lib/session";
-import { hasPermission } from "@/lib/rbac";
+import { hasEffectivePermission } from "@/lib/rbac";
 import { getSiteContent } from "@/lib/siteContent";
 import {
   updateHeroContent,
@@ -30,7 +30,7 @@ function servicesToLines(services: { title: string; body: string; points: string
 
 export default async function SiteContentPage() {
   const session = await requireSuperAdminSession();
-  if (!hasPermission(session.user.role, "platform.content.manage")) {
+  if (!hasEffectivePermission(session.user.permissions, "platform.content.manage")) {
     return (
       <div className="card p-8 text-center text-slate-400">
         ليس لديك صلاحية تعديل محتوى الموقع. هذه الصفحة محصورة بمالك المنصة.

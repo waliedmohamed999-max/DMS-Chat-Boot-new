@@ -5,7 +5,7 @@ import bcrypt from "bcryptjs";
 import type { Country } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { requireSuperAdminSession } from "@/lib/session";
-import { requirePermission } from "@/lib/rbac";
+import { requireEffectivePermission } from "@/lib/rbac";
 import { superAdminDb } from "@/lib/db";
 import { slugify } from "@/lib/slug";
 import { getPlatformSettings } from "@/lib/platformSettings";
@@ -54,7 +54,7 @@ type PartnerApplicationPayload = {
  */
 export async function approvePartnerApplication(requestId: string) {
   const session = await requireSuperAdminSession();
-  requirePermission(session.user.role, "platform.approvals.review");
+  requireEffectivePermission(session.user.permissions, "platform.approvals.review");
   const request = await superAdminDb.approvalRequest.findUniqueOrThrow({ where: { id: requestId } });
 
   if (request.type !== "PARTNER_APPLICATION") throw new Error("نوع طلب غير صالح لهذا الإجراء");
@@ -131,7 +131,7 @@ export async function approvePartnerApplication(requestId: string) {
 
 export async function approveNewTenant(requestId: string) {
   const session = await requireSuperAdminSession();
-  requirePermission(session.user.role, "platform.approvals.review");
+  requireEffectivePermission(session.user.permissions, "platform.approvals.review");
   const request = await loadRequest(requestId);
 
   await superAdminDb.$transaction(async (tx) => {
@@ -152,7 +152,7 @@ export async function approveNewTenant(requestId: string) {
 
 export async function rejectRequest(requestId: string, formData: FormData) {
   const session = await requireSuperAdminSession();
-  requirePermission(session.user.role, "platform.approvals.review");
+  requireEffectivePermission(session.user.permissions, "platform.approvals.review");
   const request = await loadRequest(requestId);
   const rawReason = String(formData.get("reason") ?? "").trim();
   // طلبات الشركاء تصل للمتقدّم مباشرة بالبريد ولا يوجد أي مسار آخر يُطلعه على سبب الرفض — سبب
@@ -203,7 +203,7 @@ export async function rejectRequest(requestId: string, formData: FormData) {
 
 export async function requestMoreInfo(requestId: string, formData: FormData) {
   const session = await requireSuperAdminSession();
-  requirePermission(session.user.role, "platform.approvals.review");
+  requireEffectivePermission(session.user.permissions, "platform.approvals.review");
   const request = await loadRequest(requestId);
   const message = String(formData.get("message") ?? "").trim();
   if (!message) throw new Error("الرسالة مطلوبة");
@@ -227,7 +227,7 @@ export async function requestMoreInfo(requestId: string, formData: FormData) {
 
 export async function approveWhatsappVerification(requestId: string) {
   const session = await requireSuperAdminSession();
-  requirePermission(session.user.role, "platform.approvals.review");
+  requireEffectivePermission(session.user.permissions, "platform.approvals.review");
   const request = await loadRequest(requestId);
 
   await superAdminDb.$transaction(async (tx) => {
@@ -250,7 +250,7 @@ export async function approveWhatsappVerification(requestId: string) {
 
 export async function approveMessageTemplate(requestId: string) {
   const session = await requireSuperAdminSession();
-  requirePermission(session.user.role, "platform.approvals.review");
+  requireEffectivePermission(session.user.permissions, "platform.approvals.review");
   const request = await loadRequest(requestId);
   const payload = request.payloadJson as { templateId?: string } | null;
   if (!payload?.templateId) throw new Error("طلب غير صالح — لا يوجد قالب مرتبط");
@@ -272,7 +272,7 @@ export async function approveMessageTemplate(requestId: string) {
 
 export async function approveCustomPlan(requestId: string, formData: FormData) {
   const session = await requireSuperAdminSession();
-  requirePermission(session.user.role, "platform.approvals.review");
+  requireEffectivePermission(session.user.permissions, "platform.approvals.review");
   const request = await loadRequest(requestId);
 
   const name = String(formData.get("planName") ?? "").trim();

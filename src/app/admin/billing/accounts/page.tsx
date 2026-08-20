@@ -1,5 +1,7 @@
 import { requireSuperAdminSession } from "@/lib/session";
-import { hasPermission } from "@/lib/rbac";
+// platform.billing.manage تبقى فحصاً دورياً عمداً (NON_CUSTOMIZABLE_PLATFORM_PERMISSIONS — راجع
+// lib/rbac.ts): تعديل دليل الحسابات إجراء مالي فعلي حقيقي.
+import { hasPermission, hasEffectivePermission } from "@/lib/rbac";
 import { superAdminDb } from "@/lib/db";
 import { ensureChartOfAccounts } from "@/lib/accounting/chartOfAccounts";
 import { computeAllAccountBalances } from "@/lib/accounting/balances";
@@ -15,7 +17,7 @@ type AccountNode = {
 
 export default async function ChartOfAccountsPage() {
   const session = await requireSuperAdminSession();
-  if (!hasPermission(session.user.role, "platform.view_revenue")) {
+  if (!hasEffectivePermission(session.user.permissions, "platform.view_revenue")) {
     return (
       <div className="card p-8 text-center text-slate-400">
         ليس لديك صلاحية عرض دليل الحسابات. هذه الصفحة محصورة بمالك المنصة والفريق المالي.

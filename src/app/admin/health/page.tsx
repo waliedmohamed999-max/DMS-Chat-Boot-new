@@ -1,13 +1,13 @@
 import Link from "next/link";
 import { requireSuperAdminSession } from "@/lib/session";
-import { hasPermission } from "@/lib/rbac";
+import { hasEffectivePermission } from "@/lib/rbac";
 import { superAdminDb } from "@/lib/db";
 
 const INACTIVITY_DAYS = 14;
 
 export default async function PlatformHealthPage() {
   const session = await requireSuperAdminSession();
-  if (!hasPermission(session.user.role, "platform.health.view")) {
+  if (!hasEffectivePermission(session.user.permissions, "platform.health.view")) {
     return (
       <div className="card p-8 text-center text-slate-400">
         ليس لديك صلاحية عرض صحة المنصة. هذه الصفحة محصورة بفريق الدعم الفني ومالك المنصة.

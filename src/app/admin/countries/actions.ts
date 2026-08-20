@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireSuperAdminSession } from "@/lib/session";
-import { requirePermission } from "@/lib/rbac";
+import { requireEffectivePermission } from "@/lib/rbac";
 import { superAdminDb } from "@/lib/db";
 import type { Country } from "@prisma/client";
 
@@ -12,7 +12,7 @@ import type { Country } from "@prisma/client";
  * كل الباقات في lib/planPricing.ts). */
 export async function updateCountryConfig(country: Country, formData: FormData) {
   const session = await requireSuperAdminSession();
-  requirePermission(session.user.role, "platform.settings.manage");
+  requireEffectivePermission(session.user.permissions, "platform.settings.manage");
 
   const vatRatePercent = Number(formData.get("vatRatePercent") ?? "0");
   const vatRateBps = Math.round(Math.max(0, Math.min(100, vatRatePercent)) * 100);

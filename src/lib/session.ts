@@ -93,16 +93,44 @@ export async function requireTenantSession() {
   return typedSession;
 }
 
+type PlatformRole = "SUPER_ADMIN" | "PLATFORM_SUPPORT" | "PLATFORM_BILLING";
+
+/**
+ * قراءة حية لبيانات عضو فريق المنصة من القاعدة — بلا هذا، كل من getPlatformSession() (يتحقق من
+ * توقيع JWT فقط) وجلسة NextAuth الاحتياطية (JWT سارٍ حتى 7 أيام) يثقان بالكامل بما كان مخزَّناً وقت
+ * تسجيل الدخول، بلا أي فحص isActive أو دور محدَّث حياً. عضو عُطِّل (toggleInternalStaffActive) أو
+ * غُيِّر دوره (changeInternalStaffRole) كان يحتفظ بوصول كامل بصلاحياته القديمة لحد 7 أيام — ثغرة
+ * حقيقية اكتُشفت أثناء المراجعة، بنفس فئة مشكلة الـJWT القديم المُصلَحة سابقاً لـrequireTenantSession.
+ */
+async function loadFreshPlatformStaff(userId: string) {
+  return superAdminDb.user.findUnique({
+    where: { id: userId },
+    select: { role: true, isActive: true, customPermissionsJson: true, name: true, email: true },
+  });
+}
+
 /**
  * يفرض جلسة أحد أدوار فريق المنصة الداخلي (مالك المنصة/دعم فني/مالي) ويعيد التوجيه إن غابت.
  *
  * يفحص أولاً كوكي جلسة المنصة المستقل (dms_platform_session، عبر /admin-login) — إن وُجد وصالح،
  * يُستخدم مباشرة ولا يمس كوكي NextAuth إطلاقاً، فيتعايش مع أي جلسة تاجر نشطة في نفس المتصفح.
  * إن غاب، يرجع لفحص جلسة NextAuth العادية (توافق خلفي كامل مع تسجيل الدخول من /login القديم).
+ *
+ * في كلا الفرعين: بعد التحقق من الكوكي/JWT، يُقرأ العضو حياً من القاعدة (loadFreshPlatformStaff) —
+ * الدور/الاسم/البريد/الصلاحيات المُرجَعة كلها من هذه القراءة الحية، وليس من التوكن القديم.
  */
 export async function requireSuperAdminSession() {
   const platformUser = await getPlatformSession();
   if (platformUser) {
+    const freshStaff = await loadFreshPlatformStaff(platformUser.id);
+    if (!freshStaff || !freshStaff.isActive || !isPlatformRole(freshStaff.role)) {
+      // لا يُستدعى clearPlatformSession() هنا عمداً: Next.js يمنع تعديل الكوكيز أثناء تصيير مكوّن
+      // خادم (requireSuperAdminSession تُستدعى من صفحات/layouts، وليس فقط من Server Actions) —
+      // "Cookies can only be modified in a Server Action or Route Handler"، خطأ 500 حقيقي اكتُشف
+      // أثناء الاختبار الحي عند تجربة هذا بالضبط. التوجيه وحده يكفي أمنياً (يمنع أي وصول فوراً)؛
+      // الكوكي القديم يبقى مرفوضاً دائماً في كل طلب تالٍ (نفس هذا الفحص)، فلا خطر أمني من بقائه.
+      redirect("/admin-login");
+    }
     return {
       // يميّز الطبقة المستدعية (admin/layout.tsx) بين الجلستين لاختيار سلوك تسجيل الخروج الصحيح:
       // "platform" يمسح كوكي dms_platform_session فقط، فلا يمس أي جلسة تاجر (NextAuth) نشطة في
@@ -110,9 +138,10 @@ export async function requireSuperAdminSession() {
       authSource: "platform" as const,
       user: {
         id: platformUser.id,
-        role: platformUser.role,
-        name: platformUser.name,
-        email: platformUser.email,
+        role: freshStaff.role as PlatformRole,
+        name: freshStaff.name,
+        email: freshStaff.email,
+        permissions: resolveEffectivePermissions(freshStaff),
       },
     };
   }
@@ -121,11 +150,21 @@ export async function requireSuperAdminSession() {
   if (!session?.user || !isPlatformRole(session.user.role)) {
     redirect("/admin-login");
   }
-  return {
-    ...session,
-    authSource: "nextauth" as const,
-  } as typeof session & {
+  const typedSession = session as typeof session & {
     authSource: "nextauth";
-    user: { id: string; role: "SUPER_ADMIN" | "PLATFORM_SUPPORT" | "PLATFORM_BILLING"; name?: string | null; email?: string | null };
+    user: { id: string; role: PlatformRole; name?: string | null; email?: string | null; permissions: Permission[] };
   };
+
+  const freshStaff = await loadFreshPlatformStaff(typedSession.user.id);
+  if (!freshStaff || !freshStaff.isActive || !isPlatformRole(freshStaff.role)) {
+    redirect("/admin-login");
+  }
+
+  typedSession.authSource = "nextauth";
+  typedSession.user.role = freshStaff.role as PlatformRole;
+  typedSession.user.name = freshStaff.name;
+  typedSession.user.email = freshStaff.email;
+  typedSession.user.permissions = resolveEffectivePermissions(freshStaff);
+
+  return typedSession;
 }

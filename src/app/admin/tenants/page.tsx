@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { requireSuperAdminSession } from "@/lib/session";
-import { hasPermission } from "@/lib/rbac";
+import { hasEffectivePermission } from "@/lib/rbac";
 import { superAdminDb } from "@/lib/db";
 import { TENANT_STATUS_LABELS_AR, TENANT_STATUS_BADGE_CLASS } from "@/lib/tenantStatus";
 import { buildTenantListWhere, type TenantListSearchParams } from "@/lib/admin/tenantFilters";
@@ -19,16 +19,16 @@ type SearchParams = TenantListSearchParams & { page?: string; sort?: SortKey; di
 
 export default async function TenantsListPage({ searchParams }: { searchParams: SearchParams }) {
   const session = await requireSuperAdminSession();
-  if (!hasPermission(session.user.role, "platform.merchants.view")) {
+  if (!hasEffectivePermission(session.user.permissions, "platform.merchants.view")) {
     return (
       <div className="card p-8 text-center text-slate-400">
         ليس لديك صلاحية عرض قائمة التجار التفصيلية. هذه الصفحة محصورة بفريق الدعم الفني ومالك المنصة.
       </div>
     );
   }
-  const canSuspend = hasPermission(session.user.role, "platform.merchants.suspend");
-  const canReview = hasPermission(session.user.role, "platform.approvals.review");
-  const canImpersonate = hasPermission(session.user.role, "platform.merchants.impersonate");
+  const canSuspend = hasEffectivePermission(session.user.permissions, "platform.merchants.suspend");
+  const canReview = hasEffectivePermission(session.user.permissions, "platform.approvals.review");
+  const canImpersonate = hasEffectivePermission(session.user.permissions, "platform.merchants.impersonate");
 
   const page = Math.max(1, parseInt(searchParams.page ?? "1", 10) || 1);
   const sort: SortKey = (["name", "createdAt", "lastActivity"] as const).includes(searchParams.sort as SortKey) ? (searchParams.sort as SortKey) : "createdAt";

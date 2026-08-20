@@ -5,7 +5,7 @@ import bcrypt from "bcryptjs";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireSuperAdminSession } from "@/lib/session";
-import { requirePermission } from "@/lib/rbac";
+import { requireEffectivePermission } from "@/lib/rbac";
 import { superAdminDb } from "@/lib/db";
 import { slugify } from "@/lib/slug";
 import { startImpersonation } from "@/lib/impersonation";
@@ -27,7 +27,7 @@ export type CreateTenantManuallyResult = { success: true; tenantId: string } | {
  */
 export async function createTenantManually(formData: FormData): Promise<CreateTenantManuallyResult> {
   const session = await requireSuperAdminSession();
-  requirePermission(session.user.role, "platform.approvals.review");
+  requireEffectivePermission(session.user.permissions, "platform.approvals.review");
 
   const storeName = String(formData.get("storeName") ?? "").trim();
   const ownerName = String(formData.get("ownerName") ?? "").trim();
@@ -115,7 +115,7 @@ export async function createTenantManually(formData: FormData): Promise<CreateTe
 
 export async function setTenantStatus(tenantId: string, status: "ACTIVE" | "SUSPENDED") {
   const session = await requireSuperAdminSession();
-  requirePermission(session.user.role, "platform.merchants.suspend");
+  requireEffectivePermission(session.user.permissions, "platform.merchants.suspend");
 
   await superAdminDb.tenant.update({ where: { id: tenantId }, data: { status } });
 
@@ -132,7 +132,7 @@ export async function setTenantStatus(tenantId: string, status: "ACTIVE" | "SUSP
 
 export async function changeTenantPlan(tenantId: string, planId: string) {
   const session = await requireSuperAdminSession();
-  requirePermission(session.user.role, "platform.merchants.change_plan");
+  requireEffectivePermission(session.user.permissions, "platform.merchants.change_plan");
 
   const plan = await superAdminDb.plan.findUniqueOrThrow({ where: { id: planId } });
 
@@ -154,7 +154,7 @@ export async function changeTenantPlan(tenantId: string, planId: string) {
 
 export async function deleteTenantPermanently(tenantId: string, confirmSlug: string) {
   const session = await requireSuperAdminSession();
-  requirePermission(session.user.role, "platform.merchants.delete");
+  requireEffectivePermission(session.user.permissions, "platform.merchants.delete");
 
   const tenant = await superAdminDb.tenant.findUniqueOrThrow({ where: { id: tenantId } });
   if (confirmSlug !== tenant.slug) {
@@ -175,7 +175,7 @@ export async function deleteTenantPermanently(tenantId: string, confirmSlug: str
 
 export async function toggleMerchantUserActive(tenantId: string, userId: string, isActive: boolean) {
   const session = await requireSuperAdminSession();
-  requirePermission(session.user.role, "platform.merchants.suspend");
+  requireEffectivePermission(session.user.permissions, "platform.merchants.suspend");
 
   await superAdminDb.user.update({ where: { id: userId, tenantId }, data: { isActive } });
 
@@ -198,7 +198,7 @@ export async function toggleMerchantUserActive(tenantId: string, userId: string,
  */
 export async function resetMerchantPassword(tenantId: string, userId: string, newPassword: string) {
   const session = await requireSuperAdminSession();
-  requirePermission(session.user.role, "platform.merchants.reset_password");
+  requireEffectivePermission(session.user.permissions, "platform.merchants.reset_password");
 
   if (newPassword.length < 8) throw new Error("كلمة المرور يجب أن تكون 8 أحرف على الأقل");
 
@@ -218,7 +218,7 @@ export async function resetMerchantPassword(tenantId: string, userId: string, ne
 
 export async function addMerchantNote(tenantId: string, formData: FormData) {
   const session = await requireSuperAdminSession();
-  requirePermission(session.user.role, "platform.merchants.notes");
+  requireEffectivePermission(session.user.permissions, "platform.merchants.notes");
 
   const body = String(formData.get("body") ?? "").trim();
   if (!body) return;
@@ -232,7 +232,7 @@ export async function addMerchantNote(tenantId: string, formData: FormData) {
 
 export async function startImpersonationAction(tenantId: string) {
   const session = await requireSuperAdminSession();
-  requirePermission(session.user.role, "platform.merchants.impersonate");
+  requireEffectivePermission(session.user.permissions, "platform.merchants.impersonate");
 
   await startImpersonation(tenantId, session.user.id);
 
@@ -265,7 +265,7 @@ export async function quickRejectNewTenant(tenantId: string, formData: FormData)
  * (لو مُدِّدت مسبقاً، لا يُفقَد التمديد السابق). */
 export async function extendTrial(tenantId: string, days: number) {
   const session = await requireSuperAdminSession();
-  requirePermission(session.user.role, "platform.merchants.suspend");
+  requireEffectivePermission(session.user.permissions, "platform.merchants.suspend");
   if (!Number.isFinite(days) || days <= 0 || days > 90) throw new Error("عدد أيام غير صالح (1-90)");
 
   const subscription = await superAdminDb.subscription.findUnique({ where: { tenantId } });

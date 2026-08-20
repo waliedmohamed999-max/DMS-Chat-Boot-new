@@ -1,6 +1,6 @@
 import { superAdminDb } from "@/lib/db";
 import { requireSuperAdminSession } from "@/lib/session";
-import { hasPermission } from "@/lib/rbac";
+import { hasEffectivePermission } from "@/lib/rbac";
 import { DEFAULT_STARTER_CHATBOT_LIMITS, type ChatbotLimits } from "@/lib/planLimits";
 import { DEFAULT_STARTER_CAMPAIGN_LIMITS, type CampaignLimits } from "@/lib/campaigns/limits";
 import { NODE_TYPES } from "@/lib/chatbot/nodeTypes";
@@ -14,7 +14,7 @@ const CONFIGURABLE_NODE_TYPES = ["message", "question", "condition", "ai_reply",
 
 export default async function AdminPlansPage() {
   const session = await requireSuperAdminSession();
-  if (!hasPermission(session.user.role, "platform.plans.manage")) {
+  if (!hasEffectivePermission(session.user.permissions, "platform.plans.manage")) {
     return (
       <div className="card p-8 text-center text-slate-400">
         ليس لديك صلاحية تعديل الباقات. هذه الصفحة محصورة بمالك المنصة.

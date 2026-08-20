@@ -166,27 +166,41 @@ export function getRoleDefaultPermissions(role: UserRole): Permission[] {
 // الفعلية. تبقى هاتين دايماً تابعتين لقيمة الدور فقط، بلا استثناء، حتى لو الطلب جاي من Owner نفسه.
 export const NON_CUSTOMIZABLE_PERMISSIONS: Permission[] = ["team.manage", "billing.manage"];
 
-// تحسب الصلاحيات الفعلية لمستخدم تاجر واحد. الأدوار الداخلية للمنصة (platform.*) والـOWNER لا
-// يُخصَّصان أبداً — OWNER لازم يحتفظ بكل صلاحيات حسابه دايماً بلا استثناء (فرض خادمي، ليس فقط UI).
+// الصلاحيات المستبعدة عمداً من تخصيص فريق المنصة الداخلي — نفس فلسفة NON_CUSTOMIZABLE_PERMISSIONS
+// تماماً: صفحة admin/team وكل actions.ts فيها محمية بفحص دوري ثابت (requirePermission على
+// session.user.role)، فمنح platform.team.manage كتخصيص لموظف دعم فني يفتح مسار تصعيد صلاحيات ذاتي
+// (يقدر يمنح نفسه باقي الصلاحيات عبر نفس الصفحة). platform.billing.manage إجراءات مالية فعلية حقيقية
+// (استرداد، تعديل دليل حسابات) — تبقى دايماً تابعة لقيمة الدور فقط، بنفس مبدأ billing.manage التاجري.
+export const NON_CUSTOMIZABLE_PLATFORM_PERMISSIONS: Permission[] = ["platform.team.manage", "platform.billing.manage"];
+
+// تحسب الصلاحيات الفعلية لمستخدم واحد (تاجر أو عضو فريق منصة). SUPER_ADMIN وOWNER لا يُخصَّصان أبداً
+// — كل منهما لازم يحتفظ بكل صلاحيات حسابه دايماً بلا استثناء (فرض خادمي، ليس فقط UI). PLATFORM_SUPPORT/
+// PLATFORM_BILLING قابلان للتخصيص الآن بنفس آلية ADMIN/AGENT التاجرية تماماً.
 export function resolveEffectivePermissions(user: {
   role: UserRole;
   customPermissionsJson?: unknown;
 }): Permission[] {
-  if (isPlatformRole(user.role) || user.role === "OWNER") {
+  if (user.role === "SUPER_ADMIN" || user.role === "OWNER") {
     return getRoleDefaultPermissions(user.role);
   }
-  const custom = parseCustomPermissions(user.customPermissionsJson);
+  const custom = parseCustomPermissions(user.customPermissionsJson, user.role);
   return custom ?? getRoleDefaultPermissions(user.role);
 }
 
-// يتحقق إن الـJSON المخزّن فعلاً مصفوفة نصوص كل عنصر فيها Permission معروف (Partial<Record> في
-// TENANT_PERMISSION_LABELS_AR) — أي قيمة غير متوقعة (JSON تالف، صلاحية platform.* متسرّبة، نص عشوائي)
-// تُرفض بصمت وتُرجع null (= رجوع آمن لصلاحيات الدور الافتراضية) بدل رمي استثناء يكسر تحميل الصفحة.
-function parseCustomPermissions(raw: unknown): Permission[] | null {
+// يتحقق إن الـJSON المخزّن فعلاً مصفوفة نصوص كل عنصر فيها Permission معروف *ومسموح بتخصيصه لهذا
+// الدور تحديداً* (عالم الصلاحيات التاجرية لتاجر، عالم صلاحيات platform.* لعضو منصة — لا تسريب بين
+// العالمين مهما حدث)، مطروحاً منها الصلاحيات غير القابلة للتخصيص إطلاقاً. أي قيمة غير متوقعة (JSON
+// تالف، صلاحية من عالم خاطئ، نص عشوائي) تُرفض بصمت وتُرجع null (= رجوع آمن لصلاحيات الدور الافتراضية)
+// بدل رمي استثناء يكسر تحميل الصفحة.
+function parseCustomPermissions(raw: unknown, role: UserRole): Permission[] | null {
   try {
     const arr = typeof raw === "string" ? JSON.parse(raw) : raw;
     if (!Array.isArray(arr)) return null;
-    const known = new Set(Object.keys(TENANT_PERMISSION_LABELS_AR));
+    // فلترة يدوية بدل Set.prototype.difference (ES2024) عمداً — دعم هذه الدالة في وقت التشغيل يعتمد
+    // على نسخة Node.js الفعلية على خادم الإنتاج، وغير مضمون عبر كل بيئات النشر.
+    const nonCustomizable: string[] = isPlatformRole(role) ? NON_CUSTOMIZABLE_PLATFORM_PERMISSIONS : NON_CUSTOMIZABLE_PERMISSIONS;
+    const universe = new Set(Object.keys(isPlatformRole(role) ? PLATFORM_PERMISSION_LABELS_AR : TENANT_PERMISSION_LABELS_AR));
+    const known = new Set(Array.from(universe).filter((p) => !nonCustomizable.includes(p)));
     const filtered = arr.filter((p): p is Permission => typeof p === "string" && known.has(p));
     return filtered.length === arr.length ? (filtered as Permission[]) : null;
   } catch {

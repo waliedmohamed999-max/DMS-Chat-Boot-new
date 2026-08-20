@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireSuperAdminSession } from "@/lib/session";
-import { requirePermission } from "@/lib/rbac";
+import { requireEffectivePermission } from "@/lib/rbac";
 import { superAdminDb } from "@/lib/db";
 import type { ChatbotNodeTypeKey } from "@/lib/planLimits";
 import { ensureChartOfAccounts } from "@/lib/accounting/chartOfAccounts";
@@ -35,7 +35,7 @@ function slugifyPlanKey(name: string): string {
 
 export async function createPlan(formData: FormData) {
   const session = await requireSuperAdminSession();
-  requirePermission(session.user.role, "platform.plans.manage");
+  requireEffectivePermission(session.user.permissions, "platform.plans.manage");
 
   const parsed = planCoreSchema.safeParse({
     name: formData.get("name"),
@@ -75,7 +75,7 @@ export async function createPlan(formData: FormData) {
 
 export async function updatePlanCoreFields(planId: string, formData: FormData) {
   const session = await requireSuperAdminSession();
-  requirePermission(session.user.role, "platform.plans.manage");
+  requireEffectivePermission(session.user.permissions, "platform.plans.manage");
 
   const parsed = planCoreSchema.safeParse({
     name: formData.get("name"),
@@ -113,7 +113,7 @@ export async function updatePlanCoreFields(planId: string, formData: FormData) {
 
 export async function togglePlanActive(planId: string, isActive: boolean) {
   const session = await requireSuperAdminSession();
-  requirePermission(session.user.role, "platform.plans.manage");
+  requireEffectivePermission(session.user.permissions, "platform.plans.manage");
 
   await superAdminDb.plan.update({ where: { id: planId }, data: { isActive } });
 
@@ -127,7 +127,7 @@ export async function togglePlanActive(planId: string, isActive: boolean) {
 /** "الأكثر طلباً" علم حصري — باقة واحدة فقط تحمله في نفس الوقت (شارة مفردة على صفحة الفوترة/الأسعار). */
 export async function setPlanAsPopular(planId: string) {
   const session = await requireSuperAdminSession();
-  requirePermission(session.user.role, "platform.plans.manage");
+  requireEffectivePermission(session.user.permissions, "platform.plans.manage");
 
   await superAdminDb.$transaction([
     superAdminDb.plan.updateMany({ where: { isPopular: true }, data: { isPopular: false } }),
@@ -145,7 +145,7 @@ export async function setPlanAsPopular(planId: string) {
 
 export async function unsetPlanPopular(planId: string) {
   const session = await requireSuperAdminSession();
-  requirePermission(session.user.role, "platform.plans.manage");
+  requireEffectivePermission(session.user.permissions, "platform.plans.manage");
 
   await superAdminDb.plan.update({ where: { id: planId }, data: { isPopular: false } });
 
@@ -160,7 +160,7 @@ export async function unsetPlanPopular(planId: string) {
 
 export async function updatePlanCampaignLimits(planId: string, formData: FormData) {
   const session = await requireSuperAdminSession();
-  requirePermission(session.user.role, "platform.plans.manage");
+  requireEffectivePermission(session.user.permissions, "platform.plans.manage");
 
   const campaignsUnlimited = formData.get("campaignsUnlimited") === "on";
   const maxCampaignsPerMonth = campaignsUnlimited ? -1 : Math.max(0, parseInt(String(formData.get("maxCampaignsPerMonth") ?? "4"), 10) || 0);
@@ -188,7 +188,7 @@ export async function updatePlanCampaignLimits(planId: string, formData: FormDat
  * بنفس مبدأ null-يعني-fallback المستخدَم في updatePlanChatbotLimits/updatePlanCampaignLimits. */
 export async function updatePlanPricing(planId: string, formData: FormData) {
   const session = await requireSuperAdminSession();
-  requirePermission(session.user.role, "platform.plans.manage");
+  requireEffectivePermission(session.user.permissions, "platform.plans.manage");
 
   const priceAeRaw = String(formData.get("priceAe") ?? "").trim();
   const priceEgRaw = String(formData.get("priceEg") ?? "").trim();
@@ -218,7 +218,7 @@ export async function updatePlanPricing(planId: string, formData: FormData) {
 
 export async function updatePlanChatbotLimits(planId: string, formData: FormData) {
   const session = await requireSuperAdminSession();
-  requirePermission(session.user.role, "platform.plans.manage");
+  requireEffectivePermission(session.user.permissions, "platform.plans.manage");
 
   const maxActiveFlowsRaw = String(formData.get("maxActiveFlows") ?? "2");
   const unlimited = formData.get("unlimited") === "on";

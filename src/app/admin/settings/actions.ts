@@ -2,13 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 import { requireSuperAdminSession } from "@/lib/session";
-import { requirePermission } from "@/lib/rbac";
+import { requireEffectivePermission } from "@/lib/rbac";
 import { superAdminDb } from "@/lib/db";
 import { encryptMetaAppSecret, encryptOpenAiApiKey } from "@/lib/platformSettings";
 
 export async function updatePlatformSettings(formData: FormData) {
   const session = await requireSuperAdminSession();
-  requirePermission(session.user.role, "platform.settings.manage");
+  requireEffectivePermission(session.user.permissions, "platform.settings.manage");
 
   const integrationsMode = formData.get("integrationsMode") === "live" ? "live" : "sandbox";
   const maintenanceMode = formData.get("maintenanceMode") === "on";

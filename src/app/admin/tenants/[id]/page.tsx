@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { requireSuperAdminSession } from "@/lib/session";
-import { hasPermission } from "@/lib/rbac";
+import { hasEffectivePermission } from "@/lib/rbac";
 import { superAdminDb } from "@/lib/db";
 import { PROVIDER_LABELS_AR } from "@/lib/integrations/registry";
 import { DEFAULT_STARTER_CHATBOT_LIMITS, type ChatbotLimits } from "@/lib/planLimits";
@@ -32,7 +32,7 @@ const INVOICE_STATUS_LABELS_AR: Record<string, string> = { PAID: "مدفوعة",
 
 export default async function TenantDetailPage({ params }: { params: { id: string } }) {
   const session = await requireSuperAdminSession();
-  const canView = hasPermission(session.user.role, "platform.merchants.view");
+  const canView = hasEffectivePermission(session.user.permissions, "platform.merchants.view");
   if (!canView) {
     return (
       <div className="card p-8 text-center text-slate-400">
@@ -41,12 +41,12 @@ export default async function TenantDetailPage({ params }: { params: { id: strin
     );
   }
 
-  const canSuspend = hasPermission(session.user.role, "platform.merchants.suspend");
-  const canDelete = hasPermission(session.user.role, "platform.merchants.delete");
-  const canChangePlan = hasPermission(session.user.role, "platform.merchants.change_plan");
-  const canImpersonate = hasPermission(session.user.role, "platform.merchants.impersonate");
-  const canAddNotes = hasPermission(session.user.role, "platform.merchants.notes");
-  const canResetPassword = hasPermission(session.user.role, "platform.merchants.reset_password");
+  const canSuspend = hasEffectivePermission(session.user.permissions, "platform.merchants.suspend");
+  const canDelete = hasEffectivePermission(session.user.permissions, "platform.merchants.delete");
+  const canChangePlan = hasEffectivePermission(session.user.permissions, "platform.merchants.change_plan");
+  const canImpersonate = hasEffectivePermission(session.user.permissions, "platform.merchants.impersonate");
+  const canAddNotes = hasEffectivePermission(session.user.permissions, "platform.merchants.notes");
+  const canResetPassword = hasEffectivePermission(session.user.permissions, "platform.merchants.reset_password");
 
   const [tenant, plans, recentInvoices, joinRequest] = await Promise.all([
     superAdminDb.tenant.findUnique({

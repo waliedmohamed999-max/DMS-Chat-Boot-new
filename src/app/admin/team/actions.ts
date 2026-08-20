@@ -4,11 +4,12 @@ import crypto from "crypto";
 import bcrypt from "bcryptjs";
 import { revalidatePath } from "next/cache";
 import { requireSuperAdminSession } from "@/lib/session";
-import { requirePermission, ROLE_LABELS_AR } from "@/lib/rbac";
+import { requirePermission, ROLE_LABELS_AR, PLATFORM_PERMISSION_LABELS_AR, NON_CUSTOMIZABLE_PLATFORM_PERMISSIONS } from "@/lib/rbac";
 import { superAdminDb } from "@/lib/db";
 import { sendEmail } from "@/lib/email/send";
 import { internalStaffInviteEmail } from "@/lib/email/internalStaffTemplates";
 import { checkTenantRateLimit } from "@/lib/rateLimit";
+import { Prisma } from "@prisma/client";
 import { z } from "zod";
 
 const inviteSchema = z.object({
@@ -110,7 +111,9 @@ export async function changeInternalStaffRole(userId: string, newRole: string): 
     if (!target || target.tenantId !== null) return { success: false, error: "عضو غير موجود" };
     if (target.role === "SUPER_ADMIN") return { success: false, error: "لا يمكن تغيير دور مالك المنصة" };
 
-    await superAdminDb.user.update({ where: { id: userId }, data: { role: parsed.data } });
+    // تغيير الدور يصفّر أي تخصيص صلاحيات سابق — نفس القرار المتّخذ لتغيير دور تاجر (AGENT⇄ADMIN):
+    // تفادياً لحالة "تخصيص مبني على دور قديم" مربكة وغير آمنة.
+    await superAdminDb.user.update({ where: { id: userId }, data: { role: parsed.data, customPermissionsJson: Prisma.JsonNull } });
     await superAdminDb.auditLog.create({
       data: { userId: session.user.id, action: "platform.team_change_role", targetType: "User", targetId: userId, metaJson: { newRole: parsed.data } },
     });
@@ -177,6 +180,129 @@ export async function resendStaffSetupLink(userId: string): Promise<ResendSetupL
     });
 
     await sendEmail(internalStaffInviteEmail({ to: target.email, name: target.name, roleLabel: ROLE_LABELS_AR[target.role], setupToken: rawSetupToken }));
+
+    revalidatePath("/admin/team");
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : "حدث خطأ غير متوقع" };
+  }
+}
+
+const platformPermissionsSchema = z.object({ permissions: z.array(z.string()).nullable() });
+
+/**
+ * تخصيص صلاحيات فردي لعضو فريق منصة فوق افتراضي دوره (customPermissionsJson) — بنفس آلية
+ * updateUserPermissions التاجرية تماماً (dashboard/settings/actions.ts). permissions = null يعني
+ * "رجوع لصلاحيات الدور الافتراضية". فحص دوري عمداً (requirePermission على session.user.role وليس
+ * effective) — من يملك حق التخصيص نفسه لا يتغير بأي تخصيص، تفادياً لحلقة تصعيد صلاحيات ذاتي.
+ */
+export async function updateInternalStaffPermissions(userId: string, permissions: string[] | null): Promise<ToggleStaffResult> {
+  try {
+    const session = await requireSuperAdminSession();
+    requirePermission(session.user.role, "platform.team.manage");
+
+    const parsed = platformPermissionsSchema.safeParse({ permissions });
+    if (!parsed.success) return { success: false, error: "بيانات غير صالحة" };
+
+    const target = await superAdminDb.user.findUnique({ where: { id: userId } });
+    if (!target || target.tenantId !== null) return { success: false, error: "عضو غير موجود" };
+    if (target.role === "SUPER_ADMIN") return { success: false, error: "لا يمكن تخصيص صلاحيات مالك المنصة" };
+
+    if (parsed.data.permissions) {
+      // فحص خادمي حقيقي (وليس ثقة بالواجهة) — يرفض أي صلاحية غير معروفة، أو صلاحية تاجرية متسرّبة
+      // من عالم مختلف، أو صلاحية ضمن NON_CUSTOMIZABLE_PLATFORM_PERMISSIONS، حتى لو تجاوز الطالب
+      // الواجهة واستدعى هذا الـaction مباشرة بحمولة يدوية.
+      const allowed = new Set(Object.keys(PLATFORM_PERMISSION_LABELS_AR));
+      for (const p of parsed.data.permissions) {
+        if (!allowed.has(p) || (NON_CUSTOMIZABLE_PLATFORM_PERMISSIONS as string[]).includes(p)) {
+          return { success: false, error: "صلاحية غير صالحة" };
+        }
+      }
+    }
+
+    await superAdminDb.user.update({
+      where: { id: userId },
+      data: { customPermissionsJson: parsed.data.permissions ? JSON.stringify(parsed.data.permissions) : Prisma.JsonNull },
+    });
+    await superAdminDb.auditLog.create({
+      data: { userId: session.user.id, action: "platform.team_permissions_change", targetType: "User", targetId: userId, metaJson: { permissions: parsed.data.permissions } },
+    });
+
+    revalidatePath("/admin/team");
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : "حدث خطأ غير متوقع" };
+  }
+}
+
+const profileSchema = z.object({ name: z.string().min(2), email: z.string().email() });
+
+export async function updateInternalStaffProfile(userId: string, formData: FormData): Promise<ToggleStaffResult> {
+  try {
+    const session = await requireSuperAdminSession();
+    requirePermission(session.user.role, "platform.team.manage");
+
+    const parsed = profileSchema.safeParse({ name: formData.get("name"), email: formData.get("email") });
+    if (!parsed.success) return { success: false, error: parsed.error.issues[0]?.message ?? "بيانات غير صالحة" };
+
+    const email = parsed.data.email.toLowerCase();
+    const target = await superAdminDb.user.findUnique({ where: { id: userId } });
+    if (!target || target.tenantId !== null) return { success: false, error: "عضو غير موجود" };
+    if (target.role === "SUPER_ADMIN" && userId !== session.user.id) {
+      return { success: false, error: "لا يمكن تعديل بيانات مالك المنصة من هنا" };
+    }
+
+    const emailTaken = await superAdminDb.user.findFirst({ where: { email, NOT: { id: userId } } });
+    if (emailTaken) return { success: false, error: "هذا البريد مستخدم بالفعل" };
+
+    await superAdminDb.user.update({ where: { id: userId }, data: { name: parsed.data.name, email } });
+    await superAdminDb.auditLog.create({
+      data: { userId: session.user.id, action: "platform.team_update_profile", targetType: "User", targetId: userId, metaJson: { name: parsed.data.name, email } },
+    });
+
+    revalidatePath("/admin/team");
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : "حدث خطأ غير متوقع" };
+  }
+}
+
+/**
+ * إعادة تعيين فورية لا رجعة فيها: تُبطل كلمة المرور الحالية فوراً (تجزئة عشوائية غير قابلة للاستخدام،
+ * بنفس أسلوب inviteInternalStaff)، تُلغي أي رابط إعداد سابق لم يُستخدم، وتنشئ رابطاً جديداً يحدِّد
+ * فيه العضو كلمة مروره بنفسه. يُستخدم لكل من: عضو نسي كلمة مروره، أو شك أمني بحساب مخترَق.
+ */
+export async function forceResetInternalStaffPassword(userId: string): Promise<ToggleStaffResult> {
+  try {
+    const session = await requireSuperAdminSession();
+    requirePermission(session.user.role, "platform.team.manage");
+
+    const rateLimit = await checkTenantRateLimit(session.user.id, "force-reset-staff-password", 20, 3600);
+    if (!rateLimit.allowed) return { success: false, error: "عدد محاولات كبير جداً خلال ساعة — حاول مرة أخرى لاحقاً." };
+
+    const target = await superAdminDb.user.findUnique({ where: { id: userId } });
+    if (!target || target.tenantId !== null) return { success: false, error: "عضو غير موجود" };
+    if (target.role === "SUPER_ADMIN") return { success: false, error: "لا يمكن إعادة تعيين كلمة مرور مالك المنصة من هنا" };
+
+    const placeholderHash = await bcrypt.hash(crypto.randomBytes(32).toString("hex"), 10);
+    const rawSetupToken = crypto.randomBytes(32).toString("hex");
+    const setupTokenHash = crypto.createHash("sha256").update(rawSetupToken).digest("hex");
+    const setupExpiresAt = new Date(Date.now() + 7 * 24 * 3600 * 1000);
+
+    await superAdminDb.$transaction(async (tx) => {
+      await tx.user.update({ where: { id: userId }, data: { passwordHash: placeholderHash } });
+      await tx.accountSetupToken.deleteMany({ where: { userId, usedAt: null } });
+      await tx.accountSetupToken.create({ data: { userId, tokenHash: setupTokenHash, expiresAt: setupExpiresAt } });
+      await tx.auditLog.create({
+        data: { userId: session.user.id, action: "platform.team_force_password_reset", targetType: "User", targetId: userId, metaJson: {} },
+      });
+    });
+
+    await sendEmail(internalStaffInviteEmail({ to: target.email, name: target.name, roleLabel: ROLE_LABELS_AR[target.role], setupToken: rawSetupToken }));
+    // ملاحظة: internalStaffInviteEmail نصّها الحالي مكتوب لدعوة جديدة ("أُنشئ لك حساب...") — استخدامها
+    // هنا لإعادة تعيين كلمة مرور رسالة مقبولة وظيفياً (نفس رابط/آلية الإعداد بالضبط) لكنها غير دقيقة
+    // الصياغة لهذا السياق تحديداً؛ قالب منفصل internalStaffPasswordResetEmail بنفس البنية تحسين نصي
+    // لاحق، وليس حرجاً لعمل الميزة.
 
     revalidatePath("/admin/team");
     return { success: true };

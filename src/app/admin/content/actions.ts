@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireSuperAdminSession } from "@/lib/session";
-import { requirePermission } from "@/lib/rbac";
+import { requireEffectivePermission } from "@/lib/rbac";
 import { superAdminDb } from "@/lib/db";
 
 /** يفكّك textarea بسطر واحد لكل عنصر، وحقول كل سطر مفصولة بـ"|" — نفس فلسفة Plan.features (سطر لكل عنصر) مع دعم حقول متعددة. */
@@ -25,7 +25,7 @@ function revalidateHomepage() {
 
 async function authorize() {
   const session = await requireSuperAdminSession();
-  requirePermission(session.user.role, "platform.content.manage");
+  requireEffectivePermission(session.user.permissions, "platform.content.manage");
   return session;
 }
 

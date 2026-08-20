@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { requireSuperAdminSession } from "@/lib/session";
-import { hasPermission } from "@/lib/rbac";
+// platform.billing.manage تبقى فحصاً دورياً عمداً (NON_CUSTOMIZABLE_PLATFORM_PERMISSIONS — راجع
+// lib/rbac.ts): تفتح إجراءات مالية فعلية حقيقية (استرداد)، فتُستثنى من التخصيص بنيوياً.
+import { hasPermission, hasEffectivePermission } from "@/lib/rbac";
 import { superAdminDb } from "@/lib/db";
 import { computeRevenueSummary } from "@/lib/admin/revenueAnalytics";
 import { buildInvoiceWhere, type InvoiceSearchParams } from "@/lib/admin/invoiceFilters";
@@ -26,14 +28,14 @@ type SearchParams = InvoiceSearchParams & { page?: string };
 
 export default async function PlatformBillingPage({ searchParams }: { searchParams: SearchParams }) {
   const session = await requireSuperAdminSession();
-  if (!hasPermission(session.user.role, "platform.view_revenue")) {
+  if (!hasEffectivePermission(session.user.permissions, "platform.view_revenue")) {
     return (
       <div className="card p-8 text-center text-slate-400">
         ليس لديك صلاحية عرض الإيرادات والفواتير. هذه الصفحة محصورة بمالك المنصة والفريق المالي.
       </div>
     );
   }
-  const canViewMerchantDetail = hasPermission(session.user.role, "platform.merchants.view");
+  const canViewMerchantDetail = hasEffectivePermission(session.user.permissions, "platform.merchants.view");
   const canRefund = hasPermission(session.user.role, "platform.billing.manage");
 
   const page = Math.max(1, parseInt(searchParams.page ?? "1", 10) || 1);

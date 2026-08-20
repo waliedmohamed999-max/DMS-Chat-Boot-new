@@ -1,12 +1,12 @@
 import { notFound } from "next/navigation";
 import { superAdminDb } from "@/lib/db";
 import { requireSuperAdminSession } from "@/lib/session";
-import { hasPermission, ROLE_LABELS_AR } from "@/lib/rbac";
+import { hasEffectivePermission, ROLE_LABELS_AR } from "@/lib/rbac";
 import { toggleMerchantUserActive } from "../../actions";
 
 export default async function TenantTeamPage({ params }: { params: { id: string } }) {
   const session = await requireSuperAdminSession();
-  const canSuspend = hasPermission(session.user.role, "platform.merchants.suspend");
+  const canSuspend = hasEffectivePermission(session.user.permissions, "platform.merchants.suspend");
 
   const tenant = await superAdminDb.tenant.findUnique({
     where: { id: params.id },

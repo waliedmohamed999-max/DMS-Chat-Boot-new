@@ -1,18 +1,18 @@
 import Link from "next/link";
 import { superAdminDb } from "@/lib/db";
 import { requireSuperAdminSession } from "@/lib/session";
-import { hasPermission } from "@/lib/rbac";
+import { hasEffectivePermission } from "@/lib/rbac";
 import { TENANT_STATUS_LABELS_AR, TENANT_STATUS_BADGE_CLASS, TENANT_STATUS_BAR_CLASS } from "@/lib/tenantStatus";
 import { formatMoney } from "@/lib/currency";
 
 export default async function AdminOverviewPage() {
   const session = await requireSuperAdminSession();
-  const canViewRevenue = hasPermission(session.user.role, "platform.view_revenue");
-  const canViewMerchants = hasPermission(session.user.role, "platform.merchants.view");
-  const canReviewApprovals = hasPermission(session.user.role, "platform.approvals.review");
-  const canViewAuditLog = hasPermission(session.user.role, "platform.audit_log.view");
-  const canManageSettings = hasPermission(session.user.role, "platform.settings.manage");
-  const canSendAnnouncements = hasPermission(session.user.role, "platform.announcements.send");
+  const canViewRevenue = hasEffectivePermission(session.user.permissions, "platform.view_revenue");
+  const canViewMerchants = hasEffectivePermission(session.user.permissions, "platform.merchants.view");
+  const canReviewApprovals = hasEffectivePermission(session.user.permissions, "platform.approvals.review");
+  const canViewAuditLog = hasEffectivePermission(session.user.permissions, "platform.audit_log.view");
+  const canManageSettings = hasEffectivePermission(session.user.permissions, "platform.settings.manage");
+  const canSendAnnouncements = hasEffectivePermission(session.user.permissions, "platform.announcements.send");
 
   const [tenantsCount, activeSubs, invoicesPaid, tenantsByStatus, pendingApprovalsCount, recentActivity] = await Promise.all([
     superAdminDb.tenant.count(),
