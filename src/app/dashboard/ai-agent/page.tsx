@@ -3,7 +3,7 @@ import { requireTenantSession } from "@/lib/session";
 import { withTenant } from "@/lib/db";
 import { hasEffectivePermission } from "@/lib/rbac";
 import { getTenantChatbotLimits, isNodeTypeAllowed, isUnlimited } from "@/lib/planLimits";
-import { updateAiAgentConfig } from "./actions";
+import { AiAgentSettingsForm } from "./AiAgentSettingsForm";
 import type { FaqItem } from "@/lib/ai/aiAgentConfig";
 
 const TONE_LABELS_AR: Record<string, string> = { FORMAL: "رسمية", FRIENDLY: "ودودة", FUN: "مرحة" };
@@ -72,7 +72,7 @@ export default async function AiAgentSettingsPage() {
         </p>
       </div>
 
-      <form action={updateAiAgentConfig} className="card max-w-3xl space-y-4 p-6">
+      <AiAgentSettingsForm>
         <label className="flex items-center gap-2 text-sm text-slate-200">
           <input type="checkbox" name="enabled" defaultChecked={config.enabled} className="h-4 w-4" />
           تفعيل الموظف الذكي (يجب أيضاً إضافة عقدة "رد ذكي" في تدفق منشور ليعمل فعلياً)
@@ -118,9 +118,7 @@ export default async function AiAgentSettingsPage() {
           <label className="label-field">أسئلة شائعة (سطر لكل سؤال، بصيغة: السؤال | الجواب)</label>
           <textarea name="faqItems" defaultValue={faqToLines(faqItems)} rows={6} className="input-field text-sm" dir="rtl" />
         </div>
-
-        <button type="submit" className="btn-primary w-full">حفظ إعدادات الموظف الذكي</button>
-      </form>
+      </AiAgentSettingsForm>
     </div>
   );
 }
