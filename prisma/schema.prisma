@@ -94,6 +94,8 @@ model Tenant {
   aiAgentConfig          AiAgentConfig?
   aiReplyLogs            AiReplyLog[]
   referral               Referral?
+  tenantChatSessions     TenantChatSession[]
+  tenantChatMessages     TenantChatMessage[]
 
   @@index([status])
 }
@@ -127,6 +129,7 @@ model User {
   contactImportBatches  ContactImportBatch[]
   assignedLeads         ContactMessage[]
   assignedChatSessions  PlatformChatSession[]
+  assignedTenantChatSessions TenantChatSession[]
 
   @@index([tenantId])
 }
@@ -289,6 +292,10 @@ model Subscription {
   // مجموع توكنز LLM المستهلَكة هذه الدورة عبر عقدة "الرد الذكي" — بنفس منطق messagesUsedThisPeriod
   // تماماً (يتراكم فقط، بلا إعادة تصفير دورية بعد؛ نفس القيد الموجود أصلاً على عدّاد الرسائل).
   aiTokensUsedThisPeriod Int                @default(0)
+  // مجموع دقائق المكالمة الصوتية الحية لويدجت موقع التاجر الخاص هذه الدورة — منفصل تماماً عن
+  // aiTokensUsedThisPeriod (ذاك خاص باستدعاءات LLM النصية). سقف شهري لكل تاجر (Growth/Scale، راجع
+  // lib/planLimits.ts) بالإضافة لحد الـ5 دقائق لكل مكالمة منفردة المطبَّق أصلاً في ChatWidget.tsx.
+  voiceCallMinutesUsedThisPeriod Int          @default(0)
   cancelAtPeriodEnd      Boolean            @default(false)
   // سبب الإلغاء المُختار في تدفق الاحتفاظ بالعميل (بيانات عمل مفيدة لفريق المنتج، وليست ضرورية تقنياً)
   cancelReason           String?
@@ -924,6 +931,10 @@ model AiAgentConfig {
   workingHours   String?
   // أسئلة شائعة يضيفها التاجر يدوياً: [{ question: string, answer: string }]
   faqItems       Json     @default("[]")
+  // مفتاح تشغيل/إيقاف صريح لويدجت شات موقع التاجر الخاص (نص + صوت + مكالمة حية عبر iframe) —
+  // منفصل عن enabled أعلاه (ذاك خاص بالموظف الذكي على واتساب فقط) وعن بوابة الباقة
+  // (websiteChatEnabled في planLimits.ts): الباقة تمنح *القدرة*، وهذا يتحكم به التاجر نفسه.
+  websiteWidgetActive Boolean @default(false)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 }
@@ -956,6 +967,60 @@ model AiReplyLog {
 
   @@index([tenantId, createdAt])
   @@index([tenantId, handoffTriggered])
+}
+
+// ========================= ويدجت شات موقع التاجر الخاص (ميزة مدفوعة حسب الباقة) =========================
+// جداول مستأجَرة (tenantId + RLS) خلافاً لـPlatformChatSession/PlatformChatMessage أعلاه (تلك جلسات
+// زوار الموقع التسويقي العام للمنصة نفسها، بلا tenantId إطلاقاً) — كل جلسة/رسالة هنا بيانات تاجر
+// حقيقية يجب أن تمر عبر withTenant() فقط، ومُضافة لمصفوفة tenant_tables في postgres-rls.sql.
+// الزائر على موقع التاجر مجهول الهوية بالكامل في هذه النسخة الأولى (لا contactId حقيقياً)، لذلك لا
+// أداة get_order_status في هذه القناة إطلاقاً (راجع lib/ai/generateWebsiteChatReply.ts).
+
+enum TenantChatSessionStatus {
+  OPEN // الموظف الذكي يرد تلقائياً
+  HANDED_OFF // حُوِّلت لفريق التاجر البشري
+  CLOSED
+}
+
+enum TenantChatSenderType {
+  VISITOR
+  AI
+  STAFF
+}
+
+model TenantChatSession {
+  id               String                   @id @default(cuid())
+  tenantId         String
+  tenant           Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  status           TenantChatSessionStatus  @default(OPEN)
+  // يُلتقَطان اختيارياً من الزائر عند بدء الجلسة (بلا تسجيل دخول) — null دائماً إن لم يُدخلهما.
+  visitorName      String?
+  visitorEmail     String?
+  assignedToUserId String?
+  assignedTo       User?                    @relation(fields: [assignedToUserId], references: [id], onDelete: SetNull)
+  lastMessageAt    DateTime                 @default(now())
+  createdAt        DateTime                 @default(now())
+
+  messages TenantChatMessage[]
+
+  @@index([tenantId, status])
+  @@index([tenantId, lastMessageAt])
+}
+
+model TenantChatMessage {
+  id         String               @id @default(cuid())
+  tenantId   String
+  tenant     Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  sessionId  String
+  session    TenantChatSession    @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  senderType TenantChatSenderType
+  text       String
+  // true لو أصل الرسالة تسجيل صوتي مُفرَّغ عبر Whisper، أو جزء من مكالمة صوتية حية — نفس دلالة
+  // PlatformChatMessage.wasVoice بالحرف.
+  wasVoice   Boolean              @default(false)
+  createdAt  DateTime             @default(now())
+
+  @@index([tenantId, sessionId, createdAt])
 }
 
 // ========================= التكاملات (Meta / Zid / Salla) =========================

@@ -23,6 +23,7 @@ async function main() {
     templatesTier: "full", analyticsTier: "advanced", multiLanguage: false,
     maxAiTokensPerMonth: 50000, // حصة معقولة للموظف الذكي — قابلة للتعديل لاحقاً من admin/plans
     voiceMessagesEnabled: true,
+    websiteChatEnabled: true, websiteVoiceCallEnabled: true, maxVoiceCallMinutesPerMonth: 100,
   };
   const scaleChatbotLimits = {
     maxActiveFlows: -1,
@@ -30,6 +31,7 @@ async function main() {
     templatesTier: "full", analyticsTier: "export", multiLanguage: true,
     maxAiTokensPerMonth: -1, // غير محدود لأعلى باقة
     voiceMessagesEnabled: true,
+    websiteChatEnabled: true, websiteVoiceCallEnabled: true, maxVoiceCallMinutesPerMonth: 300,
   };
 
   const starterCampaignLimits = { maxCampaignsPerMonth: 4, maxAudiencePerCampaign: 200, abTestingEnabled: false };

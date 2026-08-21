@@ -20,6 +20,15 @@ export type ChatbotLimits = {
   // قناة الاتصال (Meta Cloud API أو Baileys/QR). استدعاء Whisper له تكلفة فعلية لكل رسالة صوتية،
   // فمنفصل عن maxAiTokensPerMonth (ذاك خاص بعقدة "رد ذكي" فقط).
   voiceMessagesEnabled: boolean;
+  // ويدجت شات موقع التاجر الخاص (نص + رسالة صوتية) عبر iframe — منفصلة عن voiceMessagesEnabled
+  // (ذاك لواتساب فقط) وعن websiteVoiceCallEnabled أدناه (تلك للمكالمة الصوتية الحية تحديداً).
+  websiteChatEnabled: boolean;
+  // المكالمة الصوتية الحية (Realtime API) داخل ويدجت موقع التاجر — تتطلب websiteChatEnabled=true
+  // أصلاً لتُفعَّل فعلياً (تُفحص معاً في نقاط الاستدعاء، وليس بديلاً مستقلاً عنها).
+  websiteVoiceCallEnabled: boolean;
+  // سقف دقائق المكالمة الصوتية الحية الشهري لكل تاجر (بالإضافة لحد الـ5 دقائق لكل مكالمة منفردة) —
+  // -1 = غير محدود، 0 = ممنوع كلياً حتى لو websiteVoiceCallEnabled=true.
+  maxVoiceCallMinutesPerMonth: number;
 };
 
 // حدود Starter الافتراضية — تُستخدم كـ fallback آمن (الأكثر تقييداً) إن كانت الباقة بدون
@@ -32,6 +41,9 @@ export const DEFAULT_STARTER_CHATBOT_LIMITS: ChatbotLimits = {
   multiLanguage: false,
   maxAiTokensPerMonth: 0,
   voiceMessagesEnabled: false,
+  websiteChatEnabled: false,
+  websiteVoiceCallEnabled: false,
+  maxVoiceCallMinutesPerMonth: 0,
 };
 
 export const PLAN_TIER_LABELS_AR: Record<string, string> = {
@@ -54,6 +66,9 @@ export function parseChatbotLimits(raw: unknown): ChatbotLimits {
     multiLanguage: Boolean(r.multiLanguage),
     maxAiTokensPerMonth: typeof r.maxAiTokensPerMonth === "number" ? r.maxAiTokensPerMonth : DEFAULT_STARTER_CHATBOT_LIMITS.maxAiTokensPerMonth,
     voiceMessagesEnabled: Boolean(r.voiceMessagesEnabled),
+    websiteChatEnabled: Boolean(r.websiteChatEnabled),
+    websiteVoiceCallEnabled: Boolean(r.websiteVoiceCallEnabled),
+    maxVoiceCallMinutesPerMonth: typeof r.maxVoiceCallMinutesPerMonth === "number" ? r.maxVoiceCallMinutesPerMonth : DEFAULT_STARTER_CHATBOT_LIMITS.maxVoiceCallMinutesPerMonth,
   };
 }
 

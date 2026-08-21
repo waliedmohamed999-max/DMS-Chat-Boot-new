@@ -14,6 +14,7 @@ const NAV_ITEMS: (NavItem & { requires?: Permission })[] = [
   { href: "/dashboard", label: "نظرة عامة", icon: "📊" },
   { href: "/dashboard/chatbot", label: "الأتمتة", icon: "🔔" },
   { href: "/dashboard/ai-agent", label: "الموظف الذكي", icon: "🤖", requires: "chatbot.edit" },
+  { href: "/dashboard/website-chat", label: "شات موقعك", icon: "💬", requires: "chatbot.edit" },
   { href: "/dashboard/inbox", label: "صندوق المحادثات", icon: "💬" },
   { href: "/dashboard/contacts", label: "جهات الاتصال", icon: "👥" },
   { href: "/dashboard/campaigns", label: "الحملات", icon: "📣" },

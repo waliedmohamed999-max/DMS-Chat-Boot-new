@@ -24,7 +24,7 @@ DECLARE
     'AuditLog', 'Subscription', 'Invoice',
     'ApprovalRequest', 'MerchantNote', 'ImpersonationSession', 'AnnouncementDismissal',
     'QuickReply', 'InternalNote', 'ContactImportBatch', 'PaymentMethod', 'CreditNote',
-    'AiAgentConfig', 'AiReplyLog'
+    'AiAgentConfig', 'AiReplyLog', 'TenantChatSession', 'TenantChatMessage'
   ];
 BEGIN
   FOREACH t IN ARRAY tenant_tables LOOP
