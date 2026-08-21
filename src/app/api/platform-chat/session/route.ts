@@ -11,7 +11,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "عدد جلسات كبير جداً من عنوانك الحالي — حاول مرة أخرى بعد قليل" }, { status: 429 });
   }
 
-  let body: { name?: unknown; email?: unknown } = {};
+  let body: { name?: unknown; email?: unknown; isDemo?: unknown } = {};
   try {
     body = await req.json();
   } catch {
@@ -22,6 +22,10 @@ export async function POST(req: NextRequest) {
     data: {
       visitorName: typeof body.name === "string" && body.name.trim() ? body.name.trim().slice(0, 200) : null,
       visitorEmail: typeof body.email === "string" && body.email.trim() ? body.email.trim().slice(0, 200) : null,
+      // الـwidget هو من يقرر إرسال هذا بناءً على platformDemoModeEnabled القادمة من الخادم أصلاً —
+      // ليس قراراً يتخذه العميل بمعزل عن إعداد المنصة (ChatWidget.tsx لا يعرض شيئاً مختلفاً لو
+      // الإعداد معطَّل، لكن الوسم هنا يبقى دفاعياً بلا أي أثر إن أُرسِل بلا سبب).
+      isDemo: body.isDemo === true,
     },
   });
 

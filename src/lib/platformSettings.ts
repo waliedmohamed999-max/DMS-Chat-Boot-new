@@ -27,6 +27,7 @@ export type PlatformSettingsData = {
   platformChatEnabled: boolean;
   platformChatVoiceReplyEnabled: boolean;
   platformVoiceCallEnabled: boolean;
+  platformDemoModeEnabled: boolean;
 };
 
 /** يجلب إعدادات المنصة العامة، وينشئ الصف الافتراضي تلقائياً إن لم يوجد بعد (أول تشغيل). */
@@ -59,6 +60,7 @@ export async function getPlatformSettings(): Promise<PlatformSettingsData> {
     platformChatEnabled: row.platformChatEnabled,
     platformChatVoiceReplyEnabled: row.platformChatVoiceReplyEnabled,
     platformVoiceCallEnabled: row.platformVoiceCallEnabled,
+    platformDemoModeEnabled: row.platformDemoModeEnabled,
   };
 }
 

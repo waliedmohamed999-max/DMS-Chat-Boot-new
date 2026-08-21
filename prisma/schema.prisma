@@ -1149,6 +1149,9 @@ model PlatformChatSession {
   visitorEmail String?
   assignedToUserId String?
   assignedTo       User?   @relation(fields: [assignedToUserId], references: [id], onDelete: SetNull)
+  // جلسة عرض تجريبي مجاني (ردود مُبرمَجة بلا أي استدعاء LLM حقيقي، راجع demoReplyEngine.ts) — يميّزها
+  // فريق المبيعات في admin/chats عن عميل محتمل فعلي يحتاج متابعة حقيقية.
+  isDemo        Boolean  @default(false)
   lastMessageAt DateTime @default(now())
   createdAt     DateTime @default(now())
 
@@ -1220,6 +1223,11 @@ model PlatformSettings {
   // platformChatEnabled عمداً: تكلفتها أعلى بكثير من رسالة نصية أو صوتية مُسجَّلة واحدة (تقديرياً
   // ~$0.016/دقيقة)، فتفعيلها قرار منفصل عن مجرد تفعيل الشات النصي. مُعطَّلة افتراضياً.
   platformVoiceCallEnabled      Boolean  @default(false)
+  // وضع عرض تجريبي مجاني بالكامل (نص + صوت مُسجَّل + مكالمة حية) — بلا أي استدعاء LLM/Whisper/Realtime
+  // حقيقي إطلاقاً (محرك ردود مُبرمَج + Web Speech API المجانية بالمتصفح، راجع demoReplyEngine.ts
+  // وChatWidget.tsx). مستقل تماماً عن platformChatEnabled/platformVoiceCallEnabled — يتحكم بمسار
+  // موازٍ منفصل، وليس بديلاً لتفعيلهما.
+  platformDemoModeEnabled       Boolean  @default(false)
   updatedAt              DateTime @updatedAt
 }
 

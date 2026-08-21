@@ -25,6 +25,7 @@ export default async function PlatformChatsPage() {
   const serialized = sessions.map((s) => ({
     id: s.id,
     status: s.status as "OPEN" | "HANDED_OFF",
+    isDemo: s.isDemo,
     visitorName: s.visitorName,
     visitorEmail: s.visitorEmail,
     assignedTo: s.assignedTo ? { id: s.assignedTo.id, name: s.assignedTo.name } : null,

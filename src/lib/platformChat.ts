@@ -1,5 +1,7 @@
 import { rawDb } from "@/lib/db";
 import { generatePlatformChatReply } from "@/lib/ai/generatePlatformChatReply";
+import { getDemoReply } from "@/lib/ai/demoReplyEngine";
+import { getPlatformSettings } from "@/lib/platformSettings";
 import type { ChatHistoryMessage } from "@/lib/ai/generateReply";
 
 const MAX_MESSAGE_LENGTH = 2000;
@@ -33,6 +35,17 @@ export async function processPlatformChatMessage(sessionId: string, rawText: str
 
   if (session.status !== "OPEN") {
     return { kind: "static", replyText: STATIC_HANDED_OFF_REPLY, sessionStatus: session.status };
+  }
+
+  // مسار عرض تجريبي موازٍ منفصل تماماً — بلا أي استدعاء LLM إطلاقاً، مسار الجلسات الحقيقية أدناه
+  // (generatePlatformChatReply) لا يُلمَس ولا يُستدعى مطلقاً لجلسات isDemo. مطابق فقط لو الإعداد
+  // العام مفعَّل *و* الجلسة نفسها وُسِمَت كتجريبية وقت إنشائها — الاثنان معاً وليس أحدهما فقط.
+  const settings = await getPlatformSettings();
+  if (settings.platformDemoModeEnabled && session.isDemo) {
+    const demoReplyText = await getDemoReply(rawDb, text);
+    await rawDb.platformChatMessage.create({ data: { sessionId, senderType: "AI", text: demoReplyText } });
+    await rawDb.platformChatSession.update({ where: { id: sessionId }, data: { lastMessageAt: new Date() } });
+    return { kind: "ai", replyText: demoReplyText, sessionStatus: "OPEN" };
   }
 
   const recentMessages = await rawDb.platformChatMessage.findMany({

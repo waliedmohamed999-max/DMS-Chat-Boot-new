@@ -9,6 +9,7 @@ type SessionStatus = "OPEN" | "HANDED_OFF";
 export type ChatSessionSummary = {
   id: string;
   status: SessionStatus;
+  isDemo: boolean;
   visitorName: string | null;
   visitorEmail: string | null;
   assignedTo: { id: string; name: string } | null;
@@ -72,7 +73,14 @@ export function ChatSessionCard({ session }: { session: ChatSessionSummary }) {
     <div className="card flex flex-col p-5">
       <div className="mb-2 flex items-center justify-between">
         <div>
-          <p className="font-semibold text-white">{session.visitorName || "زائر مجهول"}</p>
+          <p className="flex items-center gap-1.5 font-semibold text-white">
+            {session.visitorName || "زائر مجهول"}
+            {session.isDemo && (
+              <span className="badge bg-purple-500/10 text-purple-400" title="جلسة عرض تجريبي — ليست عميلاً محتملاً فعلياً">
+                🎬 عرض تجريبي
+              </span>
+            )}
+          </p>
           <p className="text-xs text-slate-500" dir="ltr">
             {session.visitorEmail || "—"}
             {assignedTo && <span dir="rtl"> · معيَّنة لـ{assignedTo.name}</span>}

@@ -13,6 +13,29 @@ type SessionStatus = "OPEN" | "HANDED_OFF" | "CLOSED";
 
 type ChatMessage = { id: string; senderType: SenderType; text: string; createdAt: string };
 
+// واجهة مبسَّطة لـWeb Speech API (SpeechRecognition) — ليست في مكتبات TS القياسية (API غير موحَّد
+// عبر المتصفحات)، فنعرّف هنا فقط الحقول/الأحداث المستخدَمة فعلياً بدل الاعتماد على أنواع خارجية.
+type SpeechRecognitionLike = {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  start: () => void;
+  stop: () => void;
+  onresult: ((event: { results: { [i: number]: { [j: number]: { transcript: string } } } }) => void) | null;
+  onerror: (() => void) | null;
+  onend: (() => void) | null;
+};
+
+function getSpeechRecognitionCtor(): (new () => SpeechRecognitionLike) | null {
+  if (typeof window === "undefined") return null;
+  const w = window as unknown as { SpeechRecognition?: new () => SpeechRecognitionLike; webkitSpeechRecognition?: new () => SpeechRecognitionLike };
+  return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
+}
+
+function isSpeechSynthesisSupported(): boolean {
+  return typeof window !== "undefined" && "speechSynthesis" in window;
+}
+
 function Bubble({ message }: { message: ChatMessage }) {
   const isVisitor = message.senderType === "VISITOR";
   return (
@@ -33,7 +56,7 @@ function Bubble({ message }: { message: ChatMessage }) {
 
 /** فقاعة شات عامة منفصلة عن FloatingWhatsAppButton (bottom-right، بلا تسجيل دخول، بلا كوكي — الجلسة
  * تعيش في state محلي فقط وتنتهي بإغلاق التبويب عمداً، بساطة مرحلة أولى). */
-export function ChatWidget({ enabled, voiceCallEnabled }: { enabled: boolean; voiceCallEnabled: boolean }) {
+export function ChatWidget({ enabled, voiceCallEnabled, demoMode }: { enabled: boolean; voiceCallEnabled: boolean; demoMode: boolean }) {
   const [isOpen, setIsOpen] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [sessionStatus, setSessionStatus] = useState<SessionStatus>("OPEN");
@@ -46,6 +69,9 @@ export function ChatWidget({ enabled, voiceCallEnabled }: { enabled: boolean; vo
   const [isCalling, setIsCalling] = useState(false);
   const [callSecondsLeft, setCallSecondsLeft] = useState(CALL_DURATION_SECONDS);
   const [callError, setCallError] = useState<string | null>(null);
+  // متفائل افتراضياً (true) لتفادي عدم تطابق hydration — السيرفر لا يعرف قدرات المتصفح، فيُصحَّح
+  // القيمة الفعلية بعد التركيب عبر useEffect أدناه (فحص متاح فقط في المتصفح).
+  const [speechSupported, setSpeechSupported] = useState(true);
 
   const lastMessageIdRef = useRef<string | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -63,10 +89,24 @@ export function ChatWidget({ enabled, voiceCallEnabled }: { enabled: boolean; vo
   const callIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const callTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // مسار العرض التجريبي المجاني (Web Speech API) — منفصل تماماً عن refs المسار الحقيقي أعلاه، بلا
+  // أي تداخل بينهما (كل مسار يستخدم مجموعته فقط).
+  const demoRecognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const demoCallRecognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const demoCallActiveRef = useRef(false);
+
+  useEffect(() => {
+    if (demoMode) setSpeechSupported(Boolean(getSpeechRecognitionCtor()));
+  }, [demoMode]);
+
   async function ensureSession(): Promise<string | null> {
     if (sessionId) return sessionId;
     try {
-      const res = await fetch("/api/platform-chat/session", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+      const res = await fetch("/api/platform-chat/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isDemo: demoMode }),
+      });
       if (!res.ok) throw new Error("failed");
       const data = await res.json();
       setSessionId(data.sessionId);
@@ -130,11 +170,15 @@ export function ChatWidget({ enabled, voiceCallEnabled }: { enabled: boolean; vo
       dataChannelRef.current?.close();
       peerConnectionRef.current?.close();
       localStreamRef.current?.getTracks().forEach((t) => t.stop());
+      demoCallActiveRef.current = false;
+      demoCallRecognitionRef.current?.stop();
+      demoRecognitionRef.current?.stop();
+      if (isSpeechSynthesisSupported()) window.speechSynthesis.cancel();
     };
   }, []);
 
-  async function sendText() {
-    const text = input.trim();
+  async function sendText(overrideText?: string) {
+    const text = (overrideText ?? input).trim();
     if (!text || isSending) return;
     setError(null);
     const sid = await ensureSession();
@@ -164,7 +208,7 @@ export function ChatWidget({ enabled, voiceCallEnabled }: { enabled: boolean; vo
     }
   }
 
-  async function startRecording() {
+  async function startRealRecording() {
     setError(null);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -187,7 +231,44 @@ export function ChatWidget({ enabled, voiceCallEnabled }: { enabled: boolean; vo
     }
   }
 
+  /** بديل مجاني كامل لوضع العرض التجريبي: تفريغ محلي في المتصفح عبر Web Speech API بدل رفع تسجيل
+   * حقيقي لـ/api/platform-chat/voice (بلا أي استدعاء Whisper إطلاقاً). */
+  function startDemoRecording() {
+    setError(null);
+    const Ctor = getSpeechRecognitionCtor();
+    if (!Ctor) {
+      setError("التعرّف الصوتي غير مدعوم في هذا المتصفح — جرّب Chrome");
+      return;
+    }
+    const recognition = new Ctor();
+    recognition.lang = "ar-SA";
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.onresult = (event) => {
+      const transcript = event.results[0]?.[0]?.transcript?.trim();
+      if (transcript) void sendText(transcript);
+    };
+    recognition.onerror = () => {
+      setError("تعذّر التعرّف على الصوت — جرّب مرة أخرى");
+      setIsRecording(false);
+    };
+    recognition.onend = () => setIsRecording(false);
+    demoRecognitionRef.current = recognition;
+    setIsRecording(true);
+    recognition.start();
+  }
+
+  function startRecording() {
+    if (demoMode) return startDemoRecording();
+    return startRealRecording();
+  }
+
   function stopRecording() {
+    if (demoMode) {
+      demoRecognitionRef.current?.stop();
+      setIsRecording(false);
+      return;
+    }
     mediaRecorderRef.current?.stop();
     setIsRecording(false);
   }
@@ -262,6 +343,8 @@ export function ChatWidget({ enabled, voiceCallEnabled }: { enabled: boolean; vo
     if (callTimeoutRef.current) clearTimeout(callTimeoutRef.current);
     callIntervalRef.current = null;
     callTimeoutRef.current = null;
+
+    // تنظيف مسار WebRTC الحقيقي — كل الـrefs تبقى null أصلاً في وضع العرض التجريبي فلا أثر لها هناك.
     dataChannelRef.current?.close();
     peerConnectionRef.current?.close();
     localStreamRef.current?.getTracks().forEach((t) => t.stop());
@@ -269,6 +352,13 @@ export function ChatWidget({ enabled, voiceCallEnabled }: { enabled: boolean; vo
     dataChannelRef.current = null;
     peerConnectionRef.current = null;
     localStreamRef.current = null;
+
+    // تنظيف مسار العرض التجريبي (Web Speech API) — لا أثر له في المسار الحقيقي.
+    demoCallActiveRef.current = false;
+    demoCallRecognitionRef.current?.stop();
+    demoCallRecognitionRef.current = null;
+    if (isSpeechSynthesisSupported()) window.speechSynthesis.cancel();
+
     setIsCalling(false);
   }
 
@@ -278,7 +368,80 @@ export function ChatWidget({ enabled, voiceCallEnabled }: { enabled: boolean; vo
     if (sid) await sendVoiceTranscript(sid, "ai", "[انتهت المكالمة الصوتية]");
   }
 
+  function speakText(text: string, onEnd: () => void) {
+    if (!isSpeechSynthesisSupported()) {
+      onEnd();
+      return;
+    }
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = "ar-SA";
+    utterance.onend = onEnd;
+    utterance.onerror = onEnd;
+    window.speechSynthesis.speak(utterance);
+  }
+
+  /** دورة استماع→رد→نطق→استماع محلية بالكامل عبر Web Speech API — بلا أي WebRTC أو realtime-token
+   * إطلاقاً، الرد النصي يمر عبر نفس /api/platform-chat/message العادية (اللي تستخدم بدورها
+   * demoReplyEngine.ts تلقائياً لأن الجلسة isDemo). */
+  function startDemoListenCycle(sid: string) {
+    if (!demoCallActiveRef.current) return;
+    const Ctor = getSpeechRecognitionCtor();
+    if (!Ctor) return;
+
+    const recognition = new Ctor();
+    recognition.lang = "ar-SA";
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.onresult = (event) => {
+      const transcript = event.results[0]?.[0]?.transcript?.trim();
+      if (!transcript || !demoCallActiveRef.current) return;
+      void (async () => {
+        void sendVoiceTranscript(sid, "visitor", transcript);
+        const res = await fetch("/api/platform-chat/message", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionId: sid, text: transcript }),
+        }).catch(() => null);
+        const data = res ? await res.json().catch(() => ({})) : {};
+        if (data.sessionStatus) setSessionStatus(data.sessionStatus);
+        const replyText = typeof data.replyText === "string" ? data.replyText : null;
+        if (replyText) void sendVoiceTranscript(sid, "ai", replyText);
+        if (demoCallActiveRef.current) {
+          if (replyText) speakText(replyText, () => startDemoListenCycle(sid));
+          else startDemoListenCycle(sid); // لا رد نصي (تحويل مثلاً) — استأنف الاستماع مباشرة
+        }
+      })();
+    };
+    recognition.onerror = () => {
+      if (demoCallActiveRef.current) startDemoListenCycle(sid); // خطأ عابر (صمت طويل مثلاً) — استأنف
+    };
+    demoCallRecognitionRef.current = recognition;
+    recognition.start();
+  }
+
+  async function startDemoCall() {
+    setCallError(null);
+    if (!getSpeechRecognitionCtor() || !isSpeechSynthesisSupported()) {
+      setCallError("المحادثة الصوتية التجريبية غير مدعومة في هذا المتصفح — جرّب Chrome");
+      return;
+    }
+    const sid = await ensureSession();
+    if (!sid) return;
+
+    demoCallActiveRef.current = true;
+    setIsCalling(true);
+    setCallSecondsLeft(CALL_DURATION_SECONDS);
+    callIntervalRef.current = setInterval(() => {
+      setCallSecondsLeft((prev) => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    callTimeoutRef.current = setTimeout(() => void endCall(), CALL_DURATION_SECONDS * 1000);
+
+    startDemoListenCycle(sid);
+  }
+
   async function startCall() {
+    if (demoMode) return startDemoCall();
+
     setCallError(null);
     const sid = await ensureSession();
 
@@ -407,7 +570,8 @@ export function ChatWidget({ enabled, voiceCallEnabled }: { enabled: boolean; vo
             {voiceCallEnabled && (
               <button
                 onClick={isCalling ? () => void endCall() : () => void startCall()}
-                disabled={isSending || isRecording}
+                disabled={isSending || isRecording || (demoMode && !speechSupported)}
+                title={demoMode && !speechSupported ? "غير مدعوم في هذا المتصفح — جرّب Chrome" : undefined}
                 aria-label={isCalling ? "إنهاء المكالمة" : "اتصال صوتي"}
                 className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition disabled:opacity-50 ${
                   isCalling ? "animate-pulse bg-danger-500 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300"
@@ -418,7 +582,8 @@ export function ChatWidget({ enabled, voiceCallEnabled }: { enabled: boolean; vo
             )}
             <button
               onClick={isRecording ? stopRecording : startRecording}
-              disabled={isCalling}
+              disabled={isCalling || (demoMode && !speechSupported)}
+              title={demoMode && !speechSupported ? "غير مدعوم في هذا المتصفح — جرّب Chrome" : undefined}
               aria-label={isRecording ? "إيقاف التسجيل" : "تسجيل رسالة صوتية"}
               className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition disabled:opacity-50 ${
                 isRecording ? "animate-pulse bg-danger-500 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300"
@@ -435,7 +600,7 @@ export function ChatWidget({ enabled, voiceCallEnabled }: { enabled: boolean; vo
               className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 dark:border-white/10 dark:bg-slate-800 dark:text-white"
             />
             <button
-              onClick={sendText}
+              onClick={() => sendText()}
               disabled={isSending || isRecording || isCalling || !input.trim()}
               className="shrink-0 rounded-lg bg-accent-500 px-3 py-2 text-sm font-semibold text-white transition hover:bg-accent-600 disabled:opacity-50"
             >
