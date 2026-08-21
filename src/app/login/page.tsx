@@ -5,6 +5,7 @@ import { signIn, getSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { AuthShell } from "@/components/auth/AuthShell";
+import { PasswordInput } from "@/components/auth/PasswordInput";
 import { LogoFull } from "@/components/Logo";
 import { isPlatformRole } from "@/lib/rbac";
 
@@ -92,10 +93,8 @@ function LoginForm() {
           </div>
           <div>
             <label className="label-field">كلمة المرور</label>
-            <input
-              type="password"
+            <PasswordInput
               required
-              className="input-field"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"

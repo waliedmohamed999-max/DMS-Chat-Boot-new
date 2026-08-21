@@ -3,6 +3,7 @@
 import { useFormState, useFormStatus } from "react-dom";
 import Link from "next/link";
 import { AuthShell } from "@/components/auth/AuthShell";
+import { PasswordInput } from "@/components/auth/PasswordInput";
 import { LogoFull } from "@/components/Logo";
 import { affiliateLogin } from "./actions";
 
@@ -43,7 +44,7 @@ export default function AffiliateLoginPage() {
           </div>
           <div>
             <label className="label-field">كلمة المرور</label>
-            <input name="password" type="password" required className="input-field" dir="ltr" />
+            <PasswordInput name="password" required dir="ltr" />
           </div>
           <SubmitButton />
           <p className="text-center text-xs text-slate-500">

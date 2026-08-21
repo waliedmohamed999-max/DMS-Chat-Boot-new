@@ -2,6 +2,7 @@
 
 import { useFormState, useFormStatus } from "react-dom";
 import { AuthShell } from "@/components/auth/AuthShell";
+import { PasswordInput } from "@/components/auth/PasswordInput";
 import { LogoFull } from "@/components/Logo";
 import { platformLogin } from "./actions";
 
@@ -53,7 +54,7 @@ export default function PlatformLoginPage() {
           </div>
           <div>
             <label className="label-field">كلمة المرور</label>
-            <input name="password" type="password" required className="input-field" placeholder="••••••••" dir="ltr" />
+            <PasswordInput name="password" required placeholder="••••••••" dir="ltr" />
           </div>
           <SubmitButton />
           <p className="text-center text-xs text-slate-500">
