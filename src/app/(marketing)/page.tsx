@@ -9,6 +9,8 @@ import { CampaignIcon, ChatbotIcon, CrmIcon, IntegrationIcon } from "@/component
 import { getPublicPlans } from "@/app/partners/apply/actions";
 import { PricingClient } from "@/app/(marketing)/pricing/PricingClient";
 import { getSiteContent } from "@/lib/siteContent";
+import { getPlatformSettings } from "@/lib/platformSettings";
+import { ChatWidget } from "@/components/marketing/ChatWidget";
 
 // الباقات حقيقية وقابلة للتعديل من لوحة مالك المنصة — يجب أن تُقرأ حياً وليس وقت البناء (نفس السبب
 // الموثَّق في partners/apply و partners/join). محتوى الصفحة نفسه أصبح أيضاً قابلاً للتعديل حياً من
@@ -24,10 +26,13 @@ export const metadata: Metadata = {
 const FEATURE_ICONS = [CampaignIcon, ChatbotIcon, CrmIcon, IntegrationIcon];
 
 export default async function HomePage() {
-  const [plans, content] = await Promise.all([getPublicPlans(), getSiteContent()]);
+  const [plans, content, settings] = await Promise.all([getPublicPlans(), getSiteContent(), getPlatformSettings()]);
 
   return (
     <div>
+      {/* مقصورة على الصفحة الرئيسية فقط (وليس كل صفحات الموقع التسويقي عبر MarketingLayout) — قرار
+          صريح: يظهر فقط في الواجهة اللي بيتعرض فيها الخدمات، وليس في about/terms/privacy إلخ. */}
+      <ChatWidget enabled={settings.platformChatEnabled} />
       {/* Hero — أعلى الصفحة مباشرة (above the fold)، لذلك بلا أي انيميشن Reveal مبني على التمرير:
           المحتوى مرئي فوراً منذ أول رسم بدل أي وميض ظهور مؤجَّل يضر بأول انطباع وبسرعة العرض المُدرَكة. */}
       <section className="mx-auto max-w-6xl px-4 py-16 sm:py-24">
