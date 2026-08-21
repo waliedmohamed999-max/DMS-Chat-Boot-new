@@ -139,6 +139,14 @@ export default async function GlobalSettingsPage() {
               <input type="checkbox" name="platformVoiceCallEnabled" defaultChecked={settings.platformVoiceCallEnabled} />
               تفعيل زر "اتصال" (مكالمة صوتية حية Speech-to-Speech) — مفتاح منفصل، تكلفة أعلى بكثير من رسالة واحدة (~$0.016/دقيقة)
             </label>
+            <label className="flex items-center gap-2 text-sm text-slate-200">
+              <input type="checkbox" name="platformDemoModeEnabled" defaultChecked={settings.platformDemoModeEnabled} />
+              تفعيل وضع العرض التجريبي المجاني (نص + صوت + مكالمة عبر متصفح الزائر مباشرة — بلا أي تكلفة OpenAI فعلية)
+            </label>
+            <p className="text-xs text-slate-500">
+              وضع العرض التجريبي يستقل تماماً عن الخيارات أعلاه — يستبدل الردود الحقيقية بمحرك ردود مُبرمَج،
+              ويستبدل التعرّف/النطق الصوتي بأدوات المتصفح المجانية (Chrome/Edge فقط) بدل Whisper/Realtime API.
+            </p>
           </div>
         </div>
 

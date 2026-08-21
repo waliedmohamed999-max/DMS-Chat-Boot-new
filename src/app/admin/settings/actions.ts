@@ -30,6 +30,7 @@ export async function updatePlatformSettings(formData: FormData) {
   const platformChatEnabled = formData.get("platformChatEnabled") === "on";
   const platformChatVoiceReplyEnabled = formData.get("platformChatVoiceReplyEnabled") === "on";
   const platformVoiceCallEnabled = formData.get("platformVoiceCallEnabled") === "on";
+  const platformDemoModeEnabled = formData.get("platformDemoModeEnabled") === "on";
 
   // السر لا يُعاد عرضه أبداً في النموذج (لا يُملأ الحقل بالقيمة الحالية) — يُحدَّث فقط لو أُدخِلت
   // قيمة جديدة فعلياً، تفادياً لإعادة كتابة قيمة فارغة فوق سرّ حقيقي محفوظ لمجرد حفظ النموذج.
@@ -43,14 +44,14 @@ export async function updatePlatformSettings(formData: FormData) {
     update: {
       integrationsMode, maintenanceMode, maintenanceMessage, supportEmail, supportPhone, defaultTrialDays, termsVersion,
       vatRateBps, defaultCurrency, metaAppId, emailProviderName, smsProviderName,
-      sellerLegalName, sellerVatNumber, sellerAddress, aiModel, platformChatEnabled, platformChatVoiceReplyEnabled, platformVoiceCallEnabled,
+      sellerLegalName, sellerVatNumber, sellerAddress, aiModel, platformChatEnabled, platformChatVoiceReplyEnabled, platformVoiceCallEnabled, platformDemoModeEnabled,
       ...(encryptedMetaAppSecret ? { encryptedMetaAppSecret } : {}),
       ...(encryptedOpenAiApiKey ? { encryptedOpenAiApiKey } : {}),
     },
     create: {
       id: "singleton", integrationsMode, maintenanceMode, maintenanceMessage, supportEmail, supportPhone, defaultTrialDays, termsVersion,
       vatRateBps, defaultCurrency, metaAppId, emailProviderName, smsProviderName, encryptedMetaAppSecret,
-      sellerLegalName, sellerVatNumber, sellerAddress, aiModel, encryptedOpenAiApiKey, platformChatEnabled, platformChatVoiceReplyEnabled, platformVoiceCallEnabled,
+      sellerLegalName, sellerVatNumber, sellerAddress, aiModel, encryptedOpenAiApiKey, platformChatEnabled, platformChatVoiceReplyEnabled, platformVoiceCallEnabled, platformDemoModeEnabled,
     },
   });
 
@@ -59,7 +60,7 @@ export async function updatePlatformSettings(formData: FormData) {
       userId: session.user.id, action: "platform.settings_update", targetType: "PlatformSettings",
       metaJson: {
         integrationsMode, maintenanceMode, vatRateBps, defaultCurrency, metaAppSecretChanged: !!encryptedMetaAppSecret,
-        aiModel, openAiApiKeyChanged: !!encryptedOpenAiApiKey, platformChatEnabled, platformChatVoiceReplyEnabled, platformVoiceCallEnabled,
+        aiModel, openAiApiKeyChanged: !!encryptedOpenAiApiKey, platformChatEnabled, platformChatVoiceReplyEnabled, platformVoiceCallEnabled, platformDemoModeEnabled,
       },
     },
   });
