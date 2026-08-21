@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { copyToClipboard } from "@/lib/clipboard";
 
 export function ReferralLinkBox({ code }: { code: string }) {
   const [copied, setCopied] = useState(false);
@@ -12,12 +13,9 @@ export function ReferralLinkBox({ code }: { code: string }) {
   const link = `${origin || "https://app.dms.sa"}/?ref=${code}`;
 
   async function copy() {
-    try {
-      await navigator.clipboard.writeText(link);
+    if (await copyToClipboard(link)) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // فشل الوصول لـclipboard API (صلاحيات المتصفح) — لا داعي لكسر الواجهة، المستخدم يقدر ينسخ يدوياً
     }
   }
 

@@ -1409,6 +1409,7 @@ model Affiliate {
   referrals   Referral[]
   commissions Commission[]
   payouts     Payout[]
+  clicks      ReferralClick[]
 
   @@index([status])
 }
@@ -1424,11 +1425,30 @@ model Referral {
   clickedAt   DateTime  @default(now())
   // وقت إنشاء التينانت فعلياً (نهاية نافذة الإحالة الفعلية) — يُستخدم كنقطة بداية حساب نافذة الـ12 شهراً.
   convertedAt DateTime  @default(now())
+  // نفس قيمة ReferralClick.source وقت أول نقرة أدّت لهذا التحويل (من كوكي dms_ref_src) — يسمح بحساب
+  // معدّل تحويل حقيقي لكل قناة (نقرات هذه القناة مقابل تحويلات نفس القناة)، وليس رقماً إجمالياً فقط.
+  source      String?
   createdAt   DateTime  @default(now())
 
   commissions Commission[]
 
   @@index([affiliateId])
+}
+
+// نقرة خام واحدة على رابط إحالة (?ref=CODE) — بخلاف Referral (تحويل ناجح/تسجيل تاجر فعلي فقط)، هذا
+// سجل كل زيارة أولى فعلية، يُتيح حساب قمع تحويل حقيقي (نقرات → تحويلات) بدل الاعتماد على التحويلات
+// وحدها. بلا RLS (نفس بقية جداول برنامج التسويق بالعمولة، عابر للمستأجرين بطبيعته).
+model ReferralClick {
+  id          String    @id @default(cuid())
+  affiliateId String
+  affiliate   Affiliate @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
+  // قناة الترويج الاختيارية من ?src= في رابط الإحالة (whatsapp/twitter/instagram/email/direct) —
+  // تُستخدَم لتفصيل الأداء حسب القناة في لوحة المسوّق.
+  source      String?
+  createdAt   DateTime  @default(now())
+
+  @@index([affiliateId, createdAt])
+  @@index([affiliateId, source])
 }
 
 model Commission {

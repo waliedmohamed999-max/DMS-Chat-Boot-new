@@ -6,7 +6,6 @@ import { useMemo, useState } from "react";
 import { registerTenant } from "./actions";
 import { AuthShell } from "@/components/auth/AuthShell";
 import { LogoFull } from "@/components/Logo";
-import { useCaptureReferral } from "@/lib/affiliates/useReferralCapture";
 import { resolvePlanPrice } from "@/lib/planPricing";
 import { COUNTRY_LABELS_AR, CURRENCY_SYMBOLS } from "@/lib/currency";
 
@@ -36,7 +35,6 @@ function SubmitButton() {
 }
 
 export function RegisterForm({ plans, countries, initialCountry }: { plans: PublicPlan[]; countries: CountryOption[]; initialCountry: Country }) {
-  useCaptureReferral();
   const [state, formAction] = useFormState(registerTenant, { error: null });
   const [country, setCountry] = useState<Country>(initialCountry);
   const countryOption = countries.find((c) => c.country === country) ?? countries[0] ?? { country, currency: "SAR", exchangeRateFromSar: 1, isDefault: true };

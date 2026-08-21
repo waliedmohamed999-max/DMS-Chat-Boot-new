@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { requireSuperAdminSession } from "@/lib/session";
 import { requireEffectivePermission } from "@/lib/rbac";
 import { rawDb } from "@/lib/db";
+import { sendEmail } from "@/lib/email/send";
+import { payoutPaidEmail } from "@/lib/email/affiliateTemplates";
 import type { AffiliateTier } from "@prisma/client";
 
 export async function approveAffiliate(affiliateId: string) {
@@ -47,9 +49,20 @@ export async function markPayoutPaid(payoutId: string, reference: string) {
   const session = await requireSuperAdminSession();
   requireEffectivePermission(session.user.permissions, "platform.affiliates.manage");
 
-  await rawDb.$transaction(async (tx) => {
-    await tx.payout.update({ where: { id: payoutId }, data: { status: "PAID", paidAt: new Date(), reference: reference || null } });
+  const payout = await rawDb.$transaction(async (tx) => {
+    const updated = await tx.payout.update({
+      where: { id: payoutId },
+      data: { status: "PAID", paidAt: new Date(), reference: reference || null },
+      include: { affiliate: { select: { email: true, name: true } } },
+    });
     await tx.commission.updateMany({ where: { payoutId }, data: { status: "PAID" } });
+    return updated;
+  });
+
+  await sendEmail(
+    payoutPaidEmail({ to: payout.affiliate.email, name: payout.affiliate.name, amountSar: payout.amountSar, reference: payout.reference })
+  ).catch((err) => {
+    console.error(`❌ فشل إرسال بريد تأكيد الصرف للمسوّق ${payout.affiliateId}:`, err);
   });
 
   revalidatePath("/admin/affiliates");

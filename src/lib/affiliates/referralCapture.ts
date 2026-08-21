@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { rawDb } from "@/lib/db";
 
 export const REFERRAL_COOKIE_NAME = "dms_ref";
+export const REFERRAL_SOURCE_COOKIE_NAME = "dms_ref_src";
 export const REFERRAL_COOKIE_MAX_AGE_SECONDS = 90 * 24 * 3600; // نافذة إحالة 90 يوماً
 
 /** يقرأ كوكي الإحالة (إن وُجد) ويتحقق أن الكود يخص مسوّقاً ACTIVE فعلياً — لا عمولة لكود مسوّق
@@ -24,5 +25,6 @@ export async function createReferralIfAny(tenantId: string): Promise<void> {
   const existing = await rawDb.referral.findUnique({ where: { tenantId } });
   if (existing) return;
 
-  await rawDb.referral.create({ data: { affiliateId, tenantId } });
+  const source = cookies().get(REFERRAL_SOURCE_COOKIE_NAME)?.value || null;
+  await rawDb.referral.create({ data: { affiliateId, tenantId, source } });
 }

@@ -3,7 +3,6 @@
 import { useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { submitPartnerApplication, type SubmitApplicationResult } from "@/app/partners/apply/actions";
-import { useCaptureReferral } from "@/lib/affiliates/useReferralCapture";
 import { resolvePlanPrice } from "@/lib/planPricing";
 import { COUNTRY_LABELS_AR, CURRENCY_SYMBOLS } from "@/lib/currency";
 
@@ -44,7 +43,6 @@ type FormState = {
 const STEPS = ["نوع النشاط", "بيانات العمل", "اختر باقتك", "المراجعة والإرسال"] as const;
 
 export function PartnersApplyWizard({ plans, countries, initialCountry }: { plans: PublicPlan[]; countries: CountryOption[]; initialCountry: Country }) {
-  useCaptureReferral();
   const [step, setStep] = useState(0);
   const initialCountryOption = countries.find((c) => c.country === initialCountry) ?? countries[0] ?? { country: initialCountry, currency: "SAR", exchangeRateFromSar: 1, isDefault: true };
   const defaultPlanKey = plans[0]?.key ?? "";

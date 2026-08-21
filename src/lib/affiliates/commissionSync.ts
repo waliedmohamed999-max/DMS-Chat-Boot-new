@@ -1,5 +1,7 @@
 import { rawDb, superAdminDb } from "@/lib/db";
 import { TIER_RATE_PERCENT, tierForReferredCount } from "./tiers";
+import { sendEmail } from "@/lib/email/send";
+import { commissionApprovedEmail } from "@/lib/email/affiliateTemplates";
 
 const NET_30_MS = 30 * 24 * 3600 * 1000;
 const COMMISSION_WINDOW_MONTHS = 12;
@@ -85,12 +87,48 @@ async function generateCommissionsForNewlyPaidInvoices(): Promise<number> {
   return created;
 }
 
+/** يُرقّي كل عمولة تجاوزت فترة حجز Net 30 إلى APPROVED، ثم يبعث بريد إشعار واحد مجمَّع لكل مسوّق
+ * (وليس بريداً منفصلاً لكل عمولة) بإجمالي المبلغ الجديد المعتمَد هذه الدورة + رصيده الكلي المتاح
+ * للصرف الآن. */
 async function promotePendingToApproved(): Promise<number> {
-  const result = await rawDb.commission.updateMany({
+  // يُجلَب بنفس شرط استعلام updateMany **قبل** تنفيذه — بعد التحديث لا يمكن تمييز العمولات التي
+  // اعتُمدت هذه الدورة تحديداً عن أي عمولة اعتُمدت في دورة سابقة (كلاهما status=APPROVED حينها).
+  const newlyEligible = await rawDb.commission.findMany({
     where: { status: "PENDING", eligibleAt: { lte: new Date() } },
+    select: { id: true, affiliateId: true, amountSar: true },
+  });
+  if (newlyEligible.length === 0) return 0;
+
+  await rawDb.commission.updateMany({
+    where: { id: { in: newlyEligible.map((c) => c.id) } },
     data: { status: "APPROVED" },
   });
-  return result.count;
+
+  const newlyApprovedByAffiliateId = new Map<string, number>();
+  for (const c of newlyEligible) {
+    newlyApprovedByAffiliateId.set(c.affiliateId, (newlyApprovedByAffiliateId.get(c.affiliateId) ?? 0) + c.amountSar);
+  }
+  const affiliateIds = [...newlyApprovedByAffiliateId.keys()];
+
+  const [affiliates, totalApprovedGroups] = await Promise.all([
+    rawDb.affiliate.findMany({ where: { id: { in: affiliateIds } }, select: { id: true, email: true, name: true } }),
+    rawDb.commission.groupBy({
+      by: ["affiliateId"],
+      where: { affiliateId: { in: affiliateIds }, status: "APPROVED", payoutId: null },
+      _sum: { amountSar: true },
+    }),
+  ]);
+  const totalApprovedByAffiliateId = new Map(totalApprovedGroups.map((g) => [g.affiliateId, g._sum.amountSar ?? 0]));
+
+  for (const affiliate of affiliates) {
+    const amountSar = newlyApprovedByAffiliateId.get(affiliate.id) ?? 0;
+    const totalApprovedSar = totalApprovedByAffiliateId.get(affiliate.id) ?? amountSar;
+    await sendEmail(commissionApprovedEmail({ to: affiliate.email, name: affiliate.name, amountSar, totalApprovedSar })).catch((err) => {
+      console.error(`❌ فشل إرسال بريد اعتماد عمولة للمسوّق ${affiliate.id}:`, err);
+    });
+  }
+
+  return newlyEligible.length;
 }
 
 /** ترقية تلقائية فقط (أبداً تخفيض تلقائي) — راجع DECISIONS.md لسبب هذا القرار. */
