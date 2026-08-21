@@ -9,6 +9,7 @@ import { PendingReviewScreen } from "@/components/dashboard/PendingReviewScreen"
 import { AnnouncementBanner } from "@/components/dashboard/AnnouncementBanner";
 import { getPlatformSettings } from "@/lib/platformSettings";
 import { TENANT_STATUS_LABELS_AR } from "@/lib/tenantStatus";
+import { SEVERITY_PRIORITY } from "@/lib/announcements/severity";
 
 const NAV_ITEMS: (NavItem & { requires?: Permission })[] = [
   { href: "/dashboard", label: "نظرة عامة", icon: "📊" },
@@ -29,16 +30,23 @@ const NAV_ITEMS: (NavItem & { requires?: Permission })[] = [
  * PlatformAnnouncement جدول عام (لا tenantId، غير خاضع لـ RLS) — القراءة عبر rawDb آمنة.
  * AnnouncementDismissal مستأجَر (RLS) فيُقرأ عبر withTenant. الفلترة حسب الجمهور تتم في الذاكرة
  * لأن عدد الإعلانات صغير عملياً ولا يستدعي استعلام JSON معقّد على audienceTenantIdsJson.
+ * فقط الإعلانات SENT وغير المنتهية الصلاحية بعد (expiresAt فارغ أو في المستقبل) — DRAFT/SCHEDULED
+ * لم تُرسَل بعد، وEXPIRED تجاوزت صلاحيتها.
  */
 async function getApplicableAnnouncement(tenantId: string) {
+  const now = new Date();
   const [announcements, dismissals, subscription] = await Promise.all([
-    rawDb.platformAnnouncement.findMany({ orderBy: { createdAt: "desc" }, take: 20 }),
+    rawDb.platformAnnouncement.findMany({
+      where: { status: "SENT", OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] },
+      orderBy: { createdAt: "desc" },
+      take: 20,
+    }),
     withTenant(tenantId, (tx) => tx.announcementDismissal.findMany({ where: { tenantId } })),
     withTenant(tenantId, (tx) => tx.subscription.findUnique({ where: { tenantId } })),
   ]);
   const dismissedIds = new Set(dismissals.map((d) => d.announcementId));
 
-  return announcements.find((a) => {
+  const applicable = announcements.filter((a) => {
     if (dismissedIds.has(a.id)) return false;
     if (a.audienceType === "ALL") return true;
     if (a.audienceType === "SPECIFIC_PLAN") return a.audiencePlanId === subscription?.planId;
@@ -48,6 +56,11 @@ async function getApplicableAnnouncement(tenantId: string) {
     }
     return false;
   });
+
+  // ترتيب حسب الأولوية (الأحرج أولاً) ثم الأحدث — نفس منطق الفلترة القديم لكن بترتيب صريح بدل الاعتماد
+  // على ترتيب createdAt وحده، حتى لو تعدّدت إعلانات مؤهَّلة في آن واحد.
+  applicable.sort((a, b) => SEVERITY_PRIORITY[a.severity]! - SEVERITY_PRIORITY[b.severity]!);
+  return applicable[0];
 }
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -128,7 +141,13 @@ export default async function DashboardLayout({ children }: { children: React.Re
           <main className="flex-1 overflow-y-auto p-6 pb-24 lg:pb-6">
             {activeAnnouncement && (
               <div className="mb-4">
-                <AnnouncementBanner id={activeAnnouncement.id} title={activeAnnouncement.title} body={activeAnnouncement.body} />
+                <AnnouncementBanner
+                  id={activeAnnouncement.id}
+                  title={activeAnnouncement.title}
+                  body={activeAnnouncement.body}
+                  severity={activeAnnouncement.severity}
+                  dismissible={activeAnnouncement.dismissible}
+                />
               </div>
             )}
             {children}

@@ -22,7 +22,7 @@ DECLARE
     'MessageTemplate', 'Segment', 'Campaign',
     'ChatbotFlow', 'Integration', 'WebhookLog', 'Product', 'Order',
     'AuditLog', 'Subscription', 'Invoice',
-    'ApprovalRequest', 'MerchantNote', 'ImpersonationSession', 'AnnouncementDismissal',
+    'ApprovalRequest', 'MerchantNote', 'ImpersonationSession', 'AnnouncementDismissal', 'AnnouncementView',
     'QuickReply', 'InternalNote', 'ContactImportBatch', 'PaymentMethod', 'CreditNote',
     'AiAgentConfig', 'AiReplyLog', 'TenantChatSession', 'TenantChatMessage'
   ];

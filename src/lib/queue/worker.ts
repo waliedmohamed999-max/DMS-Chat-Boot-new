@@ -18,6 +18,7 @@ import { scanAndResetStuckChatbotSessions } from "@/lib/chatbot/timeoutScan";
 import { scanAndExpireSubscriptions } from "@/lib/billing/expireSubscriptions";
 import { recognizeRevenueForActiveInvoices } from "@/lib/accounting/revenueRecognition";
 import { syncAffiliateCommissions } from "@/lib/affiliates/commissionSync";
+import { scanAnnouncementLifecycle } from "@/lib/announcements/lifecycle";
 import type { Prisma } from "@prisma/client";
 
 // حد إرسال لكل مستأجر: 60 رسالة كل 10 ثوانٍ، بحد أقصى منطقي لتجريب الحملات دون أن تحتكر
@@ -323,6 +324,24 @@ async function scheduleAffiliateCommissionSync() {
   });
 }
 scheduleAffiliateCommissionSync().catch((err) => console.error("❌ تعذّرت جدولة مزامنة عمولات المسوّقين:", err));
+
+// فحص دوري لدورة حياة إعلانات المنصة (تفعيل المجدوَل + إنهاء صلاحية المنتهي) — كل 5 دقائق، نفس تردد
+// TRIGGER_SCAN_INTERVAL_MS للحملات الآلية، بنفس نمط triggerScanQueue/scheduleTriggerScan أعلاه حرفياً.
+const ANNOUNCEMENT_LIFECYCLE_INTERVAL_MS = 5 * 60 * 1000;
+const announcementLifecycleWorker = new Worker("announcement-lifecycle-scan", async () => scanAnnouncementLifecycle(), {
+  connection: redisConnection,
+  concurrency: 1,
+});
+announcementLifecycleWorker.on("failed", (job, err) => console.error("❌ فشل فحص دورة حياة الإعلانات:", err.message));
+
+const announcementLifecycleQueue = new Queue("announcement-lifecycle-scan", { connection: redisConnection });
+async function scheduleAnnouncementLifecycleScan() {
+  await announcementLifecycleQueue.add("scan", {}, {
+    repeat: { every: ANNOUNCEMENT_LIFECYCLE_INTERVAL_MS },
+    jobId: "recurring-announcement-lifecycle-scan",
+  });
+}
+scheduleAnnouncementLifecycleScan().catch((err) => console.error("❌ تعذّرت جدولة فحص دورة حياة الإعلانات:", err));
 
 console.log("🚀 عامل إرسال الحملات يعمل الآن، بانتظار المهام...");
 console.log(`⏱️  فحص الحملات الآلية مجدوَل كل ${TRIGGER_SCAN_INTERVAL_MS / 60000} دقائق`);

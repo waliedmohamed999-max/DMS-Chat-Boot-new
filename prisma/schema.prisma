@@ -88,6 +88,7 @@ model Tenant {
   merchantNotes          MerchantNote[]
   impersonationSessions  ImpersonationSession[]
   announcementDismissals AnnouncementDismissal[]
+  announcementViews      AnnouncementView[]
   quickReplies           QuickReply[]
   internalNotes          InternalNote[]
   contactImportBatches   ContactImportBatch[]
@@ -461,17 +462,40 @@ enum AnnouncementAudience {
   SPECIFIC_TENANTS
 }
 
+enum AnnouncementStatus {
+  DRAFT
+  SCHEDULED
+  SENT
+  EXPIRED
+}
+
+enum AnnouncementSeverity {
+  INFO // معلومة عامة
+  UPDATE // ميزة/تحديث جديد
+  MAINTENANCE // صيانة مجدولة
+  CRITICAL // عاجل/حرج
+}
+
 model PlatformAnnouncement {
-  id                    String               @id @default(cuid())
+  id                    String                @id @default(cuid())
   title                 String
   body                  String
-  audienceType          AnnouncementAudience @default(ALL)
+  audienceType          AnnouncementAudience  @default(ALL)
   audiencePlanId        String?
   audienceTenantIdsJson Json? // مصفوفة معرّفات تجار عند SPECIFIC_TENANTS
+  severity              AnnouncementSeverity  @default(INFO)
+  dismissible           Boolean               @default(true)
+  // القيمة الافتراضية SENT تحافظ على سلوك الصفوف القديمة الموجودة فعلاً قبل هذا التعديل (كانت كلها
+  // "مُرسَلة فوراً" بلا مفهوم مسودة/جدولة أصلاً).
+  status                AnnouncementStatus    @default(SENT)
+  scheduledFor          DateTime?
+  expiresAt             DateTime?
+  sentAt                DateTime?
   createdByUserId       String?
-  createdAt             DateTime             @default(now())
+  createdAt             DateTime              @default(now())
 
   dismissals AnnouncementDismissal[]
+  views      AnnouncementView[]
 }
 
 model AnnouncementDismissal {
@@ -481,6 +505,20 @@ model AnnouncementDismissal {
   tenantId       String
   tenant         Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   dismissedAt    DateTime             @default(now())
+
+  @@unique([announcementId, tenantId])
+}
+
+// نظير AnnouncementDismissal بالحرف، لكن لحدث "مشاهدة" منفصل تماماً عن "إغلاق" — كانا مخلوطين سابقاً
+// في رقم واحد (dismissals.length) رغم كونهما حدثين مختلفين فعلياً (التاجر قد يشاهد الإعلان ويتركه
+// ظاهراً بلا إغلاق لفترة، أو يغلقه فوراً بلا قراءة متأنية).
+model AnnouncementView {
+  id             String               @id @default(cuid())
+  announcementId String
+  announcement   PlatformAnnouncement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  tenantId       String
+  tenant         Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  viewedAt       DateTime             @default(now())
 
   @@unique([announcementId, tenantId])
 }
