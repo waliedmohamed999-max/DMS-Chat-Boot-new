@@ -8,6 +8,7 @@ import { MarketingToolkit } from "@/components/affiliates/MarketingToolkit";
 import { AffiliateFunnelChart } from "@/components/affiliates/AffiliateFunnelChart";
 import { PayoutRequestForm } from "@/components/affiliates/PayoutRequestForm";
 import { MIN_PAYOUT_SAR } from "@/lib/affiliates/payout";
+import { buildWeeklyFunnelData, buildChannelBreakdown } from "@/lib/affiliates/funnel";
 import type { CommissionStatus } from "@prisma/client";
 
 const COMMISSION_STATUS_LABELS_AR: Record<string, string> = {
@@ -27,8 +28,6 @@ const PAYOUT_STATUS_LABELS_AR: Record<string, string> = {
 };
 const VALID_COMMISSION_STATUSES: CommissionStatus[] = ["PENDING", "APPROVED", "PAID", "REVERSED"];
 const PAGE_SIZE = 25;
-const WEEK_MS = 7 * 24 * 3600 * 1000;
-const FUNNEL_WEEKS = 8;
 
 export default async function AffiliateDashboardPage({
   searchParams,
@@ -97,37 +96,10 @@ export default async function AffiliateDashboardPage({
   const totalReferrals = allReferralsForFunnel.length;
   const overallConversionRate = totalClicks > 0 ? (totalReferrals / totalClicks) * 100 : 0;
 
-  // اتجاه أسبوعي (آخر 8 أسابيع) — الأقدم أولاً (يسار) وصولاً للأسبوع الحالي (يمين)، نفس ترتيب
-  // last7Days في dashboard/page.tsx.
-  const now = Date.now();
-  const weeksAgo = (d: Date) => Math.floor((now - d.getTime()) / WEEK_MS);
-  const funnelBuckets = Array.from({ length: FUNNEL_WEEKS }, () => ({ clicks: 0, referrals: 0 }));
-  for (const c of clicks) {
-    const idx = weeksAgo(c.createdAt);
-    if (idx >= 0 && idx < FUNNEL_WEEKS) funnelBuckets[idx]!.clicks++;
-  }
-  for (const r of allReferralsForFunnel) {
-    const idx = weeksAgo(r.convertedAt);
-    if (idx >= 0 && idx < FUNNEL_WEEKS) funnelBuckets[idx]!.referrals++;
-  }
-  const funnelData = funnelBuckets
-    .map((b, i) => ({ weekLabel: i === 0 ? "الحالي" : `-${i}أ`, clicks: b.clicks, referrals: b.referrals }))
-    .reverse();
-
-  // الأداء حسب القناة — تجميع النقرات والتحويلات حسب source ("عام" لو null).
-  const channelKeys = new Set<string>(["عام"]);
-  for (const c of clicks) channelKeys.add(c.source ?? "عام");
-  for (const r of allReferralsForFunnel) channelKeys.add(r.source ?? "عام");
-  const channelStats = [...channelKeys].map((channel) => {
-    const channelClicks = clicks.filter((c) => (c.source ?? "عام") === channel).length;
-    const channelReferrals = allReferralsForFunnel.filter((r) => (r.source ?? "عام") === channel).length;
-    return {
-      channel,
-      clicks: channelClicks,
-      referrals: channelReferrals,
-      rate: channelClicks > 0 ? (channelReferrals / channelClicks) * 100 : 0,
-    };
-  });
+  // اتجاه أسبوعي + أداء حسب القناة — عبر lib/affiliates/funnel.ts (مصدر حقيقة واحد يُعاد استخدامه
+  // أيضاً في admin/affiliates/*).
+  const funnelData = buildWeeklyFunnelData(clicks, allReferralsForFunnel);
+  const channelStats = buildChannelBreakdown(clicks, allReferralsForFunnel);
 
   const referralsTotalPages = Math.max(1, Math.ceil(referralsTotal / PAGE_SIZE));
   const commissionsTotalPages = Math.max(1, Math.ceil(commissionsTotal / PAGE_SIZE));
@@ -232,7 +204,7 @@ export default async function AffiliateDashboardPage({
                     <td className="px-5 py-2.5 text-white">{s.channel}</td>
                     <td className="px-5 py-2.5 text-slate-400" dir="ltr">{s.clicks}</td>
                     <td className="px-5 py-2.5 text-slate-400" dir="ltr">{s.referrals}</td>
-                    <td className="px-5 py-2.5 text-wa-400" dir="ltr">{s.rate.toFixed(1)}%</td>
+                    <td className="px-5 py-2.5 text-wa-400" dir="ltr">{s.conversionRate.toFixed(1)}%</td>
                   </tr>
                 ))}
               </tbody>

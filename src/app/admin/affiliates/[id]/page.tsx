@@ -4,6 +4,8 @@ import { requireSuperAdminSession } from "@/lib/session";
 import { hasEffectivePermission } from "@/lib/rbac";
 import { rawDb, superAdminDb } from "@/lib/db";
 import { TIER_LABELS_AR, TIER_RATE_PERCENT } from "@/lib/affiliates/tiers";
+import { buildWeeklyFunnelData, buildChannelBreakdown } from "@/lib/affiliates/funnel";
+import { AffiliateFunnelChart } from "@/components/affiliates/AffiliateFunnelChart";
 import { suspendAffiliate, reactivateAffiliate, setAffiliateTier, markPayoutPaid, markPayoutFailed } from "../actions";
 
 const STATUS_LABELS_AR: Record<string, string> = { PENDING: "بانتظار المراجعة", ACTIVE: "نشط", SUSPENDED: "معلَّق", REJECTED: "مرفوض" };
@@ -20,7 +22,7 @@ export default async function AdminAffiliateDetailPage({ params }: { params: { i
   const affiliate = await rawDb.affiliate.findUnique({ where: { id: params.id } });
   if (!affiliate) notFound();
 
-  const [referrals, commissions, payouts] = await Promise.all([
+  const [referrals, commissions, payouts, clicks] = await Promise.all([
     rawDb.referral.findMany({
       where: { affiliateId: affiliate.id },
       include: { tenant: { select: { name: true, status: true } }, commissions: { select: { id: true } } },
@@ -33,6 +35,7 @@ export default async function AdminAffiliateDetailPage({ params }: { params: { i
       take: 100,
     }),
     rawDb.payout.findMany({ where: { affiliateId: affiliate.id }, orderBy: { requestedAt: "desc" } }),
+    rawDb.referralClick.findMany({ where: { affiliateId: affiliate.id }, orderBy: { createdAt: "desc" } }),
   ]);
 
   // نفس السبب الموثَّق في affiliates/dashboard/page.tsx: Invoice محمي بـRLS، فيُقرأ عبر superAdminDb منفصلاً.
@@ -46,6 +49,12 @@ export default async function AdminAffiliateDetailPage({ params }: { params: { i
   );
 
   const lifetimeSar = commissions.filter((c) => c.status !== "REVERSED").reduce((s, c) => s + c.amountSar, 0);
+
+  // referrals تحمل convertedAt/source الكافيين لـbuildWeeklyFunnelData/buildChannelBreakdown بلا
+  // استعلام إضافي — نفس مصدر الحقيقة الوحيد المُستخدَم في affiliates/dashboard/page.tsx وadmin/affiliates/page.tsx.
+  const funnelData = buildWeeklyFunnelData(clicks, referrals);
+  const channelStats = buildChannelBreakdown(clicks, referrals);
+  const personalConversionRate = clicks.length > 0 ? (referrals.length / clicks.length) * 100 : 0;
 
   return (
     <div className="space-y-6">
@@ -69,7 +78,7 @@ export default async function AdminAffiliateDetailPage({ params }: { params: { i
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <div className="card p-5"><p className="text-xs text-slate-500">الحالة</p><p className="mt-1 font-semibold text-white">{STATUS_LABELS_AR[affiliate.status]}</p></div>
         <div className="card p-5">
           <p className="text-xs text-slate-500">المستوى</p>
@@ -87,6 +96,11 @@ export default async function AdminAffiliateDetailPage({ params }: { params: { i
         </div>
         <div className="card p-5"><p className="text-xs text-slate-500">عدد الإحالات</p><p className="mt-1 text-2xl font-bold text-white">{referrals.length}</p></div>
         <div className="card p-5"><p className="text-xs text-slate-500">إجمالي العمولات المستحقة</p><p className="mt-1 text-2xl font-bold text-wa-400">{lifetimeSar.toLocaleString("ar-SA")} ر.س</p></div>
+        <div className="card p-5">
+          <p className="text-xs text-slate-500">عدد النقرات</p>
+          <p className="mt-1 text-2xl font-bold text-white" dir="ltr">{clicks.length}</p>
+          <p className="mt-1 text-xs text-wa-400" dir="ltr">معدّل تحويل شخصي {personalConversionRate.toFixed(1)}%</p>
+        </div>
       </div>
 
       {affiliate.promotionPlan && (
@@ -95,6 +109,37 @@ export default async function AdminAffiliateDetailPage({ params }: { params: { i
           <p className="mt-1 text-sm text-slate-300">{affiliate.promotionPlan}</p>
         </div>
       )}
+
+      <div className="card p-5">
+        <h2 className="mb-4 font-semibold text-white">اتجاه النقرات والتحويلات (آخر 8 أسابيع)</h2>
+        <AffiliateFunnelChart data={funnelData} />
+      </div>
+
+      <div className="card overflow-hidden p-0">
+        <h2 className="p-5 pb-3 font-semibold text-white">الأداء حسب القناة</h2>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="border-y border-white/5 bg-white/[0.02] text-right text-xs text-slate-500">
+              <tr>
+                <th className="px-5 py-2 font-medium">القناة</th>
+                <th className="px-5 py-2 font-medium">النقرات</th>
+                <th className="px-5 py-2 font-medium">التحويلات</th>
+                <th className="px-5 py-2 font-medium">معدّل التحويل</th>
+              </tr>
+            </thead>
+            <tbody>
+              {channelStats.map((s) => (
+                <tr key={s.channel} className="border-b border-white/5 last:border-0">
+                  <td className="px-5 py-2.5 text-white">{s.channel}</td>
+                  <td className="px-5 py-2.5 text-slate-400" dir="ltr">{s.clicks}</td>
+                  <td className="px-5 py-2.5 text-slate-400" dir="ltr">{s.referrals}</td>
+                  <td className="px-5 py-2.5 text-wa-400" dir="ltr">{s.conversionRate.toFixed(1)}%</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
 
       <div className="card overflow-hidden p-0">
         <h2 className="p-5 pb-3 font-semibold text-white">العمولات</h2>
