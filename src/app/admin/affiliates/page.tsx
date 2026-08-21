@@ -5,6 +5,7 @@ import { rawDb } from "@/lib/db";
 import { TIER_LABELS_AR, TIER_RATE_PERCENT } from "@/lib/affiliates/tiers";
 import { buildWeeklyFunnelData, buildChannelBreakdown } from "@/lib/affiliates/funnel";
 import { AffiliateFunnelChart } from "@/components/affiliates/AffiliateFunnelChart";
+import { CreateAffiliateButton } from "./CreateAffiliateButton";
 import { approveAffiliate, rejectAffiliate, markPayoutPaid, markPayoutFailed } from "./actions";
 
 const TOP_AFFILIATES_COUNT = 10;
@@ -73,9 +74,12 @@ export default async function AdminAffiliatesPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-bold text-white">برنامج التسويق بالعمولة</h1>
-        <p className="text-sm text-slate-400">مراجعة طلبات الانضمام، متابعة العمولات، واعتماد طلبات الصرف.</p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-bold text-white">برنامج التسويق بالعمولة</h1>
+          <p className="text-sm text-slate-400">مراجعة طلبات الانضمام، متابعة العمولات، واعتماد طلبات الصرف.</p>
+        </div>
+        <CreateAffiliateButton />
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">

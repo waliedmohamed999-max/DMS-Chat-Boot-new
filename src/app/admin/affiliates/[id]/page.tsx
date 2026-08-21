@@ -6,6 +6,8 @@ import { rawDb, superAdminDb } from "@/lib/db";
 import { TIER_LABELS_AR, TIER_RATE_PERCENT } from "@/lib/affiliates/tiers";
 import { buildWeeklyFunnelData, buildChannelBreakdown } from "@/lib/affiliates/funnel";
 import { AffiliateFunnelChart } from "@/components/affiliates/AffiliateFunnelChart";
+import { ReferralCodeForm, ProfileForm, PayoutInfoForm } from "./EditForms";
+import type { AffiliatePayoutDetails } from "@/lib/affiliates/payoutDetails";
 import { suspendAffiliate, reactivateAffiliate, setAffiliateTier, markPayoutPaid, markPayoutFailed } from "../actions";
 
 const STATUS_LABELS_AR: Record<string, string> = { PENDING: "بانتظار المراجعة", ACTIVE: "نشط", SUSPENDED: "معلَّق", REJECTED: "مرفوض" };
@@ -109,6 +111,25 @@ export default async function AdminAffiliateDetailPage({ params }: { params: { i
           <p className="mt-1 text-sm text-slate-300">{affiliate.promotionPlan}</p>
         </div>
       )}
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <div className="card p-5">
+          <h2 className="mb-3 font-semibold text-white">كود الإحالة</h2>
+          <ReferralCodeForm affiliateId={affiliate.id} currentCode={affiliate.referralCode} />
+        </div>
+        <div className="card p-5">
+          <h2 className="mb-3 font-semibold text-white">البيانات الشخصية</h2>
+          <ProfileForm affiliateId={affiliate.id} name={affiliate.name} email={affiliate.email} phone={affiliate.phone} />
+        </div>
+        <div className="card p-5">
+          <h2 className="mb-3 font-semibold text-white">بيانات الصرف</h2>
+          <PayoutInfoForm
+            affiliateId={affiliate.id}
+            payoutMethod={affiliate.payoutMethod}
+            details={affiliate.payoutDetailsJson as AffiliatePayoutDetails | null}
+          />
+        </div>
+      </div>
 
       <div className="card p-5">
         <h2 className="mb-4 font-semibold text-white">اتجاه النقرات والتحويلات (آخر 8 أسابيع)</h2>

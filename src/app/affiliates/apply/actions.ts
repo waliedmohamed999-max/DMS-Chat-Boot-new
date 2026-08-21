@@ -5,6 +5,7 @@ import { headers } from "next/headers";
 import { z } from "zod";
 import { rawDb } from "@/lib/db";
 import { checkTenantRateLimit } from "@/lib/rateLimit";
+import { generateReferralCode } from "@/lib/affiliates/referralCode";
 
 const applySchema = z.object({
   name: z.string().min(2, "الاسم قصير جداً"),
@@ -18,12 +19,6 @@ const applySchema = z.object({
 });
 
 export type SubmitAffiliateApplicationResult = { success: true; referralCode: string } | { success: false; error: string };
-
-/** أحرف لاتينية/أرقام فقط (يظهر الكود داخل رابط URL: ?ref=CODE) — عشوائي بالكامل، وليس مشتقاً من
- * الاسم، لتفادي أي تسريب معلومة شخصية داخل رابط عام يُنشَر على وسائل التواصل. */
-function generateReferralCode(): string {
-  return Math.random().toString(36).slice(2, 10).toUpperCase();
-}
 
 export async function submitAffiliateApplication(formData: FormData): Promise<SubmitAffiliateApplicationResult> {
   const parsed = applySchema.safeParse(Object.fromEntries(formData));
