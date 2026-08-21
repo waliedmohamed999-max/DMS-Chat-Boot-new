@@ -63,9 +63,12 @@ function MediaContent({ m }: { m: MessageBubbleData }) {
   }
   if (m.type === "AUDIO") {
     return (
-      <div className="mb-1.5 flex items-center gap-2 rounded-lg bg-black/15 p-2">
-        <span className="text-xl">🎙️</span>
-        <span className="text-xs opacity-80">رسالة صوتية</span>
+      <div className="mb-1.5 rounded-lg bg-black/15 p-2">
+        <div className="flex items-center gap-2 text-xs opacity-80">
+          <span className="text-xl">🎙️</span>
+          <span>رسالة صوتية</span>
+        </div>
+        {m.body && m.body !== "[رسالة صوتية]" && <p className="mt-1 text-xs italic opacity-90">&quot;{m.body}&quot;</p>}
       </div>
     );
   }
@@ -107,7 +110,7 @@ export function MessageBubble({ message }: { message: MessageBubbleData }) {
           </div>
         )}
         <MediaContent m={message} />
-        {message.type !== "LOCATION" && message.body && <p>{message.body}</p>}
+        {message.type !== "LOCATION" && message.type !== "AUDIO" && message.body && <p>{message.body}</p>}
         <div className="mt-1 flex items-center justify-end gap-1.5">
           {message.failureReason && <span className="text-[10px] text-danger-100">{message.failureReason}</span>}
           <p className="text-[10px] opacity-60">

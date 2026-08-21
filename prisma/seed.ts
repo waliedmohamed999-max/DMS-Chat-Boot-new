@@ -22,12 +22,14 @@ async function main() {
     allowedNodeTypes: ["start", "message", "question", "condition", "ai_reply", "api_call", "handoff", "end"],
     templatesTier: "full", analyticsTier: "advanced", multiLanguage: false,
     maxAiTokensPerMonth: 50000, // حصة معقولة للموظف الذكي — قابلة للتعديل لاحقاً من admin/plans
+    voiceMessagesEnabled: true,
   };
   const scaleChatbotLimits = {
     maxActiveFlows: -1,
     allowedNodeTypes: ["start", "message", "question", "condition", "ai_reply", "api_call", "handoff", "end"],
     templatesTier: "full", analyticsTier: "export", multiLanguage: true,
     maxAiTokensPerMonth: -1, // غير محدود لأعلى باقة
+    voiceMessagesEnabled: true,
   };
 
   const starterCampaignLimits = { maxCampaignsPerMonth: 4, maxAudiencePerCampaign: 200, abTestingEnabled: false };

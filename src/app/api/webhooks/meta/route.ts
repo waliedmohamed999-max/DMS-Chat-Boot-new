@@ -2,8 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { metaAdapter } from "@/lib/integrations/meta/adapter";
 import { superAdminDb, withTenant } from "@/lib/db";
 import { checkTenantRateLimit, checkIpRateLimit } from "@/lib/rateLimit";
-import { timingSafeStringEqual } from "@/lib/crypto";
+import { timingSafeStringEqual, decryptSecret } from "@/lib/crypto";
 import { parseMetaWebhookPayload, applyParsedMetaWebhook } from "@/lib/integrations/meta/webhookHandler";
+import { downloadMetaMedia } from "@/lib/integrations/meta/mediaDownload";
+import { transcribeVoiceMessage } from "@/lib/ai/transcribeVoiceMessage";
+import { getTenantChatbotLimits } from "@/lib/planLimits";
 import { runChatbotEngine } from "@/lib/chatbot/engine";
 
 // Meta يستدعي GET أثناء إعداد الـ webhook للتحقق (hub.challenge)
@@ -62,6 +65,25 @@ export async function POST(req: NextRequest) {
   const rateLimit = await checkTenantRateLimit(integration.tenantId, "webhook-meta", 300, 60);
   if (!rateLimit.allowed) {
     return new NextResponse("Rate limit exceeded", { status: 429 });
+  }
+
+  // إثراء رسائل صوتية واردة بتفريغ Whisper حقيقي قبل التخزين — فقط لتاجر متصل حقيقياً (Sandbox لا
+  // يحمل وسائط حقيقية إطلاقاً) وباقة تسمح بـvoiceMessagesEnabled. فشل أي خطوة (تنزيل/تفريغ) يترك
+  // body كما وصل بلا تغيير — الرسالة نفسها لا تُفقَد أبداً مهما حدث.
+  if (!integration.isSandbox && integration.encryptedAccessToken) {
+    const audioMessages = parsed.messages.filter((m) => m.type === "AUDIO" && m.metaMediaId);
+    if (audioMessages.length > 0) {
+      const limits = await getTenantChatbotLimits(integration.tenantId);
+      if (limits.voiceMessagesEnabled) {
+        const accessToken = decryptSecret(integration.encryptedAccessToken);
+        for (const msg of audioMessages) {
+          const media = await downloadMetaMedia(msg.metaMediaId!, accessToken);
+          if (!media) continue;
+          const transcript = await transcribeVoiceMessage(media.buffer, media.mimeType);
+          if (transcript) msg.body = transcript;
+        }
+      }
+    }
   }
 
   const affectedConversationIds = await applyParsedMetaWebhook(integration.tenantId, parsed);

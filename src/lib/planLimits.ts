@@ -16,6 +16,10 @@ export type ChatbotLimits = {
   // كلياً. منفصل عن allowedNodeTypes: الأخير يمنع *إضافة* العقدة للتدفق، بينما هذا يحد استهلاكها
   // الفعلي حتى لباقة تسمح بالعقدة، تفادياً لتكلفة غير محسوبة على مالك المنصة (بند 6 في البرومنت).
   maxAiTokensPerMonth: number;
+  // يتحكم في تفريغ الرسائل الصوتية الواردة عبر Whisper وقت الاستقبال (ingestion) — بصرف النظر عن
+  // قناة الاتصال (Meta Cloud API أو Baileys/QR). استدعاء Whisper له تكلفة فعلية لكل رسالة صوتية،
+  // فمنفصل عن maxAiTokensPerMonth (ذاك خاص بعقدة "رد ذكي" فقط).
+  voiceMessagesEnabled: boolean;
 };
 
 // حدود Starter الافتراضية — تُستخدم كـ fallback آمن (الأكثر تقييداً) إن كانت الباقة بدون
@@ -27,6 +31,7 @@ export const DEFAULT_STARTER_CHATBOT_LIMITS: ChatbotLimits = {
   analyticsTier: "basic",
   multiLanguage: false,
   maxAiTokensPerMonth: 0,
+  voiceMessagesEnabled: false,
 };
 
 export const PLAN_TIER_LABELS_AR: Record<string, string> = {
@@ -48,6 +53,7 @@ export function parseChatbotLimits(raw: unknown): ChatbotLimits {
     analyticsTier: r.analyticsTier === "advanced" || r.analyticsTier === "export" ? r.analyticsTier : "basic",
     multiLanguage: Boolean(r.multiLanguage),
     maxAiTokensPerMonth: typeof r.maxAiTokensPerMonth === "number" ? r.maxAiTokensPerMonth : DEFAULT_STARTER_CHATBOT_LIMITS.maxAiTokensPerMonth,
+    voiceMessagesEnabled: Boolean(r.voiceMessagesEnabled),
   };
 }
 

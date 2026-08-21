@@ -16,6 +16,10 @@ export type ParsedInboundMessage = {
   latitude?: number;
   longitude?: number;
   quotedWaMessageId?: string;
+  // معرّف وسائط Meta المؤقت (Media API) — موجود فقط في webhook حقيقي وارد من Meta (Sandbox يضع
+  // sandbox_media_url مباشرة بدل ذلك، فلا يحمل هذا الحقل). يُستهلَك في route.ts لتنزيل/تفريغ الصوت
+  // قبل applyParsedMetaWebhook، وليس داخل هذه الدالة (تبقى محلّلاً خالصاً بلا أي استدعاء شبكي).
+  metaMediaId?: string;
 };
 
 export type ParsedStatusUpdate = {
@@ -112,12 +116,13 @@ export function parseMetaWebhookPayload(payload: unknown): ParsedMetaWebhook {
         if (type === "TEXT") {
           messages.push({ ...base, type, body: String((m.text as { body?: string })?.body ?? "") });
         } else if (type === "IMAGE" || type === "DOCUMENT" || type === "AUDIO") {
-          const media = m[String(m.type)] as { caption?: string; mime_type?: string; filename?: string; sandbox_media_url?: string };
+          const media = m[String(m.type)] as { id?: string; caption?: string; mime_type?: string; filename?: string; sandbox_media_url?: string };
           messages.push({
             ...base, type,
             body: media?.caption ?? media?.filename ?? "",
             mediaUrl: media?.sandbox_media_url,
             mediaMimeType: media?.mime_type,
+            metaMediaId: media?.id,
           });
         } else if (type === "LOCATION") {
           const loc = m.location as { latitude?: number; longitude?: number; name?: string };

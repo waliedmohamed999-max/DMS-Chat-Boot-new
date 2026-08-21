@@ -72,6 +72,12 @@ export default async function AiAgentSettingsPage() {
         </p>
       </div>
 
+      {!limits.voiceMessagesEnabled && (
+        <div className="card border border-warning-500/20 bg-warning-500/5 p-4 text-sm text-slate-300">
+          🔒 الرد التلقائي على الرسائل الصوتية (تفريغها تلقائياً وفهمها) متاح من باقة النمو فما فوق.
+        </div>
+      )}
+
       <AiAgentSettingsForm>
         <label className="flex items-center gap-2 text-sm text-slate-200">
           <input type="checkbox" name="enabled" defaultChecked={config.enabled} className="h-4 w-4" />
