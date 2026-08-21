@@ -88,6 +88,9 @@ export function ChatWidget({ enabled, voiceCallEnabled, demoMode }: { enabled: b
   const localStreamRef = useRef<MediaStream | null>(null);
   const callIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const callTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // آخر وعد إرسال نص مكالمة جارٍ (مشترك بين مسارَي المكالمة الحقيقي والتجريبي، كلاهما يستخدم
+  // sendVoiceTranscript) — endCall ينتظره قبل إرسال رسالة الختام، راجع تعليق sendVoiceTranscript.
+  const lastTranscriptSendRef = useRef<Promise<void> | null>(null);
 
   // مسار العرض التجريبي المجاني (Web Speech API) — منفصل تماماً عن refs المسار الحقيقي أعلاه، بلا
   // أي تداخل بينهما (كل مسار يستخدم مجموعته فقط).
@@ -316,17 +319,23 @@ export function ChatWidget({ enabled, voiceCallEnabled, demoMode }: { enabled: b
   }
 
   /** يخزّن جزءاً مكتملاً من نص المكالمة (زائر أو مساعد) — الاستطلاع الدوري الموجود بالفعل (useEffect
-   * أعلاه) يلتقطه تلقائياً ويعرضه، بلا حاجة لتحديث state هنا مباشرة. */
+   * أعلاه) يلتقطه تلقائياً ويعرضه، بلا حاجة لتحديث state هنا مباشرة. يتتبّع وعد الإرسال الأخير في
+   * lastTranscriptSendRef حتى ينتظره endCall قبل إرسال رسالة الختام — يمنع وصول "انتهت المكالمة"
+   * للقاعدة قبل آخر رد فعلي لو صادف المستخدم قفل المكالمة في نفس لحظة وصول الرد. */
   async function sendVoiceTranscript(sid: string, role: "visitor" | "ai", text: string) {
-    try {
-      await fetch(`/api/platform-chat/${sid}/voice-transcript`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ role, text }),
-      });
-    } catch {
-      // فشل تسجيل نص المكالمة لا يوقف المكالمة نفسها — مجرد سجل مفقود لهذا الجزء
-    }
+    const send = (async () => {
+      try {
+        await fetch(`/api/platform-chat/${sid}/voice-transcript`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ role, text }),
+        });
+      } catch {
+        // فشل تسجيل نص المكالمة لا يوقف المكالمة نفسها — مجرد سجل مفقود لهذا الجزء
+      }
+    })();
+    lastTranscriptSendRef.current = send;
+    await send;
   }
 
   function handleRealtimeEvent(event: { type?: string; transcript?: string }, sid: string | null) {
@@ -365,7 +374,12 @@ export function ChatWidget({ enabled, voiceCallEnabled, demoMode }: { enabled: b
   async function endCall() {
     const sid = sessionId;
     cleanupCall();
-    if (sid) await sendVoiceTranscript(sid, "ai", "[انتهت المكالمة الصوتية]");
+    if (sid) {
+      // ننتظر أي إرسال نص مكالمة كان جارياً بالفعل (رد ذكي وصل لتوّه مثلاً) قبل رسالة الختام — يضمن
+      // ترتيب زمني صحيح في القاعدة حتى لو المستخدم قفل المكالمة في نفس لحظة وصول الرد.
+      if (lastTranscriptSendRef.current) await lastTranscriptSendRef.current.catch(() => {});
+      await sendVoiceTranscript(sid, "ai", "[انتهت المكالمة الصوتية]");
+    }
   }
 
   function speakText(text: string, onEnd: () => void) {
@@ -392,7 +406,11 @@ export function ChatWidget({ enabled, voiceCallEnabled, demoMode }: { enabled: b
     recognition.lang = "ar-SA";
     recognition.continuous = false;
     recognition.interimResults = false;
+    // يمنع onend من إعادة تشغيل الدورة لو onresult/onerror تولّى الأمر بالفعل — onend يفيد فقط في
+    // الحالة النادرة التي يُغلق فيها المتصفح التعرّف الصوتي بلا نتيجة وبلا خطأ (بصمت).
+    let handled = false;
     recognition.onresult = (event) => {
+      handled = true;
       const transcript = event.results[0]?.[0]?.transcript?.trim();
       if (!transcript || !demoCallActiveRef.current) return;
       void (async () => {
@@ -413,7 +431,11 @@ export function ChatWidget({ enabled, voiceCallEnabled, demoMode }: { enabled: b
       })();
     };
     recognition.onerror = () => {
+      handled = true;
       if (demoCallActiveRef.current) startDemoListenCycle(sid); // خطأ عابر (صمت طويل مثلاً) — استأنف
+    };
+    recognition.onend = () => {
+      if (!handled && demoCallActiveRef.current) startDemoListenCycle(sid);
     };
     demoCallRecognitionRef.current = recognition;
     recognition.start();
