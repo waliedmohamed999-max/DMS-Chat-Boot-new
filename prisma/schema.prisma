@@ -1216,6 +1216,10 @@ model PlatformSettings {
   // لو مفعَّلة: كل رد نصي من الموظف الذكي في الشات العام يُولَّد له أيضاً مقطع صوتي عبر TTS (بلا تخزين
   // على الخادم — يُبَث مباشرة للمتصفح). مُعطَّلة افتراضياً (تكلفة إضافية فعلية لكل رد).
   platformChatVoiceReplyEnabled Boolean  @default(false)
+  // مكالمة صوتية حية (Speech-to-Speech عبر OpenAI Realtime API/WebRTC) — مفتاح منفصل تماماً عن
+  // platformChatEnabled عمداً: تكلفتها أعلى بكثير من رسالة نصية أو صوتية مُسجَّلة واحدة (تقديرياً
+  // ~$0.016/دقيقة)، فتفعيلها قرار منفصل عن مجرد تفعيل الشات النصي. مُعطَّلة افتراضياً.
+  platformVoiceCallEnabled      Boolean  @default(false)
   updatedAt              DateTime @updatedAt
 }
 

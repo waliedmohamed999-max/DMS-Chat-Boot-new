@@ -26,6 +26,7 @@ export type PlatformSettingsData = {
   aiModel: string;
   platformChatEnabled: boolean;
   platformChatVoiceReplyEnabled: boolean;
+  platformVoiceCallEnabled: boolean;
 };
 
 /** يجلب إعدادات المنصة العامة، وينشئ الصف الافتراضي تلقائياً إن لم يوجد بعد (أول تشغيل). */
@@ -57,6 +58,7 @@ export async function getPlatformSettings(): Promise<PlatformSettingsData> {
     aiModel: row.aiModel || process.env.OPENAI_MODEL || "gpt-4o-mini",
     platformChatEnabled: row.platformChatEnabled,
     platformChatVoiceReplyEnabled: row.platformChatVoiceReplyEnabled,
+    platformVoiceCallEnabled: row.platformVoiceCallEnabled,
   };
 }
 

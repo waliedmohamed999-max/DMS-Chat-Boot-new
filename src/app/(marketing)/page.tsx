@@ -32,7 +32,7 @@ export default async function HomePage() {
     <div>
       {/* مقصورة على الصفحة الرئيسية فقط (وليس كل صفحات الموقع التسويقي عبر MarketingLayout) — قرار
           صريح: يظهر فقط في الواجهة اللي بيتعرض فيها الخدمات، وليس في about/terms/privacy إلخ. */}
-      <ChatWidget enabled={settings.platformChatEnabled} />
+      <ChatWidget enabled={settings.platformChatEnabled} voiceCallEnabled={settings.platformVoiceCallEnabled} />
       {/* Hero — أعلى الصفحة مباشرة (above the fold)، لذلك بلا أي انيميشن Reveal مبني على التمرير:
           المحتوى مرئي فوراً منذ أول رسم بدل أي وميض ظهور مؤجَّل يضر بأول انطباع وبسرعة العرض المُدرَكة. */}
       <section className="mx-auto max-w-6xl px-4 py-16 sm:py-24">

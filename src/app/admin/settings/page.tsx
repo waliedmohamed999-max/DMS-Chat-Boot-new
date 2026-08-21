@@ -135,6 +135,10 @@ export default async function GlobalSettingsPage() {
               <input type="checkbox" name="platformChatVoiceReplyEnabled" defaultChecked={settings.platformChatVoiceReplyEnabled} />
               توليد رد صوتي (TTS) إضافي لكل رد نصي — تكلفة إضافية فعلية لكل رسالة
             </label>
+            <label className="flex items-center gap-2 text-sm text-slate-200">
+              <input type="checkbox" name="platformVoiceCallEnabled" defaultChecked={settings.platformVoiceCallEnabled} />
+              تفعيل زر "اتصال" (مكالمة صوتية حية Speech-to-Speech) — مفتاح منفصل، تكلفة أعلى بكثير من رسالة واحدة (~$0.016/دقيقة)
+            </label>
           </div>
         </div>
 
