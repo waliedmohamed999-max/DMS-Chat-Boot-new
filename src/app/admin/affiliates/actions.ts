@@ -134,13 +134,24 @@ export async function updateAffiliatePayoutInfo(affiliateId: string, formData: F
   requireEffectivePermission(session.user.permissions, "platform.affiliates.manage");
 
   const payoutMethod = String(formData.get("payoutMethod") ?? "").trim() || null;
+  const paymentTypeRaw = String(formData.get("paymentType") ?? "bank");
   const details: AffiliatePayoutDetails = {
+    paymentType: paymentTypeRaw === "wallet" ? "wallet" : "bank",
     bankName: String(formData.get("bankName") ?? "").trim() || undefined,
     accountHolderName: String(formData.get("accountHolderName") ?? "").trim() || undefined,
+    accountNumber: String(formData.get("accountNumber") ?? "").trim() || undefined,
     iban: String(formData.get("iban") ?? "").trim() || undefined,
+    swiftCode: String(formData.get("swiftCode") ?? "").trim() || undefined,
+    branchName: String(formData.get("branchName") ?? "").trim() || undefined,
+    nationalId: String(formData.get("nationalId") ?? "").trim() || undefined,
+    walletProvider: String(formData.get("walletProvider") ?? "").trim() || undefined,
+    walletNumber: String(formData.get("walletNumber") ?? "").trim() || undefined,
     notes: String(formData.get("notes") ?? "").trim() || undefined,
   };
-  const hasAnyDetail = Object.values(details).some(Boolean);
+  // paymentType نفسه دائماً "موجود" (قيمة افتراضية "bank")، فلا يصح استخدامه وحده لتقرير وجود أي
+  // بيانات فعلية — نفحص بقية الحقول تحديداً بدل Object.values(details).some(Boolean) كما كان سابقاً.
+  const { paymentType: _paymentType, ...detailFieldsOnly } = details;
+  const hasAnyDetail = Object.values(detailFieldsOnly).some(Boolean);
 
   await rawDb.affiliate.update({
     where: { id: affiliateId },

@@ -100,32 +100,81 @@ export function PayoutInfoForm({
   details: AffiliatePayoutDetails | null;
 }) {
   const { error, success, isPending, run } = useFormFeedback();
+  const [paymentType, setPaymentType] = useState<"bank" | "wallet">(details?.paymentType ?? "bank");
 
   function handleSubmit(formData: FormData) {
     run(() => updateAffiliatePayoutInfo(affiliateId, formData));
   }
 
   return (
-    <form action={handleSubmit} className="space-y-2">
+    <form action={handleSubmit} className="space-y-3">
       <FormFeedback error={error} success={success} successMessage="✅ تم حفظ بيانات الصرف." />
       <div>
-        <label className="label-field text-xs">طريقة الاستلام</label>
-        <input name="payoutMethod" defaultValue={payoutMethod ?? ""} placeholder="مثال: تحويل بنكي / محفظة STC Pay" className="input-field text-sm" />
+        <label className="label-field text-xs">طريقة الاستلام (وصف مختصر)</label>
+        <input name="payoutMethod" defaultValue={payoutMethod ?? ""} placeholder="مثال: تحويل بنكي — الأهلي" className="input-field text-sm" />
       </div>
-      <div className="grid grid-cols-2 gap-2">
-        <div>
-          <label className="label-field text-xs">اسم البنك</label>
-          <input name="bankName" defaultValue={details?.bankName ?? ""} className="input-field text-sm" />
+
+      <div className="flex gap-3 text-xs text-slate-300">
+        <label className="flex items-center gap-1.5">
+          <input type="radio" name="paymentType" value="bank" checked={paymentType === "bank"} onChange={() => setPaymentType("bank")} />
+          تحويل بنكي
+        </label>
+        <label className="flex items-center gap-1.5">
+          <input type="radio" name="paymentType" value="wallet" checked={paymentType === "wallet"} onChange={() => setPaymentType("wallet")} />
+          محفظة إلكترونية
+        </label>
+      </div>
+
+      {paymentType === "bank" ? (
+        <div className="space-y-2 rounded-lg border border-white/5 p-3">
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="label-field text-xs">اسم البنك</label>
+              <input name="bankName" defaultValue={details?.bankName ?? ""} className="input-field text-sm" />
+            </div>
+            <div>
+              <label className="label-field text-xs">اسم صاحب الحساب</label>
+              <input name="accountHolderName" defaultValue={details?.accountHolderName ?? ""} className="input-field text-sm" />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="label-field text-xs">رقم الحساب</label>
+              <input name="accountNumber" defaultValue={details?.accountNumber ?? ""} dir="ltr" className="input-field text-sm" />
+            </div>
+            <div>
+              <label className="label-field text-xs">IBAN</label>
+              <input name="iban" defaultValue={details?.iban ?? ""} dir="ltr" className="input-field text-sm" />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="label-field text-xs">SWIFT/BIC Code</label>
+              <input name="swiftCode" defaultValue={details?.swiftCode ?? ""} dir="ltr" className="input-field text-sm" />
+            </div>
+            <div>
+              <label className="label-field text-xs">اسم/عنوان الفرع</label>
+              <input name="branchName" defaultValue={details?.branchName ?? ""} className="input-field text-sm" />
+            </div>
+          </div>
+          <div>
+            <label className="label-field text-xs">رقم الهوية/الإقامة لصاحب الحساب</label>
+            <input name="nationalId" defaultValue={details?.nationalId ?? ""} dir="ltr" className="input-field text-sm" />
+          </div>
         </div>
-        <div>
-          <label className="label-field text-xs">اسم صاحب الحساب</label>
-          <input name="accountHolderName" defaultValue={details?.accountHolderName ?? ""} className="input-field text-sm" />
+      ) : (
+        <div className="space-y-2 rounded-lg border border-white/5 p-3">
+          <div>
+            <label className="label-field text-xs">مزوّد المحفظة</label>
+            <input name="walletProvider" defaultValue={details?.walletProvider ?? ""} placeholder="مثال: STC Pay" className="input-field text-sm" />
+          </div>
+          <div>
+            <label className="label-field text-xs">رقم المحفظة/الجوال</label>
+            <input name="walletNumber" defaultValue={details?.walletNumber ?? ""} dir="ltr" className="input-field text-sm" />
+          </div>
         </div>
-      </div>
-      <div>
-        <label className="label-field text-xs">IBAN</label>
-        <input name="iban" defaultValue={details?.iban ?? ""} dir="ltr" className="input-field text-sm" />
-      </div>
+      )}
+
       <div>
         <label className="label-field text-xs">ملاحظات</label>
         <textarea name="notes" defaultValue={details?.notes ?? ""} rows={2} className="input-field text-sm" />
