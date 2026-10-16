@@ -2,6 +2,7 @@ import { requireSuperAdminSession } from "@/lib/session";
 import { hasEffectivePermission } from "@/lib/rbac";
 import { getPlatformSettings } from "@/lib/platformSettings";
 import { updatePlatformSettings } from "./actions";
+import { TestEmailButton } from "./TestEmailButton";
 
 export default async function GlobalSettingsPage() {
   const session = await requireSuperAdminSession();
@@ -192,6 +193,7 @@ export default async function GlobalSettingsPage() {
 
         <button type="submit" className="btn-primary w-full">حفظ الإعدادات</button>
       </form>
+      <TestEmailButton />
     </div>
   );
 }

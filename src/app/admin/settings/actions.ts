@@ -5,6 +5,7 @@ import { requireSuperAdminSession } from "@/lib/session";
 import { requireEffectivePermission } from "@/lib/rbac";
 import { superAdminDb } from "@/lib/db";
 import { encryptMetaAppSecret, encryptOpenAiApiKey } from "@/lib/platformSettings";
+import { diagnoseEmail } from "@/lib/email/send";
 
 export async function updatePlatformSettings(formData: FormData) {
   const session = await requireSuperAdminSession();
@@ -68,4 +69,11 @@ export async function updatePlatformSettings(formData: FormData) {
   revalidatePath("/admin/settings");
   revalidatePath("/dashboard");
   revalidatePath("/login");
+}
+
+export async function sendTestEmail(): Promise<{ ok: boolean; detail: string }> {
+  const session = await requireSuperAdminSession();
+  requireEffectivePermission(session.user.permissions, "platform.settings.manage");
+  if (!session.user.email) return { ok: false, detail: "لا يوجد بريد مسجَّل لحسابك لإرسال الرسالة التجريبية إليه." };
+  return diagnoseEmail(session.user.email);
 }
