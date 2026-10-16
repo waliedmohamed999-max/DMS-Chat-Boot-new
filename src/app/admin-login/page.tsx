@@ -55,6 +55,11 @@ export default function PlatformLoginPage() {
           <div>
             <label className="label-field">كلمة المرور</label>
             <PasswordInput name="password" required placeholder="••••••••" dir="ltr" />
+            <div className="mt-1.5 text-left">
+              <a href="/forgot-password" className="text-xs text-wa-400 hover:underline">
+                نسيت كلمة المرور؟
+              </a>
+            </div>
           </div>
           <SubmitButton />
           <p className="text-center text-xs text-slate-500">

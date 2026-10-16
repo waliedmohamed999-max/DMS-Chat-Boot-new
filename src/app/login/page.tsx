@@ -29,6 +29,7 @@ function LoginForm() {
   const searchParams = useSearchParams();
   const justRegistered = searchParams.get("registered") === "1";
   const justSetup = searchParams.get("setup") === "1";
+  const justReset = searchParams.get("reset") === "1";
   const redirectReason = searchParams.get("reason");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -73,6 +74,11 @@ function LoginForm() {
             تم إعداد حسابك بنجاح! سجّل الدخول الآن بكلمة المرور التي اخترتها.
           </div>
         )}
+        {justReset && (
+          <div className="mb-4 rounded-lg border border-success-500/30 bg-success-500/10 px-3 py-2 text-sm text-success-500">
+            تم تغيير كلمة المرور بنجاح! سجّل الدخول الآن بكلمة المرور الجديدة (فريق المنصة: من صفحة دخول الفريق).
+          </div>
+        )}
         <form onSubmit={handleSubmit} className="card space-y-4 p-6">
           {error && (
             <div className="rounded-lg border border-danger-500/30 bg-danger-500/10 px-3 py-2 text-sm text-danger-500">
@@ -100,6 +106,11 @@ function LoginForm() {
               placeholder="••••••••"
               dir="ltr"
             />
+            <div className="mt-1.5 text-left">
+              <Link href="/forgot-password" className="text-xs text-wa-400 hover:underline">
+                نسيت كلمة المرور؟
+              </Link>
+            </div>
           </div>
           <button
             type="submit"
