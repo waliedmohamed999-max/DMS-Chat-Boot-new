@@ -68,10 +68,11 @@ const EMBED_HEADERS = [
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false, // لا تُسرِّب "X-Powered-By: Next.js" لكل استجابة
+  // pdfkit يحمّل ملفات خط .afm ديناميكياً عبر path.join(__dirname, ...) وقت التشغيل — تجميع
+  // webpack العادي يكسر هذا المسار، فيُستثنى هنا (نفس السبب والنمط لـbullmq/ioredis أعلاه).
+  // baileys: مكتبة خادم فقط بتبعيات اختيارية (jimp/sharp/link-preview-js) يفشل Turbopack في حلّها وقت التجميع.
+  serverExternalPackages: ["bullmq", "ioredis", "pdfkit", "@whiskeysockets/baileys"],
   experimental: {
-    // pdfkit يحمّل ملفات خط .afm ديناميكياً عبر path.join(__dirname, ...) وقت التشغيل — تجميع
-    // webpack العادي يكسر هذا المسار، فيُستثنى هنا (نفس السبب والنمط لـbullmq/ioredis أعلاه).
-    serverComponentsExternalPackages: ["bullmq", "ioredis", "pdfkit"],
     // الافتراضي 1MB غير كافٍ لملف Excel حقيقي — هذا أيضاً حد أمني أول ضد رفع ملفات ضخمة كوسيلة
     // استنزاف موارد، بالإضافة لتحقق صريح من file.size داخل كل Server Action نفسها (دفاع مزدوج).
     serverActions: { bodySizeLimit: "5mb" },

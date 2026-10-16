@@ -8,7 +8,7 @@ export const REFERRAL_COOKIE_MAX_AGE_SECONDS = 90 * 24 * 3600; // نافذة إ�
 /** يقرأ كوكي الإحالة (إن وُجد) ويتحقق أن الكود يخص مسوّقاً ACTIVE فعلياً — لا عمولة لكود مسوّق
  * معلَّق/بانتظار المراجعة/مرفوض. */
 export async function resolveReferralAffiliateId(): Promise<string | null> {
-  const code = cookies().get(REFERRAL_COOKIE_NAME)?.value;
+  const code = (await cookies()).get(REFERRAL_COOKIE_NAME)?.value;
   if (!code) return null;
   const affiliate = await rawDb.affiliate.findUnique({ where: { referralCode: code }, select: { id: true, status: true } });
   if (!affiliate || affiliate.status !== "ACTIVE") return null;
@@ -25,6 +25,6 @@ export async function createReferralIfAny(tenantId: string): Promise<void> {
   const existing = await rawDb.referral.findUnique({ where: { tenantId } });
   if (existing) return;
 
-  const source = cookies().get(REFERRAL_SOURCE_COOKIE_NAME)?.value || null;
+  const source = (await cookies()).get(REFERRAL_SOURCE_COOKIE_NAME)?.value || null;
   await rawDb.referral.create({ data: { affiliateId, tenantId, source } });
 }

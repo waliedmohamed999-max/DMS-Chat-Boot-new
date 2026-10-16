@@ -35,7 +35,8 @@ function pct(part: number, total: number): string {
   return `${Math.round((part / total) * 100)}%`;
 }
 
-export default async function CampaignDetailPage({ params }: { params: { id: string } }) {
+export default async function CampaignDetailPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const session = await requireTenantSession();
   const tenantId = session.user.tenantId;
   const canManage = hasEffectivePermission(session.user.permissions, "campaigns.manage");

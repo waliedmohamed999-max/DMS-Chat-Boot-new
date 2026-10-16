@@ -6,7 +6,8 @@ import { getTenantChatbotLimits } from "@/lib/planLimits";
 /** ينشئ جلسة شات جديدة لويدجت موقع تاجر معيّن (بلا تسجيل دخول، بلا كوكي — نفس فلسفة
  * /api/platform-chat/session، لكن يفحص بوابة الباقة + تفعيل التاجر الصريح قبل إنشاء أي جلسة، لأن هذا
  * المسار عام تماماً وtenantId يأتي من رابط الـiframe نفسه (قابل للتخمين/الزيارة المباشرة). */
-export async function POST(req: NextRequest, { params }: { params: { tenantId: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ tenantId: string }> }) {
+  const params = await props.params;
   const tenantId = params.tenantId;
   const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || req.headers.get("x-real-ip") || "unknown";
   const ipLimit = await checkIpRateLimit(ip, "tenant-chat-new-session", 5, 300);

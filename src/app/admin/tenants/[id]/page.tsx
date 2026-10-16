@@ -30,7 +30,8 @@ const JOIN_SOURCE_LABELS_AR: Record<string, string> = {
 
 const INVOICE_STATUS_LABELS_AR: Record<string, string> = { PAID: "مدفوعة", FAILED: "فشلت", PENDING: "قيد الانتظار", REFUNDED: "مستردة" };
 
-export default async function TenantDetailPage({ params }: { params: { id: string } }) {
+export default async function TenantDetailPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const session = await requireSuperAdminSession();
   const canView = hasEffectivePermission(session.user.permissions, "platform.merchants.view");
   if (!canView) {

@@ -5,7 +5,11 @@ import { checkIpRateLimit } from "@/lib/rateLimit";
 /** نقطة polling خفيفة — نظير /api/platform-chat/[sessionId]/messages، لكن عبر withTenant() لأن هذه
  * بيانات تاجر حقيقية خاضعة لـRLS. تُستخدَم من الـiframe المُضمَّن في موقع التاجر ومن
  * dashboard/website-chat/sessions معاً (نفس نمط استخدام admin/chats لنظيرتها العامة). */
-export async function GET(req: NextRequest, { params }: { params: { tenantId: string; sessionId: string } }) {
+export async function GET(
+  req: NextRequest,
+  props: { params: Promise<{ tenantId: string; sessionId: string }> }
+) {
+  const params = await props.params;
   const { tenantId, sessionId } = params;
   const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || req.headers.get("x-real-ip") || "unknown";
   const ipLimit = await checkIpRateLimit(ip, "tenant-chat-poll", 60, 60);

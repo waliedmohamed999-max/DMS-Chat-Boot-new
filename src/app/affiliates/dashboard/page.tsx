@@ -29,11 +29,12 @@ const PAYOUT_STATUS_LABELS_AR: Record<string, string> = {
 const VALID_COMMISSION_STATUSES: CommissionStatus[] = ["PENDING", "APPROVED", "PAID", "REVERSED"];
 const PAGE_SIZE = 25;
 
-export default async function AffiliateDashboardPage({
-  searchParams,
-}: {
-  searchParams: { commissionsPage?: string; referralsPage?: string; commissionsStatus?: string };
-}) {
+export default async function AffiliateDashboardPage(
+  props: {
+    searchParams: Promise<{ commissionsPage?: string; referralsPage?: string; commissionsStatus?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const affiliate = await requireAffiliateSession();
 
   const commissionsPage = Math.max(1, parseInt(searchParams.commissionsPage ?? "1", 10) || 1);

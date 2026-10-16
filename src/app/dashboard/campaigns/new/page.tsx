@@ -10,11 +10,12 @@ import type { SegmentFilter } from "@/lib/campaigns/audience";
 import type { OrderStatus } from "@prisma/client";
 import { ORDER_STATUSES_ORDERED } from "@/lib/orders/labels";
 
-export default async function NewCampaignPage({
-  searchParams,
-}: {
-  searchParams: { duplicateFrom?: string; audienceTagId?: string; orderStatus?: string; orderWithinDays?: string };
-}) {
+export default async function NewCampaignPage(
+  props: {
+    searchParams: Promise<{ duplicateFrom?: string; audienceTagId?: string; orderStatus?: string; orderWithinDays?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const session = await requireTenantSession();
   const tenantId = session.user.tenantId;
 

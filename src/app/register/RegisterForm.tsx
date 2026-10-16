@@ -1,8 +1,8 @@
 "use client";
 
-import { useFormState, useFormStatus } from "react-dom";
+import { useFormStatus } from "react-dom";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useActionState, useMemo, useState } from "react";
 import { registerTenant } from "./actions";
 import { AuthShell } from "@/components/auth/AuthShell";
 import { LogoFull } from "@/components/Logo";
@@ -35,7 +35,7 @@ function SubmitButton() {
 }
 
 export function RegisterForm({ plans, countries, initialCountry }: { plans: PublicPlan[]; countries: CountryOption[]; initialCountry: Country }) {
-  const [state, formAction] = useFormState(registerTenant, { error: null });
+  const [state, formAction] = useActionState(registerTenant, { error: null });
   const [country, setCountry] = useState<Country>(initialCountry);
   const countryOption = countries.find((c) => c.country === country) ?? countries[0] ?? { country, currency: "SAR", exchangeRateFromSar: 1, isDefault: true };
 

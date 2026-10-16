@@ -6,7 +6,8 @@ import { hasEffectivePermission } from "@/lib/rbac";
 import { TemplateBuilder } from "@/components/dashboard/TemplateBuilder";
 import { createTemplate } from "../actions";
 
-export default async function NewTemplatePage({ searchParams }: { searchParams: { editFrom?: string } }) {
+export default async function NewTemplatePage(props: { searchParams: Promise<{ editFrom?: string }> }) {
+  const searchParams = await props.searchParams;
   const session = await requireTenantSession();
   const tenantId = session.user.tenantId;
 

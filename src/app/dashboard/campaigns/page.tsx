@@ -31,11 +31,12 @@ function buildQuery(params: Record<string, string | undefined>) {
   return s ? `?${s}` : "";
 }
 
-export default async function CampaignsPage({
-  searchParams,
-}: {
-  searchParams: { tab?: string; status?: string; templateId?: string; q?: string; dateFrom?: string; dateTo?: string; page?: string };
-}) {
+export default async function CampaignsPage(
+  props: {
+    searchParams: Promise<{ tab?: string; status?: string; templateId?: string; q?: string; dateFrom?: string; dateTo?: string; page?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const session = await requireTenantSession();
   const tenantId = session.user.tenantId;
   const canManage = hasEffectivePermission(session.user.permissions, "campaigns.manage");

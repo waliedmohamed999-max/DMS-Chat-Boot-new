@@ -1,6 +1,7 @@
 "use client";
 
-import { useFormState, useFormStatus } from "react-dom";
+import { useActionState } from "react";
+import { useFormStatus } from "react-dom";
 import { requestPayout } from "@/app/affiliates/dashboard/actions";
 
 function SubmitButton() {
@@ -13,7 +14,7 @@ function SubmitButton() {
 }
 
 export function PayoutRequestForm() {
-  const [state, formAction] = useFormState(requestPayout, { error: null });
+  const [state, formAction] = useActionState(requestPayout, { error: null });
   return (
     <form action={formAction} className="space-y-2">
       {state.error && (

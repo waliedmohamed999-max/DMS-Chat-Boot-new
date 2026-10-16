@@ -5,7 +5,13 @@ import { hasEffectivePermission } from "@/lib/rbac";
 import { superAdminDb } from "@/lib/db";
 import { TenantDetailTabs } from "@/components/admin/TenantDetailTabs";
 
-export default async function TenantDetailLayout({ children, params }: { children: React.ReactNode; params: { id: string } }) {
+export default async function TenantDetailLayout(props: { children: React.ReactNode; params: Promise<{ id: string }> }) {
+  const params = await props.params;
+
+  const {
+    children
+  } = props;
+
   const session = await requireSuperAdminSession();
   if (!hasEffectivePermission(session.user.permissions, "platform.merchants.view")) {
     return (

@@ -12,7 +12,11 @@ const CALL_END_MARKER = "[انتهت المكالمة الصوتية]";
  * /api/platform-chat/[sessionId]/voice-transcript، مع إضافة تتبّع دقائق المكالمة الشهري لكل تاجر: عند
  * وصول علامة النهاية، نبحث عن أحدث علامة بداية لنفس الجلسة ونزيد الفارق الزمني (بالدقائق، مُقرَّباً
  * للأعلى) على Subscription.voiceCallMinutesUsedThisPeriod. */
-export async function POST(req: NextRequest, { params }: { params: { tenantId: string; sessionId: string } }) {
+export async function POST(
+  req: NextRequest,
+  props: { params: Promise<{ tenantId: string; sessionId: string }> }
+) {
+  const params = await props.params;
   const { tenantId, sessionId } = params;
   const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || req.headers.get("x-real-ip") || "unknown";
   const ipLimit = await checkIpRateLimit(ip, "tenant-voice-transcript", 60, 60);

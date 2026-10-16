@@ -1,6 +1,7 @@
 "use client";
 
-import { useFormState, useFormStatus } from "react-dom";
+import { useActionState } from "react";
+import { useFormStatus } from "react-dom";
 import { AuthShell } from "@/components/auth/AuthShell";
 import { PasswordInput } from "@/components/auth/PasswordInput";
 import { LogoFull } from "@/components/Logo";
@@ -26,7 +27,7 @@ function SubmitButton() {
 }
 
 export default function PlatformLoginPage() {
-  const [state, formAction] = useFormState(platformLogin, { error: null });
+  const [state, formAction] = useActionState(platformLogin, { error: null });
 
   return (
     <AuthShell bullets={BULLETS} tagline="لوحة تحكم فريق المنصة الداخلي">

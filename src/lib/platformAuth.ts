@@ -33,7 +33,7 @@ export async function setPlatformSession(user: PlatformSessionUser): Promise<voi
     .setExpirationTime(`${MAX_AGE_SECONDS}s`)
     .sign(getSecret());
 
-  cookies().set(COOKIE_NAME, token, {
+  (await cookies()).set(COOKIE_NAME, token, {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
@@ -43,7 +43,7 @@ export async function setPlatformSession(user: PlatformSessionUser): Promise<voi
 }
 
 export async function getPlatformSession(): Promise<PlatformSessionUser | null> {
-  const token = cookies().get(COOKIE_NAME)?.value;
+  const token = (await cookies()).get(COOKIE_NAME)?.value;
   if (!token) return null;
   try {
     const { payload } = await jwtVerify(token, getSecret());
@@ -61,5 +61,5 @@ export async function getPlatformSession(): Promise<PlatformSessionUser | null> 
 }
 
 export async function clearPlatformSession(): Promise<void> {
-  cookies().delete(COOKIE_NAME);
+  (await cookies()).delete(COOKIE_NAME);
 }

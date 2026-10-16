@@ -17,7 +17,8 @@ const STATUS_LABELS: Record<string, { label: string; className: string }> = {
 
 type SearchParams = { connected?: string; zid_error?: string; salla_error?: string };
 
-export default async function IntegrationsPage({ searchParams }: { searchParams: SearchParams }) {
+export default async function IntegrationsPage(props: { searchParams: Promise<SearchParams> }) {
+  const searchParams = await props.searchParams;
   const session = await requireTenantSession();
   const tenantId = session.user.tenantId;
 

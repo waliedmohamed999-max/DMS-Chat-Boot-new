@@ -38,7 +38,7 @@ export async function submitAffiliateApplication(formData: FormData): Promise<Su
     return { success: false, error: "يجب الموافقة على الشروط والأحكام للمتابعة." };
   }
 
-  const ip = headers().get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  const ip = (await headers()).get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
   const rateLimit = await checkTenantRateLimit(ip, "affiliate-apply", 5, 3600);
   if (!rateLimit.allowed) {
     return { success: false, error: "عدد محاولات كبير جداً من عنوانك الحالي — حاول مرة أخرى بعد ساعة." };

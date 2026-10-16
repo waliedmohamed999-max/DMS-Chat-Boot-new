@@ -23,7 +23,8 @@ const TAB_LABELS: Record<Tab, string> = {
 
 type SearchParams = ContactListSearchParams & { page?: string };
 
-export default async function ContactsPage({ searchParams }: { searchParams: SearchParams }) {
+export default async function ContactsPage(props: { searchParams: Promise<SearchParams> }) {
+  const searchParams = await props.searchParams;
   const session = await requireTenantSession();
   const tenantId = session.user.tenantId;
   const canExport = hasEffectivePermission(session.user.permissions, "contacts.export");

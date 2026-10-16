@@ -14,7 +14,8 @@ const CALL_START_MARKER = "[بدأت مكالمة صوتية]";
  * رخيص، DB فقط)، ثم حصة الدقائق الشهرية (DB أيضاً)، ثم حدود المعدّل أخيراً — حتى لا نستهلك عداد
  * المعدّل المحدود لمكالمات مرفوضة أصلاً ببوابة الباقة أو الحصة الشهرية.
  */
-export async function POST(req: NextRequest, { params }: { params: { tenantId: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ tenantId: string }> }) {
+  const params = await props.params;
   const tenantId = params.tenantId;
   const body = await req.json().catch(() => null);
   const sessionId = typeof body?.sessionId === "string" ? body.sessionId : null;

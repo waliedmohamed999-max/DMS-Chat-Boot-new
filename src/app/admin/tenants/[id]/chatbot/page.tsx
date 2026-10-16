@@ -2,7 +2,8 @@ import { notFound } from "next/navigation";
 import { superAdminDb } from "@/lib/db";
 import type { FlowGraph } from "@/lib/chatbot/types";
 
-export default async function TenantChatbotPage({ params }: { params: { id: string } }) {
+export default async function TenantChatbotPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const tenant = await superAdminDb.tenant.findUnique({ where: { id: params.id }, select: { id: true } });
   if (!tenant) notFound();
 

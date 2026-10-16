@@ -8,7 +8,8 @@ import { TenantEmbedChatWidget } from "./TenantEmbedChatWidget";
  * (بوابة الباقة + تفعيل التاجر الصريح) قبل تمرير enabled/voiceCallEnabled للمكوّن العميل، بنفس نمط
  * تمرير settings.platformChatEnabled لـChatWidget من (marketing)/page.tsx تماماً.
  */
-export default async function EmbedChatPage({ params }: { params: { tenantId: string } }) {
+export default async function EmbedChatPage(props: { params: Promise<{ tenantId: string }> }) {
+  const params = await props.params;
   const tenantId = params.tenantId;
 
   let enabled = false;

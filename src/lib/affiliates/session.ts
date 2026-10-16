@@ -24,7 +24,7 @@ export async function setAffiliateSession(affiliateId: string): Promise<void> {
     .setExpirationTime(`${MAX_AGE_SECONDS}s`)
     .sign(getSecret());
 
-  cookies().set(COOKIE_NAME, token, {
+  (await cookies()).set(COOKIE_NAME, token, {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
@@ -34,13 +34,13 @@ export async function setAffiliateSession(affiliateId: string): Promise<void> {
 }
 
 export async function clearAffiliateSession(): Promise<void> {
-  cookies().delete(COOKIE_NAME);
+  (await cookies()).delete(COOKIE_NAME);
 }
 
 /** يتحقق من الكوكي ثم يُعيد جلب سجل المسوّق حياً من القاعدة (وليس من الـJWT فقط) — بحيث تعليق
  * حساب مسوّق من admin/affiliates يسري فوراً على الجلسة القائمة، لا ينتظر انتهاء صلاحية التوكن. */
 export async function getAffiliateSession() {
-  const token = cookies().get(COOKIE_NAME)?.value;
+  const token = (await cookies()).get(COOKIE_NAME)?.value;
   if (!token) return null;
 
   let affiliateId: string;

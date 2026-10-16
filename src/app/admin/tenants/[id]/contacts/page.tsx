@@ -5,7 +5,11 @@ import { STAGE_LABELS_AR, CONTACT_SOURCE_LABELS_AR } from "@/lib/contacts/stages
 
 const PAGE_SIZE = 25;
 
-export default async function TenantContactsPage({ params, searchParams }: { params: { id: string }; searchParams: { page?: string } }) {
+export default async function TenantContactsPage(
+  props: { params: Promise<{ id: string }>; searchParams: Promise<{ page?: string }> }
+) {
+  const searchParams = await props.searchParams;
+  const params = await props.params;
   const tenant = await superAdminDb.tenant.findUnique({ where: { id: params.id }, select: { id: true, name: true } });
   if (!tenant) notFound();
 

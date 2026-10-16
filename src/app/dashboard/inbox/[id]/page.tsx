@@ -23,7 +23,8 @@ const ORDER_STATUS_LABELS: Record<string, string> = {
   SHIPPED: "🚚 تم الشحن", DELIVERED: "📦 تم التسليم", CANCELLED: "❌ ملغي",
 };
 
-export default async function ConversationThreadPage({ params }: { params: { id: string } }) {
+export default async function ConversationThreadPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const session = await requireTenantSession();
   const tenantId = session.user.tenantId;
   const canAssign = hasEffectivePermission(session.user.permissions, "inbox.assign");

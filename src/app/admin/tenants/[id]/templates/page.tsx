@@ -8,7 +8,8 @@ const STATUS_LABELS: Record<string, { label: string; className: string }> = {
   REJECTED: { label: "مرفوض", className: "bg-danger-500/10 text-danger-500" },
 };
 
-export default async function TenantTemplatesPage({ params }: { params: { id: string } }) {
+export default async function TenantTemplatesPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const tenant = await superAdminDb.tenant.findUnique({ where: { id: params.id }, select: { id: true } });
   if (!tenant) notFound();
 

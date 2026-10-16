@@ -19,7 +19,7 @@ export async function checkPartnerApplicationStatus(formData: FormData): Promise
     return { found: false, error: "رقم الطلب والبريد الإلكتروني مطلوبان" };
   }
 
-  const ip = headers().get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  const ip = (await headers()).get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
   const rateLimit = await checkTenantRateLimit(ip, "partner-status-check", 20, 3600);
   if (!rateLimit.allowed) {
     return { found: false, error: "عدد محاولات كبير جداً — حاول لاحقاً." };

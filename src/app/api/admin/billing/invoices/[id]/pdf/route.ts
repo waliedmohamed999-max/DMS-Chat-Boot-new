@@ -6,7 +6,8 @@ import { getPlatformSettings } from "@/lib/platformSettings";
 import { generateInvoicePdfBuffer } from "@/lib/billing/invoicePdf";
 
 /** نفس مولّد PDF المستخدَم من جانب التاجر، لكن عبر جلسة فريق المنصة (superAdminDb، عابر للتجار). */
-export async function GET(_req: Request, { params }: { params: { id: string } }) {
+export async function GET(_req: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const session = await requireSuperAdminSession();
   try {
     requirePermission(session.user.role, "platform.view_revenue");

@@ -3,7 +3,8 @@ import { SetupForm } from "./SetupForm";
 import { AuthShell } from "@/components/auth/AuthShell";
 import { LogoFull } from "@/components/Logo";
 
-export default async function PartnerSetupPage({ params }: { params: { token: string } }) {
+export default async function PartnerSetupPage(props: { params: Promise<{ token: string }> }) {
+  const params = await props.params;
   const info = await getSetupTokenInfo(params.token);
 
   if (!info.valid) {

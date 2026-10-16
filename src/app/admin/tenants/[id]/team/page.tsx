@@ -4,7 +4,8 @@ import { requireSuperAdminSession } from "@/lib/session";
 import { hasEffectivePermission, ROLE_LABELS_AR } from "@/lib/rbac";
 import { toggleMerchantUserActive } from "../../actions";
 
-export default async function TenantTeamPage({ params }: { params: { id: string } }) {
+export default async function TenantTeamPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const session = await requireSuperAdminSession();
   const canSuspend = hasEffectivePermission(session.user.permissions, "platform.merchants.suspend");
 

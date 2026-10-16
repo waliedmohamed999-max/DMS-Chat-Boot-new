@@ -24,7 +24,8 @@ function toDatetimeLocalValue(d: Date | null): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-export default async function AnnouncementsPage({ searchParams }: { searchParams: { edit?: string } }) {
+export default async function AnnouncementsPage(props: { searchParams: Promise<{ edit?: string }> }) {
+  const searchParams = await props.searchParams;
   const session = await requireSuperAdminSession();
   if (!hasEffectivePermission(session.user.permissions, "platform.announcements.send")) {
     return (

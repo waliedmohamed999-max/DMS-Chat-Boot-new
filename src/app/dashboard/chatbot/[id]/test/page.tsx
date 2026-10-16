@@ -7,7 +7,8 @@ import { ChatbotTestOnlyPanel } from "@/components/dashboard/ChatbotTestOnlyPane
 import { getConnectedPhoneNumber } from "@/lib/integrations/registry";
 import type { FlowGraph } from "@/lib/chatbot/types";
 
-export default async function ChatbotFlowTestOnlyPage({ params }: { params: { id: string } }) {
+export default async function ChatbotFlowTestOnlyPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const session = await requireTenantSession();
 
   if (!hasEffectivePermission(session.user.permissions, "chatbot.test")) {

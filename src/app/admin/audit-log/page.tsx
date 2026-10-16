@@ -8,7 +8,8 @@ const PAGE_SIZE = 30;
 
 type SearchParams = AuditLogSearchParams & { page?: string };
 
-export default async function PlatformAuditLogPage({ searchParams }: { searchParams: SearchParams }) {
+export default async function PlatformAuditLogPage(props: { searchParams: Promise<SearchParams> }) {
+  const searchParams = await props.searchParams;
   const session = await requireSuperAdminSession();
   if (!hasEffectivePermission(session.user.permissions, "platform.audit_log.view")) {
     return (

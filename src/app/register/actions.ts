@@ -43,7 +43,7 @@ export async function registerTenant(
 
   // تسجيل تاجر عام بلا مصادقة مسبقة — بلا هذا الحد كان بالإمكان إغراق مركز الموافقات وقاعدة
   // البيانات بحسابات وهمية بلا أي عائق، خلافاً لبقية النماذج العامة المشابهة (تواصل معنا، طلب شراكة).
-  const ip = headers().get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  const ip = (await headers()).get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
   const rateLimit = await checkTenantRateLimit(ip, "register-tenant", 5, 3600);
   if (!rateLimit.allowed) {
     return { error: "عدد محاولات تسجيل كبير جداً من عنوانك الحالي — حاول مرة أخرى بعد ساعة." };

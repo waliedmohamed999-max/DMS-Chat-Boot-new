@@ -2,7 +2,8 @@ import { notFound } from "next/navigation";
 import { superAdminDb } from "@/lib/db";
 import { ORDER_STATUS_LABELS_AR } from "@/lib/orders/labels";
 
-export default async function TenantOrdersPage({ params }: { params: { id: string } }) {
+export default async function TenantOrdersPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const tenant = await superAdminDb.tenant.findUnique({ where: { id: params.id }, select: { id: true } });
   if (!tenant) notFound();
 

@@ -17,7 +17,8 @@ const ALL_STATUSES = ["PENDING_REVIEW", "TRIAL", "ACTIVE", "SUSPENDED", "CANCELL
 type SortKey = "name" | "createdAt" | "lastActivity";
 type SearchParams = TenantListSearchParams & { page?: string; sort?: SortKey; dir?: "asc" | "desc"; prefillLead?: string };
 
-export default async function TenantsListPage({ searchParams }: { searchParams: SearchParams }) {
+export default async function TenantsListPage(props: { searchParams: Promise<SearchParams> }) {
+  const searchParams = await props.searchParams;
   const session = await requireSuperAdminSession();
   if (!hasEffectivePermission(session.user.permissions, "platform.merchants.view")) {
     return (

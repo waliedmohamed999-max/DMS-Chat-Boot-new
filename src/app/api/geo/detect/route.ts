@@ -14,7 +14,7 @@ const SUPPORTED_COUNTRIES = new Set(["SA", "AE", "EG"]);
 export async function GET(req: NextRequest) {
   try {
     const forwardedFor = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-    const ip = forwardedFor || req.headers.get("x-real-ip") || req.ip;
+    const ip = forwardedFor || req.headers.get("x-real-ip");
 
     // بيئة محلية/بلا IP حقيقي قابل للتحديد — لا معنى لاستدعاء خدمة خارجية.
     if (!ip || ip === "127.0.0.1" || ip === "::1" || ip.startsWith("192.168.") || ip.startsWith("10.")) {

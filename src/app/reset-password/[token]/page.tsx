@@ -8,7 +8,8 @@ export const metadata = { title: "تعيين كلمة مرور جديدة — DM
 
 // نفس رموز AccountSetupToken ونفس منطق الإكمال الآمن (مُجزَّأ + صلاحية + استخدام واحد) الخاص بـ
 // partners/setup — صفحة منفصلة فقط لأن نصوص "إعداد حساب جديد" لا تناسب سياق استعادة كلمة المرور.
-export default async function ResetPasswordPage({ params }: { params: { token: string } }) {
+export default async function ResetPasswordPage(props: { params: Promise<{ token: string }> }) {
+  const params = await props.params;
   const info = await getSetupTokenInfo(params.token);
 
   if (!info.valid) {

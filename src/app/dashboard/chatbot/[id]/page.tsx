@@ -10,13 +10,14 @@ import { canDeleteFlow } from "@/lib/chatbot/permissions";
 import { getConnectedPhoneNumber } from "@/lib/integrations/registry";
 import type { FlowGraph } from "@/lib/chatbot/types";
 
-export default async function ChatbotFlowPage({
-  params,
-  searchParams,
-}: {
-  params: { id: string };
-  searchParams: { view?: string };
-}) {
+export default async function ChatbotFlowPage(
+  props: {
+    params: Promise<{ id: string }>;
+    searchParams: Promise<{ view?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
+  const params = await props.params;
   const session = await requireTenantSession();
 
   if (!hasEffectivePermission(session.user.permissions, "chatbot.edit")) {

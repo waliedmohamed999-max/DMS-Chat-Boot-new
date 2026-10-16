@@ -21,7 +21,7 @@ export default async function MarketingLayout({ children }: { children: React.Re
   // كوكي dms_country يُقرأ هنا (Server Component) قبل أول رسم — يمنع "flash" لدولة خاطئة قبل أن
   // يتحقق CountryProvider من الكوكي على العميل. اختيار محفوظ صالح فعلياً (موجود ضمن الدول النشطة
   // حالياً) وحده يُحتسَب "تفضيلاً محفوظاً" يمنع الكشف التلقائي عبر IP لاحقاً.
-  const storedCountryRaw = cookies().get("dms_country")?.value;
+  const storedCountryRaw = (await cookies()).get("dms_country")?.value;
   const hasStoredPreference = Boolean(storedCountryRaw && countries.some((c) => c.country === storedCountryRaw));
   const initialCountry: Country = hasStoredPreference ? (storedCountryRaw as Country) : defaultCountry;
 

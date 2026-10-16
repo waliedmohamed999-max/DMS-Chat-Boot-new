@@ -15,7 +15,8 @@ const COMMISSION_STATUS_LABELS_AR: Record<string, string> = {
   PENDING: "قيد الانتظار", APPROVED: "معتمدة", PAID: "مصروفة", REVERSED: "معكوسة",
 };
 
-export default async function AdminAffiliateDetailPage({ params }: { params: { id: string } }) {
+export default async function AdminAffiliateDetailPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const session = await requireSuperAdminSession();
   if (!hasEffectivePermission(session.user.permissions, "platform.affiliates.manage")) {
     return <div className="card p-8 text-center text-slate-400">ليس لديك صلاحية إدارة برنامج التسويق بالعمولة.</div>;

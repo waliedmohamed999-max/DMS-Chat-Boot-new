@@ -42,7 +42,7 @@ export async function submitContactMessage(formData: FormData): Promise<ContactF
     return { success: false, error: "تعذّر إرسال الرسالة، أعد المحاولة." };
   }
 
-  const ip = headers().get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  const ip = (await headers()).get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
   const rateLimit = await checkTenantRateLimit(ip, "contact-message", 5, 3600);
   if (!rateLimit.allowed) {
     return { success: false, error: "عدد رسائل كبير جداً من عنوانك الحالي — حاول مرة أخرى بعد ساعة." };

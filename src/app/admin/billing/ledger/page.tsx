@@ -15,7 +15,8 @@ const SOURCE_TYPE_LABELS_AR: Record<string, string> = {
 
 type SearchParams = LedgerSearchParams & { page?: string };
 
-export default async function LedgerPage({ searchParams }: { searchParams: SearchParams }) {
+export default async function LedgerPage(props: { searchParams: Promise<SearchParams> }) {
+  const searchParams = await props.searchParams;
   const session = await requireSuperAdminSession();
   if (!hasEffectivePermission(session.user.permissions, "platform.view_revenue")) {
     return (

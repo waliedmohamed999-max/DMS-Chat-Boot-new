@@ -16,7 +16,7 @@ export default async function PartnersApplyPage() {
 
   // هذه الصفحة خارج تخطيط (marketing) (بلا Navbar/CountryProvider) — تقرأ نفس كوكي dms_country
   // مباشرة حتى تبقى الدولة المختارة من زر 🌍 في الموقع العام متسقة هنا أيضاً.
-  const storedCountry = cookies().get("dms_country")?.value;
+  const storedCountry = (await cookies()).get("dms_country")?.value;
   const initialCountry = countries.find((c) => c.country === storedCountry)?.country
     ?? countries.find((c) => c.isDefault)?.country
     ?? "SA";

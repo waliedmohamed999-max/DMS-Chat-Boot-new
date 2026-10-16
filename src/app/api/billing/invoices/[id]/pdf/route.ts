@@ -4,7 +4,8 @@ import { withTenant, rawDb } from "@/lib/db";
 import { getPlatformSettings } from "@/lib/platformSettings";
 import { generateInvoicePdfBuffer } from "@/lib/billing/invoicePdf";
 
-export async function GET(_req: Request, { params }: { params: { id: string } }) {
+export async function GET(_req: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const session = await requireTenantSession();
   const tenantId = session.user.tenantId;
 

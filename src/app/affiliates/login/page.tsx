@@ -1,6 +1,7 @@
 "use client";
 
-import { useFormState, useFormStatus } from "react-dom";
+import { useActionState } from "react";
+import { useFormStatus } from "react-dom";
 import Link from "next/link";
 import { AuthShell } from "@/components/auth/AuthShell";
 import { PasswordInput } from "@/components/auth/PasswordInput";
@@ -21,7 +22,7 @@ function SubmitButton() {
 }
 
 export default function AffiliateLoginPage() {
-  const [state, formAction] = useFormState(affiliateLogin, { error: null });
+  const [state, formAction] = useActionState(affiliateLogin, { error: null });
 
   return (
     <AuthShell tagline="لوحة تحكم المسوّق بالعمولة">

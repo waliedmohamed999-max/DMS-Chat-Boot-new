@@ -14,7 +14,8 @@ const TAB_ORDER: Tab[] = ["all", ...ORDER_STATUSES_ORDERED];
 
 type SearchParams = OrderListSearchParams & { page?: string };
 
-export default async function OrdersPage({ searchParams }: { searchParams: SearchParams }) {
+export default async function OrdersPage(props: { searchParams: Promise<SearchParams> }) {
+  const searchParams = await props.searchParams;
   const session = await requireTenantSession();
   const tenantId = session.user.tenantId;
 

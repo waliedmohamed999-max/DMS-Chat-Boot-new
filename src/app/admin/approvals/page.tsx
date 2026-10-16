@@ -31,7 +31,8 @@ function Tabs({ active }: { active: "pending" | "approved" | "rejected" }) {
   );
 }
 
-export default async function ApprovalsCenterPage({ searchParams }: { searchParams: { tab?: string; page?: string } }) {
+export default async function ApprovalsCenterPage(props: { searchParams: Promise<{ tab?: string; page?: string }> }) {
+  const searchParams = await props.searchParams;
   const session = await requireSuperAdminSession();
   if (!hasEffectivePermission(session.user.permissions, "platform.approvals.review")) {
     return (

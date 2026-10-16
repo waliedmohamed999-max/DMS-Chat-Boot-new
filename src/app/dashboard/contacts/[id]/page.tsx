@@ -23,7 +23,8 @@ const RECIPIENT_STATUS_LABELS: Record<string, string> = {
   PENDING: "قيد الإرسال", SENT: "أُرسلت", DELIVERED: "وصلت", READ: "قُرئت", REPLIED: "رُدَّ عليها", FAILED: "فشلت",
 };
 
-export default async function ContactDetailPage({ params }: { params: { id: string } }) {
+export default async function ContactDetailPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const session = await requireTenantSession();
   const tenantId = session.user.tenantId;
 

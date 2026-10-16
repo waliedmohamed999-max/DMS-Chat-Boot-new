@@ -1,6 +1,7 @@
 import Link from "next/link";
 
-export default function NoAccessPage({ searchParams }: { searchParams: { from?: string } }) {
+export default async function NoAccessPage(props: { searchParams: Promise<{ from?: string }> }) {
+  const searchParams = await props.searchParams;
   return (
     <div className="flex h-full flex-col items-center justify-center text-center">
       <div className="mb-4 text-5xl">🔒</div>

@@ -26,7 +26,8 @@ const INVOICE_STATUS_BADGE: Record<string, string> = {
 
 type SearchParams = InvoiceSearchParams & { page?: string };
 
-export default async function PlatformBillingPage({ searchParams }: { searchParams: SearchParams }) {
+export default async function PlatformBillingPage(props: { searchParams: Promise<SearchParams> }) {
+  const searchParams = await props.searchParams;
   const session = await requireSuperAdminSession();
   if (!hasEffectivePermission(session.user.permissions, "platform.view_revenue")) {
     return (

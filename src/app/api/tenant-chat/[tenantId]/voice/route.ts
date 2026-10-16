@@ -12,7 +12,8 @@ const MAX_AUDIO_BYTES = 10 * 1024 * 1024; // 10MB — نفس حد /api/platform-
  * X-*)، لكن يفحص بوابة الباقة + تفعيل التاجر **قبل** استدعاء Whisper — تفريغ صوتي له تكلفة فعلية
  * حقيقية على مفتاح OpenAI المشترك للمنصة، فلا يصح إنفاقها على تاجر لا يملك هذه الميزة أصلاً.
  */
-export async function POST(req: NextRequest, { params }: { params: { tenantId: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ tenantId: string }> }) {
+  const params = await props.params;
   const tenantId = params.tenantId;
   const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || req.headers.get("x-real-ip") || "unknown";
   const ipLimit = await checkIpRateLimit(ip, "tenant-chat-voice", 10, 60);

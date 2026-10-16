@@ -48,7 +48,7 @@ export async function startImpersonation(tenantId: string, superAdminUserId: str
     },
   });
 
-  cookies().set(IMPERSONATION_COOKIE, rawToken, {
+  (await cookies()).set(IMPERSONATION_COOKIE, rawToken, {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
@@ -71,7 +71,7 @@ export async function startImpersonation(tenantId: string, superAdminUserId: str
 }
 
 export async function endImpersonation(): Promise<void> {
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   const rawToken = cookieStore.get(IMPERSONATION_COOKIE)?.value;
   if (rawToken) {
     const tokenHash = hashToken(rawToken);
@@ -91,7 +91,7 @@ export async function endImpersonation(): Promise<void> {
 
 /** يُستدعى من getCurrentSession() فقط — لا يُستخدم مباشرة في أي مكان آخر. */
 export async function getActiveImpersonation(): Promise<ActiveImpersonation | null> {
-  const rawToken = cookies().get(IMPERSONATION_COOKIE)?.value;
+  const rawToken = (await cookies()).get(IMPERSONATION_COOKIE)?.value;
   if (!rawToken) return null;
 
   const tokenHash = hashToken(rawToken);

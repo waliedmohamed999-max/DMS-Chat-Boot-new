@@ -4,7 +4,8 @@ import { checkIpRateLimit } from "@/lib/rateLimit";
 
 /** نقطة polling خفيفة (نفس نمط /api/inbox/unread-count) — تُستخدَم من الـwidget (كل 3 ثوانٍ أثناء
  * فتح الشات) ومن صفحة الإدارة معاً لجلب أي رسائل جديدة بعد messageId معيّن + حالة الجلسة الحالية. */
-export async function GET(req: NextRequest, { params }: { params: { sessionId: string } }) {
+export async function GET(req: NextRequest, props: { params: Promise<{ sessionId: string }> }) {
+  const params = await props.params;
   const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || req.headers.get("x-real-ip") || "unknown";
   const ipLimit = await checkIpRateLimit(ip, "platform-chat-poll", 60, 60);
   if (!ipLimit.allowed) return NextResponse.json({ error: "طلبات كثيرة جداً" }, { status: 429 });
