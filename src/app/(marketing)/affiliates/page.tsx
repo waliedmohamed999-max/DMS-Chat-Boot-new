@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { LogoFull } from "@/components/Logo";
+import "./affiliates.css";
+import { ArrowLeft, BadgeCheck, Clock3, CreditCard, Link2, TrendingUp, Users } from "lucide-react";
 import { Reveal } from "@/components/marketing/Reveal";
 import { TIER_RATE_PERCENT, TIER_LABELS_AR, TIER_THRESHOLDS } from "@/lib/affiliates/tiers";
 
@@ -11,10 +12,10 @@ export const metadata = {
 const TIER_ORDER = ["STARTER", "GROWTH", "ELITE"] as const;
 
 const STATS = [
-  { icon: "📈", value: "30%", label: "الحد الأقصى للعمولة" },
-  { icon: "⏱️", value: "12 شهر", label: "مدة العمولة لكل عميل" },
-  { icon: "💳", value: "Net 30", label: "المدفوعات" },
-  { icon: "🍪", value: "90 يوم", label: "نافذة تتبّع الإحالة" },
+  { icon: TrendingUp, value: "30%", label: "الحد الأقصى للعمولة" },
+  { icon: Clock3, value: "12 شهر", label: "مدة العمولة لكل عميل" },
+  { icon: CreditCard, value: "Net 30", label: "المدفوعات" },
+  { icon: Link2, value: "90 يوم", label: "نافذة تتبّع الإحالة" },
 ];
 
 const STEPS = [
@@ -46,51 +47,28 @@ const FAQ = [
 
 export default function AffiliatesPage() {
   return (
-    <div className="min-h-screen bg-white dark:bg-slate-950">
-      <header className="border-b border-white/10 bg-navy-950 px-4 py-4">
-        <div className="mx-auto flex max-w-5xl items-center justify-between">
-          <LogoFull size="sm" light />
-          <div className="flex items-center gap-4 text-sm">
-            <Link href="/affiliates/login" className="text-slate-300 hover:text-white">
-              دخول المسوّقين
-            </Link>
-            <Link href="/affiliates/apply" className="rounded-lg bg-wa-500 px-4 py-2 font-semibold text-white hover:bg-wa-600">
-              قدّم للانضمام
-            </Link>
-          </div>
-        </div>
-      </header>
-
-      {/* Hero */}
-      <section className="relative overflow-hidden bg-gradient-to-br from-navy-950 via-navy-900 to-wa-700/30 px-4 py-20">
-        <div className="pointer-events-none absolute -left-24 -top-24 h-72 w-72 rounded-full bg-wa-500/20 blur-3xl" />
-        <div className="pointer-events-none absolute -bottom-24 -right-24 h-72 w-72 rounded-full bg-accent-500/10 blur-3xl" />
-        <div className="relative mx-auto max-w-3xl text-center">
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-wa-300">
-            <span className="h-1.5 w-1.5 rounded-full bg-wa-400" /> برنامج التسويق بالعمولة
-          </span>
-          <h1 className="mt-5 text-3xl font-extrabold leading-tight text-white sm:text-5xl">
-            اربح حتى <span className="text-wa-400">30%</span> عمولة متكررة
-          </h1>
-          <p className="mx-auto mt-5 max-w-xl text-lg text-slate-300">
-            حَوِّل معرفتك بالأعمال التي تتواصل مع عملائها عبر واتساب إلى دخل حقيقي — عمولة على كل دفعة
-            يسدّدها التاجر الذي أحلته، لمدة 12 شهراً كاملة.
-          </p>
-          <div className="mt-8">
-            <Link href="/affiliates/apply" className="rounded-lg bg-wa-500 px-8 py-3 text-base font-bold text-white shadow-card transition hover:bg-wa-600">
-              قدّم للانضمام الآن
-            </Link>
-          </div>
-        </div>
-
-        <div className="relative mx-auto mt-14 grid max-w-3xl grid-cols-2 gap-4 sm:grid-cols-4">
-          {STATS.map((s) => (
-            <div key={s.label} className="rounded-2xl border border-white/10 bg-white/5 p-4 text-center backdrop-blur">
-              <div className="text-xl">{s.icon}</div>
-              <p className="mt-2 text-xl font-bold text-white">{s.value}</p>
-              <p className="mt-0.5 text-xs text-slate-400">{s.label}</p>
+    <div className="affiliate-page">
+      <section className="affiliate-hero">
+        <div className="affiliate-hero-grid">
+          <div className="affiliate-hero-copy">
+            <span className="affiliate-eyebrow"><Users size={16} aria-hidden="true" /> برنامج شركاء النجاح</span>
+            <h1>رشّح منصة تثق بها.<br /><span>وابنِ دخلاً يتكرر.</span></h1>
+            <p>ساعد الأعمال على تطوير تواصلها عبر واتساب، واربح حتى <strong>30% عمولة</strong> على كل دفعة يسدّدها العميل الذي أحلته، لمدة 12 شهراً كاملة.</p>
+            <div className="affiliate-actions">
+              <Link href="/affiliates/apply" className="affiliate-primary">قدّم للانضمام الآن <ArrowLeft size={18} aria-hidden="true" /></Link>
+              <Link href="/affiliates/login" className="affiliate-secondary">دخول المسوّقين <ArrowLeft size={16} aria-hidden="true" /></Link>
             </div>
-          ))}
+            <div className="affiliate-hero-note"><BadgeCheck size={17} aria-hidden="true" /> تقديم مجاني <span aria-hidden="true">·</span> رابط إحالة خاص <span aria-hidden="true">·</span> متابعة من لوحة واحدة</div>
+          </div>
+          <div className="affiliate-visual" role="img" aria-label="ثلاثة مستويات للعمولة، تبدأ من 20% وتصل إلى 30% لمدة 12 شهراً لكل عميل، وترتفع تلقائياً مع نمو إحالاتك">
+            <div className="affiliate-visual-heading"><span className="affiliate-icon"><TrendingUp size={22} aria-hidden="true" /></span><div><strong>نجاحهم، فرصتك للنمو</strong><p>كل إحالة تفتح لك باباً جديداً</p></div></div>
+            <div className="affiliate-commission"><span>عمولة متكررة تصل إلى</span><strong dir="ltr">30<span>%</span></strong><p>لمدة 12 شهراً لكل عميل</p></div>
+            <div className="affiliate-growth" aria-hidden="true">{TIER_ORDER.map(tier => <div key={tier}><span>{TIER_RATE_PERCENT[tier]}%</span><i style={{ height: `${TIER_RATE_PERCENT[tier] * 3}px` }} /><small>{TIER_LABELS_AR[tier]}</small></div>)}</div>
+            <div className="affiliate-visual-foot"><BadgeCheck size={17} aria-hidden="true" /> ترتفع نسبتك تلقائياً مع نمو إحالاتك</div>
+          </div>
+        </div>
+        <div className="affiliate-stats">
+          {STATS.map(({ icon: Icon, value, label }) => <div key={label}><span className="affiliate-icon"><Icon size={21} aria-hidden="true" /></span><div><strong>{value}</strong><p>{label}</p></div></div>)}
         </div>
       </section>
 
@@ -111,13 +89,13 @@ export default function AffiliatesPage() {
               return (
                 <Reveal key={tier} delay={i * 100}>
                   <div
-                    className={`relative flex h-full flex-col rounded-2xl border p-6 text-center ${
-                      featured ? "border-wa-500 shadow-lg ring-2 ring-wa-500/30" : "border-slate-200 dark:border-white/10"
+                    className={`affiliate-tier relative flex h-full flex-col rounded-2xl border p-6 text-center ${
+                      featured ? "affiliate-tier-featured" : "border-slate-200 dark:border-white/10"
                     }`}
                   >
                     {featured && (
-                      <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-wa-500 px-3 py-1 text-xs font-bold text-white">
-                        الأكثر شيوعاً
+                      <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-violet-600 px-3 py-1 text-xs font-bold text-white">
+                        شريك نمو
                       </span>
                     )}
                     <p className="text-sm text-slate-400">{TIER_LABELS_AR[tier]}</p>
@@ -175,14 +153,14 @@ export default function AffiliatesPage() {
           <div className="mt-10 grid grid-cols-1 gap-8 sm:grid-cols-3">
             {STEPS.map((s, i) => (
               <Reveal key={s.n} delay={i * 100}>
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-wa-500 text-xs font-bold text-white">{s.n}</div>
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-violet-600 text-xs font-bold text-white">{s.n}</div>
                 <h3 className="mt-4 font-bold text-slate-900 dark:text-white">{s.title}</h3>
                 <p className="mt-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400">{s.body}</p>
               </Reveal>
             ))}
           </div>
           <Reveal className="mt-10 text-center">
-            <Link href="/affiliates/apply" className="rounded-lg bg-wa-500 px-8 py-3 text-base font-bold text-white shadow-card transition hover:bg-wa-600">
+            <Link href="/affiliates/apply" className="rounded-lg bg-violet-600 px-8 py-3 text-base font-bold text-white shadow-card transition hover:bg-violet-700">
               انضم إلى البرنامج
             </Link>
           </Reveal>
@@ -200,10 +178,10 @@ export default function AffiliatesPage() {
           <div className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-2">
             <Reveal>
               <div className="h-full rounded-xl border border-slate-200 bg-white p-5 dark:border-white/10 dark:bg-slate-900">
-                <p className="mb-3 text-sm font-bold text-wa-600 dark:text-wa-400">مناسب تماماً لـ</p>
+                <p className="mb-3 text-sm font-bold text-violet-600 dark:text-violet-400">مناسب تماماً لـ</p>
                 <ul className="space-y-2.5 text-sm text-slate-600 dark:text-slate-300">
                   {SUITABLE_FOR.map((t) => (
-                    <li key={t} className="flex items-start gap-2"><span className="mt-0.5 text-wa-500">✓</span>{t}</li>
+                    <li key={t} className="flex items-start gap-2"><span className="mt-0.5 text-violet-500">✓</span>{t}</li>
                   ))}
                 </ul>
               </div>
@@ -247,12 +225,12 @@ export default function AffiliatesPage() {
       {/* Bottom CTA */}
       <section className="px-4 pb-20">
         <Reveal className="mx-auto max-w-4xl">
-          <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-navy-950 via-navy-900 to-wa-600/40 p-10 text-center sm:p-14">
-            <div className="pointer-events-none absolute -left-20 -top-20 h-64 w-64 rounded-full bg-wa-500/20 blur-3xl" />
+          <div className="affiliate-bottom relative overflow-hidden rounded-3xl p-10 text-center sm:p-14">
+            <div className="pointer-events-none absolute -left-20 -top-20 h-64 w-64 rounded-full bg-violet-600/20 blur-3xl" />
             <div className="relative z-10">
               <h2 className="text-2xl font-bold text-white sm:text-3xl">جاهز تبدأ تربح؟</h2>
-              <p className="mx-auto mt-3 max-w-xl text-slate-300">التقديم مجاني ويستغرق دقائق — راجعة الطلبات خلال أيام عمل قليلة.</p>
-              <Link href="/affiliates/apply" className="mt-6 inline-block rounded-lg bg-wa-500 px-8 py-3 text-base font-bold text-white shadow-card transition hover:bg-wa-600">
+              <p className="mx-auto mt-3 max-w-xl text-slate-300">التقديم مجاني ويستغرق دقائق — تُراجَع الطلبات خلال أيام عمل قليلة.</p>
+              <Link href="/affiliates/apply" className="affiliate-primary mt-6">
                 قدّم للانضمام الآن
               </Link>
             </div>
@@ -260,9 +238,6 @@ export default function AffiliatesPage() {
         </Reveal>
       </section>
 
-      <footer className="border-t border-slate-100 px-4 py-8 text-center text-xs text-slate-400 dark:border-white/10">
-        <Link href="/" className="hover:underline">DMS Tech</Link> © {new Date().getFullYear()}
-      </footer>
     </div>
   );
 }
