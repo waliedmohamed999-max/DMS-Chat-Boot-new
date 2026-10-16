@@ -1,5 +1,6 @@
 ﻿/** Published WhatsApp packages on dmstech.sa/offers, reviewed 2026-10-16.
  * These are company service packages; requests go to the company's canonical order pages.
+ * Migration fixture and runtime fallback. Live prices are read from MarketingPlan in the database.
  * Existing tenant subscription records and billing limits are intentionally independent.
  * Temporary offers remain on the canonical site so expired promotions are never cached here.
  */

@@ -1,6 +1,8 @@
 import Link from "next/link";
 import "./affiliates.css";
-import { ArrowLeft, BadgeCheck, Clock3, CreditCard, Link2, TrendingUp, Users } from "lucide-react";
+import "../public-pages.css";
+import { ArrowLeft, BadgeCheck, Check, Clock3, CreditCard, Link2, TrendingUp, Users } from "lucide-react";
+import { MarketingFaq } from "@/components/marketing/MarketingFaq";
 import { Reveal } from "@/components/marketing/Reveal";
 import { TIER_RATE_PERCENT, TIER_LABELS_AR, TIER_THRESHOLDS } from "@/lib/affiliates/tiers";
 
@@ -49,10 +51,11 @@ export default function AffiliatesPage() {
   return (
     <div className="affiliate-page">
       <section className="affiliate-hero">
+        <nav className="public-breadcrumb" aria-label="مسار الصفحة"><Link href="/">الرئيسية</Link><span>/</span><span aria-current="page">التسويق بالعمولة</span></nav>
         <div className="affiliate-hero-grid">
           <div className="affiliate-hero-copy">
             <span className="affiliate-eyebrow"><Users size={16} aria-hidden="true" /> برنامج شركاء النجاح</span>
-            <h1>رشّح منصة تثق بها.<br /><span>وابنِ دخلاً يتكرر.</span></h1>
+            <h1>علاقاتك تفتح الفرص.<br /><span>وشراكتنا تنمّي أرباحك.</span></h1>
             <p>ساعد الأعمال على تطوير تواصلها عبر واتساب، واربح حتى <strong>30% عمولة</strong> على كل دفعة يسدّدها العميل الذي أحلته، لمدة 12 شهراً كاملة.</p>
             <div className="affiliate-actions">
               <Link href="/affiliates/apply" className="affiliate-primary">قدّم للانضمام الآن <ArrowLeft size={18} aria-hidden="true" /></Link>
@@ -61,7 +64,7 @@ export default function AffiliatesPage() {
             <div className="affiliate-hero-note"><BadgeCheck size={17} aria-hidden="true" /> تقديم مجاني <span aria-hidden="true">·</span> رابط إحالة خاص <span aria-hidden="true">·</span> متابعة من لوحة واحدة</div>
           </div>
           <div className="affiliate-visual" role="img" aria-label="ثلاثة مستويات للعمولة، تبدأ من 20% وتصل إلى 30% لمدة 12 شهراً لكل عميل، وترتفع تلقائياً مع نمو إحالاتك">
-            <div className="affiliate-visual-heading"><span className="affiliate-icon"><TrendingUp size={22} aria-hidden="true" /></span><div><strong>نجاحهم، فرصتك للنمو</strong><p>كل إحالة تفتح لك باباً جديداً</p></div></div>
+            <div className="affiliate-visual-heading"><span className="affiliate-icon"><TrendingUp size={22} aria-hidden="true" /></span><div><strong>شراكة تنمو معك</strong><p>إحالات أكثر. عائد أعلى.</p></div><span className="affiliate-partner-label">DMS PARTNERS</span></div>
             <div className="affiliate-commission"><span>عمولة متكررة تصل إلى</span><strong dir="ltr">30<span>%</span></strong><p>لمدة 12 شهراً لكل عميل</p></div>
             <div className="affiliate-growth" aria-hidden="true">{TIER_ORDER.map(tier => <div key={tier}><span>{TIER_RATE_PERCENT[tier]}%</span><i style={{ height: `${TIER_RATE_PERCENT[tier] * 3}px` }} /><small>{TIER_LABELS_AR[tier]}</small></div>)}</div>
             <div className="affiliate-visual-foot"><BadgeCheck size={17} aria-hidden="true" /> ترتفع نسبتك تلقائياً مع نمو إحالاتك</div>
@@ -73,10 +76,11 @@ export default function AffiliatesPage() {
       </section>
 
       {/* Tiers */}
-      <section className="px-4 py-16">
+      <section className="affiliate-tiers-section px-4 py-16">
         <div className="mx-auto max-w-5xl">
           <Reveal className="mx-auto max-w-2xl text-center">
-            <h2 className="text-2xl font-bold text-slate-900 sm:text-3xl dark:text-white">ثلاثة مستويات. كلما زاد حجم إحالاتك، ارتفعت نسبتك.</h2>
+            <span className="public-kicker">كل إحالة تصنع فرقاً</span>
+            <h2 className="text-2xl font-bold text-slate-900 sm:text-3xl dark:text-white">طموحك أكبر؟ عمولتك أعلى.</h2>
             <p className="mt-3 text-slate-500 dark:text-slate-400">
               تبدأ بنسبة 20% وترتفع تلقائياً كلما زاد عدد عملائك المدفوعين — بلا أي طلب ترقية.
             </p>
@@ -98,15 +102,17 @@ export default function AffiliatesPage() {
                         شريك نمو
                       </span>
                     )}
-                    <p className="text-sm text-slate-400">{TIER_LABELS_AR[tier]}</p>
-                    <p className="mt-2 text-4xl font-extrabold text-slate-900 dark:text-white">{TIER_RATE_PERCENT[tier]}%</p>
-                    <p className="text-xs text-slate-400">من كل دفعة</p>
+                    <span className="affiliate-tier-index">المستوى 0{i + 1}</span>
+                    <h3>{TIER_LABELS_AR[tier]}</h3>
+                    <p className="affiliate-tier-rate"><bdi>{TIER_RATE_PERCENT[tier]}<span>%</span></bdi></p>
+                    <p className="affiliate-tier-caption">عمولة متكررة من كل دفعة</p>
                     <div className="mt-5 space-y-2 border-t border-slate-100 pt-4 text-sm text-slate-500 dark:border-white/10 dark:text-slate-400">
-                      <p>12 شهراً لكل عميل</p>
-                      <p>
+                      <p><Check size={16} aria-hidden="true" /> 12 شهراً من العمولات لكل عميل</p>
+                      <p><Users size={16} aria-hidden="true" />
                         {range.max ? `من ${range.min} إلى ${range.max} عميلاً محالاً` : `${range.min} عميلاً محالاً فأكثر`}
                       </p>
                     </div>
+                    <Link href="/affiliates/apply" className="affiliate-tier-link">ابدأ شراكتك <ArrowLeft size={16} aria-hidden="true" /></Link>
                   </div>
                 </Reveal>
               );
@@ -120,10 +126,11 @@ export default function AffiliatesPage() {
       </section>
 
       {/* Payout details */}
-      <section className="border-y border-slate-100 bg-slate-50/60 px-4 py-16 dark:border-white/5 dark:bg-white/[0.02]">
+      <section className="affiliate-payout-section border-y border-slate-100 bg-slate-50/60 px-4 py-16 dark:border-white/5 dark:bg-white/[0.02]">
         <div className="mx-auto max-w-5xl">
           <Reveal className="mx-auto max-w-2xl text-center">
-            <h2 className="text-2xl font-bold text-slate-900 sm:text-3xl dark:text-white">اعرف بدقة متى وكيف تستلم أرباحك</h2>
+            <span className="public-kicker">شفافية من أول يوم</span>
+            <h2 className="text-2xl font-bold text-slate-900 sm:text-3xl dark:text-white">أرباحك، بتفاصيل واضحة.</h2>
           </Reveal>
           <div className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {[
@@ -145,33 +152,30 @@ export default function AffiliatesPage() {
       </section>
 
       {/* How it works */}
-      <section className="px-4 py-16">
+      <section className="affiliate-steps-section px-4 py-16">
         <div className="mx-auto max-w-4xl">
           <Reveal className="mx-auto max-w-2xl text-center">
-            <h2 className="text-2xl font-bold text-slate-900 sm:text-3xl dark:text-white">ثلاث خطوات نحو أول عمولة لك</h2>
+            <span className="public-kicker">من المعرفة إلى الفرصة</span>
+            <h2 className="text-2xl font-bold text-slate-900 sm:text-3xl dark:text-white">شراكة بسيطة. أثر مستمر.</h2>
           </Reveal>
           <div className="mt-10 grid grid-cols-1 gap-8 sm:grid-cols-3">
             {STEPS.map((s, i) => (
-              <Reveal key={s.n} delay={i * 100}>
+              <Reveal key={s.n} delay={i * 100} className="affiliate-step">
                 <div className="flex h-8 w-8 items-center justify-center rounded-full bg-violet-600 text-xs font-bold text-white">{s.n}</div>
                 <h3 className="mt-4 font-bold text-slate-900 dark:text-white">{s.title}</h3>
                 <p className="mt-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400">{s.body}</p>
               </Reveal>
             ))}
           </div>
-          <Reveal className="mt-10 text-center">
-            <Link href="/affiliates/apply" className="rounded-lg bg-violet-600 px-8 py-3 text-base font-bold text-white shadow-card transition hover:bg-violet-700">
-              انضم إلى البرنامج
-            </Link>
-          </Reveal>
         </div>
       </section>
 
       {/* Who is this for */}
-      <section className="border-y border-slate-100 bg-slate-50/60 px-4 py-16 dark:border-white/5 dark:bg-white/[0.02]">
+      <section className="affiliate-audience-section border-y border-slate-100 bg-slate-50/60 px-4 py-16 dark:border-white/5 dark:bg-white/[0.02]">
         <div className="mx-auto max-w-4xl">
           <Reveal className="mx-auto max-w-2xl text-center">
-            <h2 className="text-2xl font-bold text-slate-900 sm:text-3xl dark:text-white">مصمَّم لكل من يتحدث لغة عملاء واتساب</h2>
+            <span className="public-kicker">هل هذه فرصتك؟</span>
+            <h2 className="text-2xl font-bold text-slate-900 sm:text-3xl dark:text-white">جمهورك المناسب، بداية شراكتنا.</h2>
             <p className="mt-3 text-slate-500 dark:text-slate-400">يناسب البرنامج كل من يمتلك علاقة أو جمهوراً حقيقياً مع أصحاب أعمال يعتمدون على واتساب للتواصل.</p>
           </Reveal>
 
@@ -201,26 +205,7 @@ export default function AffiliatesPage() {
       </section>
 
       {/* FAQ */}
-      <section className="px-4 py-16">
-        <div className="mx-auto max-w-3xl">
-          <Reveal className="mx-auto max-w-2xl text-center">
-            <h2 className="text-2xl font-bold text-slate-900 sm:text-3xl dark:text-white">أسئلتك وإجاباتها</h2>
-          </Reveal>
-          <div className="mt-10 space-y-3">
-            {FAQ.map((f) => (
-              <Reveal key={f.q}>
-                <details className="group rounded-xl border border-slate-200 bg-white p-4 dark:border-white/10 dark:bg-slate-900">
-                  <summary className="flex cursor-pointer list-none items-center justify-between text-sm font-semibold text-slate-900 dark:text-white">
-                    {f.q}
-                    <span className="text-slate-400 transition group-open:rotate-45">+</span>
-                  </summary>
-                  <p className="mt-3 text-sm leading-relaxed text-slate-500 dark:text-slate-400">{f.a}</p>
-                </details>
-              </Reveal>
-            ))}
-          </div>
-        </div>
-      </section>
+      <MarketingFaq items={FAQ} title="تفاصيل الشراكة، بكل وضوح" />
 
       {/* Bottom CTA */}
       <section className="px-4 pb-20">

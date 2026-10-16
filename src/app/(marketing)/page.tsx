@@ -7,6 +7,7 @@ import { SolutionsSection } from "@/components/marketing/SolutionsSection";
 import { LogoMarquee } from "@/components/marketing/LogoMarquee";
 import { CampaignIcon, ChatbotIcon, CrmIcon, IntegrationIcon } from "@/components/marketing/ServiceIcons";
 import { PricingClient } from "@/app/(marketing)/pricing/PricingClient";
+import { getMarketingPlans } from "@/lib/marketingPlans";
 import { getSiteContent } from "@/lib/siteContent";
 import { getPlatformSettings } from "@/lib/platformSettings";
 import { ChatWidget } from "@/components/marketing/ChatWidget";
@@ -27,7 +28,7 @@ export const metadata: Metadata = {
 const FEATURE_ICONS = [CampaignIcon, ChatbotIcon, CrmIcon, IntegrationIcon];
 
 export default async function HomePage() {
-  const [content, settings] = await Promise.all([getSiteContent(), getPlatformSettings()]);
+  const [content, settings, plans] = await Promise.all([getSiteContent(), getPlatformSettings(), getMarketingPlans()]);
 
   return (
     <div className="marketing-home">
@@ -142,7 +143,7 @@ export default async function HomePage() {
             <p className="mt-3 text-slate-500 dark:text-slate-400">باقات واتساب للأعمال من DMS Tech — نطاق واضح وأسعار شهرية وسنوية.</p>
           </Reveal>
 
-          <PricingClient />
+          <PricingClient plans={plans} />
 
           <Reveal className="mt-8 text-center">
             <Link href="/pricing" className="text-sm font-semibold text-wa-600 hover:underline dark:text-wa-400">

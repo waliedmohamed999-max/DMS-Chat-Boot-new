@@ -5,6 +5,7 @@ import { DEFAULT_STARTER_CHATBOT_LIMITS, type ChatbotLimits } from "@/lib/planLi
 import { DEFAULT_STARTER_CAMPAIGN_LIMITS, type CampaignLimits } from "@/lib/campaigns/limits";
 import { NODE_TYPES } from "@/lib/chatbot/nodeTypes";
 import { parsePlanPricing } from "@/lib/planPricing";
+import { MarketingPlans } from "./MarketingPlans";
 import {
   updatePlanChatbotLimits, updatePlanCampaignLimits, updatePlanPricing,
   createPlan, updatePlanCoreFields, togglePlanActive, setPlanAsPopular, unsetPlanPopular,
@@ -32,9 +33,12 @@ export default async function AdminPlansPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-xl font-bold text-white">إدارة الباقات</h1>
-        <p className="text-sm text-slate-400">إنشاء/تعديل الباقات القياسية بالكامل — الاسم، السعر، الحدود، وحدود الشات بوت — دون الحاجة لتعديل الكود.</p>
+        <p className="text-sm text-slate-400">إدارة باقات الموقع وأسعارها، وباقات اشتراكات العملاء وحدودها.</p>
       </div>
 
+      <MarketingPlans />
+
+      <div className="border-t border-white/10 pt-6"><h2 className="text-lg font-bold text-white">باقات اشتراكات العملاء</h2><p className="text-sm text-slate-400">الباقات المرتبطة بحسابات العملاء وحدود الاستخدام والفوترة.</p></div>
       <div className="card p-5">
         <h2 className="mb-4 font-semibold text-white">+ إنشاء باقة جديدة</h2>
         <form action={createPlan} className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">

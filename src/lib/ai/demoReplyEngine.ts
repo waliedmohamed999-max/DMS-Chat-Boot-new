@@ -1,4 +1,4 @@
-import { COMPANY_WHATSAPP_PLANS } from "@/components/marketing/companyPlans";
+import { getMarketingPlans } from "@/lib/marketingPlans";
 import type { Prisma } from "@prisma/client";
 
 /**
@@ -16,7 +16,9 @@ export async function getDemoReply(tx: Prisma.TransactionClient, text: string): 
   // كانت تسقط للرد الافتراضي العام بدل فرع السعر الحقيقي)، فأُضيفت الصيغتان صراحة بدل الاعتماد على
   // المفرد فقط.
   if (/سعر|أسعار|باقة|باقات|تكلفة|اشتراك/.test(normalized)) {
-    const list = COMPANY_WHATSAPP_PLANS.map(p => `${p.name}: ${p.startingFrom ? "تبدأ من " : ""}${p.monthlySar} ريال شهرياً، أو ${p.annualSar} ريال سنوياً`).join("؛ ");
+    const plans = await getMarketingPlans(tx);
+    if (!plans.length) return "لا توجد باقات متاحة حالياً. تواصل مع فريق DMS Tech للحصول على عرض سعر.";
+    const list = plans.map(p => `${p.name}: ${p.startingFrom ? "تبدأ من " : ""}${p.monthlySar} ريال شهرياً، أو ${p.annualSar} ريال سنوياً`).join("؛ ");
     return `باقات واتساب من DMS Tech: ${list}. الأسعار قبل الضريبة ورسوم الاستخدام. العروض الحالية وتفاصيل الطلب: https://dmstech.sa/offers#pkg-whatsapp-automation`;
 
   }

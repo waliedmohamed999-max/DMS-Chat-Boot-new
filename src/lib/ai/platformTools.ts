@@ -1,4 +1,4 @@
-import { COMPANY_WHATSAPP_PLANS } from "@/components/marketing/companyPlans";
+import { getMarketingPlans } from "@/lib/marketingPlans";
 import type { Prisma } from "@prisma/client";
 import type OpenAI from "openai";
 
@@ -37,11 +37,12 @@ export async function executeAiPlatformTool(_tx: Prisma.TransactionClient, toolN
 
   if (toolName === "get_plan_price") {
     const planName = String(args.planName ?? "").trim();
-    const plans = COMPANY_WHATSAPP_PLANS.filter(plan => !planName || plan.name.includes(planName) || plan.key.toLowerCase().includes(planName.toLowerCase()));
+    const catalogue = await getMarketingPlans(_tx);
+    const plans = catalogue.filter(plan => !planName || plan.name.includes(planName) || plan.key.toLowerCase().includes(planName.toLowerCase()));
     if (plans.length === 0) return JSON.stringify({ found: false });
     return JSON.stringify({
       found: true,
-      source: "https://dmstech.sa/offers#pkg-whatsapp-automation",
+      source: "/pricing",
       offersUrl: "https://dmstech.sa/offers",
       vatIncluded: false,
       currency: "SAR",

@@ -1,6 +1,10 @@
 import type { Metadata } from "next";
-import { Reveal } from "@/components/marketing/Reveal";
+import Link from "next/link";
+import { ArrowLeft, Check, MessagesSquare, SlidersHorizontal } from "lucide-react";
+import { MarketingFaq } from "@/components/marketing/MarketingFaq";
+import "../public-pages.css";
 import { PricingClient } from "./PricingClient";
+import { getMarketingPlans } from "@/lib/marketingPlans";
 
 // الباقات حقيقية وقابلة للتعديل من لوحة مالك المنصة (admin/plans) — يجب أن تُقرأ حياً وليس وقت البناء.
 export const dynamic = "force-dynamic";
@@ -19,33 +23,24 @@ const FAQS = [
 ];
 
 export default async function PricingPage() {
-
+  const plans = await getMarketingPlans();
   return (
-    <div className="mx-auto max-w-6xl px-4 py-16">
-      <div className="mx-auto max-w-2xl text-center">
-        <h1 className="text-3xl font-extrabold text-slate-900 sm:text-4xl dark:text-white">باقات تناسب كل حجم نشاط</h1>
-        <p className="mt-4 text-lg text-slate-500 dark:text-slate-400">باقات واتساب للأعمال من DMS Tech — نفس التفاصيل والأسعار المنشورة في الموقع الرئيسي.</p>
-      </div>
-
-      <PricingClient />
-
-      <div className="mx-auto mt-24 max-w-2xl">
-        <Reveal>
-          <h2 className="text-center text-2xl font-bold text-slate-900 dark:text-white">الأسئلة الشائعة</h2>
-        </Reveal>
-        <div className="mt-8 space-y-3">
-          {FAQS.map((f, i) => (
-            <Reveal key={f.q} delay={i * 60}>
-              <details className="group rounded-xl border border-slate-200 bg-white p-4 dark:border-white/10 dark:bg-slate-900">
-                <summary className="flex cursor-pointer items-center justify-between text-sm font-semibold text-slate-800 dark:text-slate-100">
-                  {f.q}
-                  <span className="mr-2 text-slate-400 transition group-open:rotate-45">+</span>
-                </summary>
-                <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">{f.a}</p>
-              </details>
-            </Reveal>
-          ))}
+    <div className="public-offer-page">
+      <header className="public-page-hero">
+        <nav className="public-breadcrumb" aria-label="مسار الصفحة"><Link href="/">الرئيسية</Link><span>/</span><span aria-current="page">الباقات والأسعار</span></nav>
+        <span className="public-eyebrow"><MessagesSquare size={16} aria-hidden="true" /> حلول واتساب للأعمال</span>
+        <h1>خطوتك القادمة للنمو،<br /><span>تبدأ بالباقة المناسبة.</span></h1>
+        <p>من أول محادثة منظّمة إلى أتمتة أعمالك بالكامل.<br className="hidden sm:block" /> اختر ما يحتاجه فريقك اليوم، وتوسّع معنا مع نمو نشاطك.</p>
+        <div className="public-hero-notes"><span><Check size={16} aria-hidden="true" /> أسعار واضحة</span><span><Check size={16} aria-hidden="true" /> إعداد يناسب نشاطك</span><span><Check size={16} aria-hidden="true" /> دعم من فريق DMS Tech</span></div>
+      </header>
+      <div className="public-page-container">
+        <PricingClient plans={plans} />
+        <div className="public-custom-plan">
+          <span className="public-custom-icon"><SlidersHorizontal size={26} aria-hidden="true" /></span>
+          <div><h2>احتياجات أكبر؟ نصمّم الحل معك.</h2><p>فروع متعددة، فريق أكبر، أو تكاملات خاصة. نحدّد معك النطاق المناسب لأعمالك.</p></div>
+          <Link href="/contact">ناقش احتياجاتك معنا <ArrowLeft size={18} aria-hidden="true" /></Link>
         </div>
+        <MarketingFaq items={FAQS} title="نساعدك تختار بثقة" />
       </div>
     </div>
   );

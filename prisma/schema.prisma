@@ -228,6 +228,23 @@ model ImpersonationSession {
 
 // ========================= الباقات والفوترة =========================
 
+// Public service packages, managed by the platform owner independently of existing tenant contracts.
+model MarketingPlan {
+  id           String  @id @default(cuid())
+  key          String  @unique
+  name         String
+  monthlySar   Int
+  annualSar    Int
+  popular      Boolean @default(false)
+  startingFrom Boolean @default(false)
+  isActive     Boolean @default(true)
+  summary      String
+  audience     String
+  delivery     String
+  features     Json
+  exclusions   Json
+}
+
 model Plan {
   id                  String   @id @default(cuid())
   key                 String   @unique // starter | growth | scale

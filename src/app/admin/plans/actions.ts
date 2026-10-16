@@ -10,6 +10,37 @@ import { z } from "zod";
 
 const ALL_NODE_TYPES: ChatbotNodeTypeKey[] = ["start", "message", "question", "condition", "ai_reply", "api_call", "handoff", "end"];
 
+const marketingPlanSchema = z.object({
+  name: z.string().trim().min(2).max(100),
+  monthlySar: z.coerce.number().int().min(0).max(100000000),
+  annualSar: z.coerce.number().int().min(0).max(100000000),
+  summary: z.string().trim().min(2).max(500),
+  audience: z.string().trim().min(2).max(500),
+  delivery: z.string().trim().min(2).max(300),
+  features: z.string().trim().min(2).max(10000),
+  exclusions: z.string().trim().max(10000),
+});
+
+export async function saveMarketingPlan(planId: string, formData: FormData) {
+  const session = await requireSuperAdminSession();
+  requireEffectivePermission(session.user.permissions, "platform.plans.manage");
+  const values = marketingPlanSchema.parse(Object.fromEntries(formData));
+  const popular = formData.get("popular") === "on";
+  await superAdminDb.$transaction(async tx => {
+    if (popular) await tx.marketingPlan.updateMany({ where: { popular: true }, data: { popular: false } });
+    await tx.marketingPlan.update({ where: { id: planId }, data: {
+      ...values,
+      features: values.features.split("\n").map(s => s.trim()).filter(Boolean),
+      exclusions: values.exclusions.split("\n").map(s => s.trim()).filter(Boolean),
+      popular, isActive: formData.get("isActive") === "on", startingFrom: formData.get("startingFrom") === "on",
+    } });
+    await tx.auditLog.create({ data: { userId: session.user.id, action: "platform.marketing_plan_update", targetType: "MarketingPlan", targetId: planId } });
+  });
+  revalidatePath("/admin/plans");
+  revalidatePath("/");
+  revalidatePath("/pricing");
+}
+
 const planCoreSchema = z.object({
   name: z.string().min(2, "اسم الباقة قصير جداً"),
   priceMonthlySar: z.coerce.number().int().min(0),
