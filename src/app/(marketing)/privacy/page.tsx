@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import { Reveal } from "@/components/marketing/Reveal";
 
 export const metadata: Metadata = {
-  title: "سياسة الخصوصية — DMS",
-  description: "سياسة الخصوصية الخاصة بمنصة DMS وكيفية تعاملنا مع بياناتك.",
+  title: "سياسة الخصوصية — DMS Tech",
+  description: "سياسة الخصوصية الخاصة بمنصة DMS Tech وكيفية تعاملنا مع بياناتك.",
 };
 
 export default function PrivacyPage() {

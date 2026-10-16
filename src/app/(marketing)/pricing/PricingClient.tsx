@@ -1,126 +1,39 @@
-"use client";
+﻿"use client";
 
 import { useState } from "react";
-import Link from "next/link";
-import { resolvePlanPrice } from "@/lib/planPricing";
-import { CURRENCY_SYMBOLS, COUNTRY_LABELS_AR } from "@/lib/currency";
-import { useCountry } from "@/components/marketing/CountryContext";
+import { ArrowLeft, ArrowUpLeft, BadgeCheck, Bot, Check, Clock3, Info, MessagesSquare, Network, Tag, X } from "lucide-react";
+import { COMPANY_WHATSAPP_PLANS } from "@/components/marketing/companyPlans";
+import { COMPANY_URL } from "@/components/marketing/brand";
 
-type PublicPlan = {
-  key: string;
-  name: string;
-  priceMonthlySar: number;
-  pricingJson: unknown;
-  maxUsers: number;
-  maxWhatsappNumbers: number;
-  maxMessagesPerMonth: number;
-  features: unknown;
-  isPopular: boolean;
-  annualDiscountBps: number;
-};
+const number = new Intl.NumberFormat("en-SA", { maximumFractionDigits: 0 });
+const PLAN_ICONS = [MessagesSquare, Bot, Network];
 
-export function PricingClient({ plans }: { plans: PublicPlan[] }) {
+export function PricingClient() {
   const [annual, setAnnual] = useState(false);
-  // الدولة مصدرها الآن السياق المشترك (زر 🌍 في الشريط العلوي) — لا حالة محلية منفصلة هنا، فتبقى
-  // متزامنة مع أي صفحة تسويقية أخرى تلقائياً بدل مبدّل مستقل بهذه الصفحة وحدها.
-  const { country, currentCountryOption } = useCountry();
-  const currencySymbol = CURRENCY_SYMBOLS[currentCountryOption.currency] ?? currentCountryOption.currency;
-
-  // كل باقة لها سعر الآن دائماً (تحويل تلقائي بسعر صرف الدولة، أو سعر يدوي مخصَّص إن وُجد — راجع
-  // lib/planPricing.ts) — لا إخفاء لباقات "غير مُسعَّرة" بعد الآن.
-  const visiblePlans = plans.map((plan) => ({ plan, price: resolvePlanPrice(plan, currentCountryOption) }));
-
-  // "الأكثر طلباً" علم حقيقي من Plan.isPopular (يُضبط من Super Admin) — لم يعد استنتاجاً بصرياً
-  // بموضع الباقة في المصفوفة كما كان سابقاً (راجع DECISIONS.md).
-  const featuredKey = plans.find((p) => p.isPopular)?.key ?? null;
-
   return (
-    <>
-      <p className="mt-4 text-center text-xs text-slate-400 dark:text-slate-500">
-        الأسعار معروضة لـ{COUNTRY_LABELS_AR[country]} — غيّرها من زر 🌍 أعلى الصفحة.
-      </p>
-
-      <div className="mt-4 flex items-center justify-center gap-3">
-        <span className={`text-sm font-medium ${!annual ? "text-slate-900 dark:text-white" : "text-slate-400"}`}>شهري</span>
-        <button
-          type="button"
-          role="switch"
-          aria-checked={annual}
-          onClick={() => setAnnual((a) => !a)}
-          className={`relative h-7 w-12 rounded-full transition ${annual ? "bg-wa-500" : "bg-slate-300 dark:bg-slate-700"}`}
-        >
-          <span className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition ${annual ? "right-0.5" : "right-[22px]"}`} />
-        </button>
-        <span className={`text-sm font-medium ${annual ? "text-slate-900 dark:text-white" : "text-slate-400"}`}>سنوي</span>
+    <div className="pricing-section" id="product-plans">
+      <div className="dms-pricing-trust"><span><BadgeCheck size={16} />نفس باقات واتساب المنشورة لدى DMS Tech</span><a href={`${COMPANY_URL}/offers#pkg-whatsapp-automation`}>التفاصيل في الموقع الرئيسي<ArrowUpLeft size={14} /></a></div>
+      <div className="pricing-toolbar"><p>الأسعار بالريال السعودي · قبل ضريبة القيمة المضافة</p><div className="pricing-period" role="group" aria-label="فترة الاشتراك"><button type="button" aria-pressed={!annual} onClick={() => setAnnual(false)}>شهري</button><button type="button" aria-pressed={annual} onClick={() => setAnnual(true)}>سنوي<span className="dms-save-label">شهران مجاناً</span></button></div></div>
+      <div className="pricing-grid dms-company-plans">
+        {COMPANY_WHATSAPP_PLANS.map((plan, i) => {
+          const Icon = PLAN_ICONS[i]!;
+          return (
+            <article key={plan.key} className={`pricing-card ${plan.popular ? "pricing-card-featured" : ""}`}>
+              <div className="pricing-card-top"><span className="pricing-plan-mark"><Icon size={22} strokeWidth={1.75} aria-hidden="true" /></span>{plan.popular && <span className="pricing-popular">الباقة المقترحة</span>}</div>
+              <h3>{plan.name}</h3><p className="dms-plan-summary">{plan.summary}</p><p className="dms-plan-audience">مناسبة: {plan.audience}</p>
+              <div className="dms-plan-starting">{plan.startingFrom ? "يبدأ من" : "سعر الاشتراك"}</div>
+              <div className="pricing-price"><strong dir="ltr">{number.format(annual ? plan.annualSar : plan.monthlySar)}</strong><span>ر.س<small>/ {annual ? "سنوياً" : "شهرياً"}</small></span></div>
+              <p className="pricing-billing-note">{annual ? <>وفّر <bdi dir="ltr">{number.format(plan.monthlySar * 12 - plan.annualSar)}</bdi> ر.س مقارنة بالدفع الشهري</> : <>أو <bdi dir="ltr">{number.format(plan.annualSar)}</bdi> ر.س سنوياً</>}</p>
+              <a href={`${COMPANY_URL}/offers/${plan.key}`} className="pricing-cta">اطلب هذه الباقة<ArrowLeft size={16} /></a>
+              <div className="dms-plan-delivery"><Clock3 size={15} /><span>التنفيذ: {plan.delivery}</span></div>
+              <div className="pricing-includes">ما تشمله الباقة</div><ul>{plan.features.map(feature => <li key={feature}><Check size={16} strokeWidth={1.75} aria-hidden="true" /><span>{feature}</span></li>)}</ul>
+              <div className="dms-plan-exclusions"><p>غير مشمول</p><ul>{plan.exclusions.map(item => <li key={item}><X size={14} aria-hidden="true" /><span>{item}</span></li>)}</ul></div>
+            </article>
+          );
+        })}
       </div>
-
-      {visiblePlans.length === 0 ? (
-        <p className="mt-12 text-center text-slate-400">لا توجد باقات متاحة حالياً.</p>
-      ) : (
-        /* موبايل: شريط أفقي قابل للسحب يُظهر بطاقتين فقط في العرض مع Scroll Snap (لا تكديس صفوف فوق
-           بعضها) — بدءاً من lg يتحول لشبكة عادية بكل الباقات ظاهرة معاً بلا سحب.
-           pt-4: تحديد overflow-x وحده (بلا overflow-y) يجعل المتصفح يحسب overflow-y تلقائياً كـauto
-           بدل visible (قاعدة قياسية في CSS Overflow spec) — فيقص شارة "الأكثر شيوعاً" التي تبرز فوق
-           حافة البطاقة (-top-3) دون هامش علوي كافٍ يستوعبها. */
-        <div
-          className="mt-10 flex snap-x snap-mandatory gap-4 overflow-x-auto pt-4 pb-2 [-ms-overflow-style:none] [scrollbar-width:none] sm:gap-6 lg:grid lg:grid-cols-4 lg:overflow-visible lg:pt-0 [&::-webkit-scrollbar]:hidden"
-        >
-          {visiblePlans.map(({ plan, price }, i) => {
-            const isFeatured = plan.key === featuredKey;
-            // نسبة خصم حقيقية لكل باقة على حدة (Plan.annualDiscountBps، تُضبط من Super Admin) — بدل
-            // ثابت 20% موحَّد كان مكتوباً مباشرة في هذا الملف بلا أي علاقة بنظام الباقات الفعلي.
-            const discountFraction = plan.annualDiscountBps / 10000;
-            const displayPrice = annual ? Math.round(price * (1 - discountFraction)) : price;
-            const features = Array.isArray(plan.features) ? (plan.features as string[]) : [];
-            // نقطة الالتقاط (snap) على أول بطاقة كل زوج فقط (0، 2، ...) — لو وُضعت على كل بطاقة، أي
-            // سحب يدوي بطيء (لا يشبه "رمية" سريعة) قد يتوقف على بطاقة فردية فيظهر نصف بطاقتين بدل زوج
-            // كامل، وهو بالضبط ما لاحظه المستخدم فعلياً عند السحب اليدوي.
-            const isPairStart = i % 2 === 0;
-            return (
-              <div
-                key={plan.key}
-                className={`relative flex h-full w-[calc(50%-0.5rem)] flex-none flex-col rounded-2xl border p-4 sm:w-[calc(50%-0.75rem)] sm:rounded-3xl sm:p-7 lg:w-auto ${isPairStart ? "snap-start" : "snap-align-none"} ${
-                  isFeatured
-                    ? "border-wa-500 bg-white shadow-lg ring-2 ring-wa-500/30 dark:bg-slate-900"
-                    : "border-slate-200 bg-white shadow-card dark:border-white/10 dark:bg-slate-900"
-                }`}
-              >
-                {isFeatured && (
-                  <span className="absolute -top-3 right-4 rounded-full bg-wa-500 px-2.5 py-1 text-[11px] font-bold text-white sm:right-6 sm:px-3 sm:text-xs">الأكثر شيوعاً</span>
-                )}
-                <h3 className="text-base font-bold text-slate-900 sm:text-lg dark:text-white">{plan.name}</h3>
-                <p className="mt-3" dir="ltr">
-                  <span className="text-2xl font-extrabold text-slate-900 sm:text-3xl dark:text-white">{displayPrice}</span>
-                  <span className="mr-1 text-xs text-slate-400 sm:text-sm">{currencySymbol}/شهرياً</span>
-                </p>
-                {annual && (
-                  <p className="mt-1 text-xs text-wa-600 dark:text-wa-400" dir="ltr">
-                    سنوياً: {displayPrice * 12} {currencySymbol} — وفّر {plan.annualDiscountBps / 100}%
-                  </p>
-                )}
-
-                <ul className="mt-4 space-y-2 text-xs text-slate-600 sm:mt-6 sm:space-y-2.5 sm:text-sm dark:text-slate-300">
-                  <li className="flex items-center gap-2"><span className="text-wa-500">✓</span> حتى {plan.maxUsers} مستخدمين</li>
-                  <li className="flex items-center gap-2"><span className="text-wa-500">✓</span> {plan.maxWhatsappNumbers} رقم واتساب</li>
-                  <li className="flex items-center gap-2"><span className="text-wa-500">✓</span> {plan.maxMessagesPerMonth.toLocaleString("ar-SA")} رسالة شهرياً</li>
-                  {features.map((f) => (
-                    <li key={f} className="flex items-center gap-2"><span className="text-wa-500">✓</span> {f}</li>
-                  ))}
-                </ul>
-
-                <Link
-                  href="/partners/join"
-                  className={`mt-6 rounded-lg px-4 py-2.5 text-center text-sm font-bold transition sm:mt-8 ${
-                    isFeatured ? "bg-wa-500 text-white hover:bg-wa-600" : "border border-slate-300 text-slate-700 hover:bg-slate-50 dark:border-white/15 dark:text-slate-200 dark:hover:bg-white/5"
-                  }`}
-                >
-                  ابدأ بهذه الباقة
-                </Link>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </>
+      <div className="dms-pricing-notice"><Info size={18} /><p>رسوم رسائل ميتا واستخدام الذكاء الاصطناعي تُحسب حسب الاستخدام الفعلي. اعتماد الحساب والقوالب يخضع لموافقة ميتا. الأسعار قبل ضريبة القيمة المضافة <bdi dir="ltr">15%</bdi>.</p></div>
+      <a className="dms-company-offer-link" href={`${COMPANY_URL}/offers`}><span className="dms-offer-link-icon"><Tag size={22} /></span><span><strong>عروض DMS Tech الحالية</strong><small>شاهد العروض الموسمية والسنوية وتفاصيل صلاحيتها في الموقع الرئيسي.</small></span><ArrowUpLeft size={20} /></a>
+    </div>
   );
 }

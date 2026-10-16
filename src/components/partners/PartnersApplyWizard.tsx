@@ -300,7 +300,7 @@ export function PartnersApplyWizard({ plans, countries, initialCountry }: { plan
           </div>
           <label className="flex items-start gap-2 text-sm text-slate-300">
             <input type="checkbox" checked={form.termsAccepted} onChange={(e) => update("termsAccepted", e.target.checked)} className="mt-0.5" />
-            <span>أوافق على الشروط والأحكام وسياسة الخصوصية الخاصة بمنصة DMS.</span>
+            <span>أوافق على الشروط والأحكام وسياسة الخصوصية الخاصة بمنصة DMS Tech.</span>
           </label>
         </div>
       )}

@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import { Reveal } from "@/components/marketing/Reveal";
 
 export const metadata: Metadata = {
-  title: "الشروط والأحكام — DMS",
-  description: "الشروط والأحكام الخاصة باستخدام منصة DMS.",
+  title: "الشروط والأحكام — DMS Tech",
+  description: "الشروط والأحكام الخاصة باستخدام منصة DMS Tech.",
 };
 
 export default function TermsPage() {
@@ -15,7 +15,7 @@ export default function TermsPage() {
       </Reveal>
 
       <Reveal delay={100} className="mt-8 space-y-5 text-slate-600 dark:text-slate-300">
-        <p>باستخدامك منصة DMS، فإنك توافق على الشروط التالية. يرجى قراءتها بعناية قبل التسجيل.</p>
+        <p>باستخدامك منصة DMS Tech، فإنك توافق على الشروط التالية. يرجى قراءتها بعناية قبل التسجيل.</p>
         <div>
           <h2 className="mb-2 font-semibold text-slate-900 dark:text-white">1. استخدام الخدمة</h2>
           <p>يُسمح باستخدام المنصة لأغراض تجارية مشروعة فقط، وفق سياسات WhatsApp Business Platform وشروط استخدامها الرسمية.</p>

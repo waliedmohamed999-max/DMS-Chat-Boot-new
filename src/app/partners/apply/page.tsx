@@ -23,7 +23,7 @@ export default async function PartnersApplyPage() {
 
   return (
     <AuthShell
-      tagline="انضم كشريك أعمال على منصة DMS"
+      tagline="انضم كشريك أعمال على منصة DMS Tech"
       bullets={[
         { icon: "📝", text: "طلب انضمام بسيط بخطوات واضحة" },
         { icon: "⏱️", text: "مراجعة سريعة من فريقنا" },

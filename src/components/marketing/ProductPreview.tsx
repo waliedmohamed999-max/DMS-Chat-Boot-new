@@ -80,7 +80,7 @@ export function ProductPreview() {
           </div>
 
           {/* لوحة التفاصيل */}
-          <div className="hidden w-1/4 flex-col border-r border-slate-100 bg-slate-50/70 md:flex dark:border-white/5 dark:bg-white/[0.02]">
+          <div className="hidden w-1/4 flex-col border-r border-slate-100 bg-slate-50/70 dark:border-white/5 dark:bg-white/[0.02]">
             <div className="border-b border-slate-100 px-3 py-2.5 text-xs font-semibold text-slate-500 dark:border-white/5 dark:text-slate-400">
               الموظف الذكي
             </div>

@@ -38,7 +38,7 @@ export default async function PartnersJoinPage() {
       </header>
 
       <section className="mx-auto max-w-3xl px-4 py-16 text-center">
-        <h1 className="text-3xl font-bold text-slate-900 sm:text-4xl dark:text-white">انضم كشريك أعمال على منصة DMS</h1>
+        <h1 className="text-3xl font-bold text-slate-900 sm:text-4xl dark:text-white">انضم كشريك أعمال على منصة DMS Tech</h1>
         <p className="mt-4 text-lg text-slate-500 dark:text-slate-400">
           منصة CRM متكاملة لإدارة عملائك عبر واتساب — للمتاجر الإلكترونية، العيادات، الصالونات،
           والخدمات من كل الأنواع. قدّم طلبك الآن وسيراجعه فريقنا خلال وقت قصير.
@@ -92,7 +92,7 @@ export default async function PartnersJoinPage() {
       )}
 
       <footer className="border-t border-slate-200 px-4 py-6 text-center text-xs text-slate-400 dark:border-white/10">
-        © DMS — Digital Messaging System
+        © DMS Tech
       </footer>
     </div>
   );

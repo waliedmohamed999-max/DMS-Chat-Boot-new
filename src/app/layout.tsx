@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
+import "./marketing.css";
 import { Providers } from "./providers";
 
 // خطوط محلية مضمَّنة في المشروع بدل next/font/google — بيئات بناء بلا وصول لـ fonts.googleapis.com
@@ -9,7 +10,9 @@ const cairo = localFont({ src: "./fonts/Cairo-Variable.woff2", variable: "--font
 const inter = localFont({ src: "./fonts/Inter-Latin-Variable.woff2", variable: "--font-inter", weight: "100 900", display: "swap" });
 
 export const metadata: Metadata = {
-  title: "DMS — Digital Messaging System | CRM واتساب للتجار",
+  applicationName: "DMS Tech",
+  icons: { icon: "/logo.png", apple: "/logo.png" },
+  title: "DMS Tech | CRM واتساب للتجار",
   description: "منصة إدارة علاقات العملاء عبر واتساب للتجار: حملات، شات بوت ذكي، ربط زد وسلة، وأكثر.",
 };
 

@@ -23,7 +23,7 @@ export default async function PartnerSetupPage(props: { params: Promise<{ token:
 
   return (
     <AuthShell
-      tagline="أهلاً بك في عائلة DMS"
+      tagline="أهلاً بك في عائلة DMS Tech"
       bullets={[
         { icon: "🎉", text: "تم قبول طلب انضمامك بنجاح" },
         { icon: "🔑", text: "خطوة أخيرة: حدّد كلمة مرور حسابك" },

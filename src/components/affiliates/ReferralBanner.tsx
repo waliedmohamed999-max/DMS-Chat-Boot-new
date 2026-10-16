@@ -37,7 +37,7 @@ export function ReferralBanner({ link, affiliateName }: { link: string; affiliat
       ctx.fillStyle = "#FFFFFF";
       ctx.textAlign = "center";
       ctx.font = "bold 56px Arial, sans-serif";
-      ctx.fillText("جرّب منصة DMS", BANNER_SIZE / 2, 180);
+      ctx.fillText("جرّب منصة DMS Tech", BANNER_SIZE / 2, 180);
       ctx.font = "32px Arial, sans-serif";
       ctx.fillStyle = "#94A3B8";
       ctx.fillText("إدارة عملائك عبر واتساب — بذكاء اصطناعي", BANNER_SIZE / 2, 240);

@@ -2,7 +2,7 @@ import { AuthShell } from "@/components/auth/AuthShell";
 import { LogoFull } from "@/components/Logo";
 import { ForgotPasswordForm } from "./ForgotPasswordForm";
 
-export const metadata = { title: "نسيت كلمة المرور — DMS" };
+export const metadata = { title: "نسيت كلمة المرور — DMS Tech" };
 
 export default function ForgotPasswordPage() {
   return (

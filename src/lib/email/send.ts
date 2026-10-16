@@ -61,5 +61,5 @@ export async function sendEmail(input: EmailInput): Promise<void> {
 
 /** غلاف RTL موحّد لكل القوالب — القوالب نفسها تُرجع فقرات HTML بسيطة بلا اتجاه نص صريح. */
 function wrapHtml(body: string): string {
-  return `<!doctype html><html lang="ar" dir="rtl"><body style="margin:0;padding:24px;background:#f5f7fb;font-family:Tahoma,Arial,sans-serif;color:#0f172a;line-height:1.8"><div style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:12px;padding:24px;direction:rtl;text-align:right">${body}<hr style="border:none;border-top:1px solid #e2e8f0;margin:24px 0 12px"><p style="font-size:12px;color:#64748b;margin:0">DMS — Digital Messaging System</p></div></body></html>`;
+  return `<!doctype html><html lang="ar" dir="rtl"><body style="margin:0;padding:24px;background:#f5f7fb;font-family:Tahoma,Arial,sans-serif;color:#0f172a;line-height:1.8"><div style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:12px;padding:24px;direction:rtl;text-align:right">${body}<hr style="border:none;border-top:1px solid #e2e8f0;margin:24px 0 12px"><p style="font-size:12px;color:#64748b;margin:0">DMS Tech</p></div></body></html>`;
 }

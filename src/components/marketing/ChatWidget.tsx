@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { X, MessagesSquare, Phone, Mic, Square } from "lucide-react";
 
 const POLL_INTERVAL_MS = 3000; // نفس فترة InboxLivePoller.tsx بالضبط
 const MAX_RECORDING_MS = 60_000;
@@ -547,14 +548,14 @@ export function ChatWidget({ enabled, voiceCallEnabled, demoMode }: { enabled: b
         aria-label="محادثة مباشرة"
         className="fixed bottom-5 right-5 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-accent-500 text-2xl text-white shadow-lg transition hover:scale-105 hover:bg-accent-600"
       >
-        {isOpen ? "✕" : "💬"}
+        {isOpen ? <X size={24} /> : <MessagesSquare size={24} />}
       </button>
 
       {isOpen && (
-        <div className="fixed bottom-24 right-5 z-50 flex h-[480px] w-[340px] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-white/10 dark:bg-slate-900">
+        <div className="fixed bottom-24 right-5 z-50 flex h-[480px] w-[min(340px,calc(100vw-40px))] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-white/10 dark:bg-slate-900">
           <div className="flex items-center justify-between border-b border-slate-100 bg-accent-500 px-4 py-3 text-white dark:border-white/10">
             <p className="text-sm font-semibold">محادثة مباشرة</p>
-            <button onClick={() => setIsOpen(false)} aria-label="إغلاق" className="text-lg leading-none opacity-90 hover:opacity-100">✕</button>
+            <button onClick={() => setIsOpen(false)} aria-label="إغلاق" className="text-lg leading-none opacity-90 hover:opacity-100"><X size={20} /></button>
           </div>
 
           {isCalling && (
@@ -599,7 +600,7 @@ export function ChatWidget({ enabled, voiceCallEnabled, demoMode }: { enabled: b
                   isCalling ? "animate-pulse bg-danger-500 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300"
                 }`}
               >
-                📞
+                <Phone size={18} />
               </button>
             )}
             <button
@@ -611,7 +612,7 @@ export function ChatWidget({ enabled, voiceCallEnabled, demoMode }: { enabled: b
                 isRecording ? "animate-pulse bg-danger-500 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300"
               }`}
             >
-              🎙️
+              {isRecording ? <Square size={18} /> : <Mic size={18} />}
             </button>
             <input
               value={input}

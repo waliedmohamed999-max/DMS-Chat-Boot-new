@@ -13,7 +13,7 @@ export async function updatePlatformSettings(formData: FormData) {
   const integrationsMode = formData.get("integrationsMode") === "live" ? "live" : "sandbox";
   const maintenanceMode = formData.get("maintenanceMode") === "on";
   const maintenanceMessage = String(formData.get("maintenanceMessage") ?? "").trim() || null;
-  const supportEmail = String(formData.get("supportEmail") ?? "").trim() || "support@platform.sa";
+  const supportEmail = String(formData.get("supportEmail") ?? "").trim() || "info@dmstech.sa";
   const supportPhone = String(formData.get("supportPhone") ?? "").trim() || null;
   const defaultTrialDays = Math.max(1, parseInt(String(formData.get("defaultTrialDays") ?? "14"), 10) || 14);
   const termsVersion = String(formData.get("termsVersion") ?? "").trim() || null;

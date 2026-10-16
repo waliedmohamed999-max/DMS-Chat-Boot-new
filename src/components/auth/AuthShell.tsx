@@ -1,3 +1,4 @@
+import { BadgeCheck, Bot, ChartColumn, ShieldCheck } from "lucide-react";
 import { LogoFull } from "@/components/Logo";
 
 const DEFAULT_BULLETS = [
@@ -23,7 +24,7 @@ export function AuthShell({
   tagline?: string;
 }) {
   return (
-    <div className="flex min-h-screen">
+    <div className="dms-auth-shell flex min-h-screen">
       <div className="relative hidden w-1/2 flex-col justify-between overflow-hidden bg-gradient-to-br from-navy-950 via-navy-900 to-wa-700/40 p-12 lg:flex">
         <div className="pointer-events-none absolute -left-24 -top-24 h-72 w-72 rounded-full bg-wa-500/20 blur-3xl" />
         <div className="pointer-events-none absolute -bottom-24 -right-24 h-72 w-72 rounded-full bg-wa-500/10 blur-3xl" />
@@ -33,9 +34,9 @@ export function AuthShell({
         <div className="relative z-10">
           <h2 className="text-2xl font-bold leading-snug text-white">{tagline}</h2>
           <ul className="mt-6 space-y-3">
-            {bullets.map((b) => (
+            {bullets.map((b, index) => (
               <li key={b.text} className="flex items-center gap-3 text-sm text-slate-200">
-                <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-white/10 text-sm">{b.icon}</span>
+                <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-white/10 text-sm">{index % 4 === 0 ? <BadgeCheck size={17} /> : index % 4 === 1 ? <Bot size={17} /> : index % 4 === 2 ? <ChartColumn size={17} /> : <ShieldCheck size={17} />}</span>
                 {b.text}
               </li>
             ))}

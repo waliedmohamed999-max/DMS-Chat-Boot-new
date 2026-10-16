@@ -66,6 +66,7 @@ const EMBED_HEADERS = [
 ];
 
 const nextConfig = {
+  distDir: process.env.NEXT_DIST_DIR || ".next",
   reactStrictMode: true,
   poweredByHeader: false, // لا تُسرِّب "X-Powered-By: Next.js" لكل استجابة
   // pdfkit يحمّل ملفات خط .afm ديناميكياً عبر path.join(__dirname, ...) وقت التشغيل — تجميع

@@ -4,7 +4,7 @@ import { AuthShell } from "@/components/auth/AuthShell";
 import { LogoFull } from "@/components/Logo";
 import { ResetPasswordForm } from "./ResetPasswordForm";
 
-export const metadata = { title: "تعيين كلمة مرور جديدة — DMS" };
+export const metadata = { title: "تعيين كلمة مرور جديدة — DMS Tech" };
 
 // نفس رموز AccountSetupToken ونفس منطق الإكمال الآمن (مُجزَّأ + صلاحية + استخدام واحد) الخاص بـ
 // partners/setup — صفحة منفصلة فقط لأن نصوص "إعداد حساب جديد" لا تناسب سياق استعادة كلمة المرور.

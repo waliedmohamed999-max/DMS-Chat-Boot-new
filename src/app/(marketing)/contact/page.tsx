@@ -3,22 +3,23 @@ import { getPlatformSettings } from "@/lib/platformSettings";
 import { MailIcon, PhoneIcon, ClockIcon, CheckCircleIcon } from "@/components/marketing/ServiceIcons";
 import { CopyButton } from "@/components/marketing/CopyButton";
 import { ContactForm } from "./ContactForm";
+import { COMPANY_CONTACT } from "@/lib/companyContact";
 
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "تواصل معنا — DMS",
-  description: "تواصل مع فريق DMS عبر النموذج أو واتساب أو البريد الإلكتروني — نرد خلال ساعات العمل.",
+  title: "تواصل معنا — DMS Tech",
+  description: "تواصل مع فريق DMS Tech عبر النموذج أو واتساب أو البريد الإلكتروني — نرد خلال ساعات العمل.",
 };
 
 const TRUST_POINTS = [
-  { icon: CheckCircleIcon, text: "رد خلال ساعتين في أيام العمل" },
-  { icon: ClockIcon, text: "دعم متاح 6 أيام أسبوعياً" },
-  { icon: MailIcon, text: "فريق دعم عربي متخصص" },
+  { icon: CheckCircleIcon, text: "دعم أداة DMS Chat Bot" },
+  { icon: PhoneIcon, text: "تواصل مباشر عبر واتساب" },
+  { icon: MailIcon, text: "بريد الشركة الرسمي" },
 ];
 
 const FAQS = [
-  { q: "خلال متى يرد فريق الدعم؟", a: "خلال ساعتين تقريباً في أيام العمل الرسمية، وقد يطول الرد قليلاً في أوقات الذروة." },
+  { q: "كيف أتواصل مع فريق الدعم؟", a: "أرسل استفسارك عبر نموذج التواصل أو واتساب الشركة أو بريد info@dmstech.sa، وسيتابع فريق DMS Tech طلبك." },
   { q: "هل يمكنني التواصل عبر واتساب مباشرة؟", a: "نعم، استخدم زر واتساب العائم في أسفل الشاشة، أو رقم واتساب المذكور في هذه الصفحة إن كان متاحاً." },
   { q: "هل التواصل هنا مخصص للتجار الحاليين فقط؟", a: "لا، يمكن لأي زائر أو صاحب نشاط التواصل معنا سواء كان لديه حساب بالفعل أو يفكر في الانضمام." },
 ];
@@ -29,8 +30,8 @@ export default async function ContactPage() {
   return (
     <div className="mx-auto max-w-5xl px-4 py-16">
       <div className="mx-auto max-w-2xl text-center">
-        <h1 className="text-3xl font-extrabold text-slate-900 sm:text-4xl dark:text-white">تواصل معنا</h1>
-        <p className="mt-4 text-lg text-slate-500 dark:text-slate-400">لديك سؤال أو تحتاج مساعدة؟ فريقنا جاهز للرد.</p>
+        <h1 className="text-3xl font-extrabold text-slate-900 sm:text-4xl dark:text-white">الدعم والتواصل</h1>
+        <p className="mt-4 text-lg text-slate-500 dark:text-slate-400">تواصل مع فريق DMS Tech للاستفسار عن أداة المحادثات أو الحصول على الدعم.</p>
 
         <div className="mt-6 flex flex-wrap items-center justify-center gap-x-6 gap-y-2">
           {TRUST_POINTS.map((p) => (
@@ -55,7 +56,7 @@ export default async function ContactPage() {
               </h3>
               <CopyButton value={settings.supportEmail} />
             </div>
-            <p dir="ltr" className="mt-1 text-sm text-slate-500 dark:text-slate-400">{settings.supportEmail}</p>
+            <a href={`mailto:${settings.supportEmail}`} dir="ltr" className="mt-2 inline-block text-sm text-slate-500 hover:text-wa-600 dark:text-slate-400">{settings.supportEmail}</a>
           </div>
           {settings.supportPhone && (
             <div className="rounded-2xl border border-slate-200 bg-white p-6 dark:border-white/10 dark:bg-slate-900">
@@ -65,14 +66,15 @@ export default async function ContactPage() {
                 </h3>
                 <CopyButton value={settings.supportPhone} />
               </div>
-              <p dir="ltr" className="mt-1 text-sm text-slate-500 dark:text-slate-400">{settings.supportPhone}</p>
+              <a href={`https://wa.me/${settings.supportPhone.replace(/\D/g, "")}`} dir="ltr" className="mt-2 inline-block text-sm text-slate-500 hover:text-wa-600 dark:text-slate-400">{settings.supportPhone === COMPANY_CONTACT.phone ? COMPANY_CONTACT.displayPhone : settings.supportPhone}</a>
             </div>
           )}
           <div className="rounded-2xl border border-slate-200 bg-white p-6 dark:border-white/10 dark:bg-slate-900">
             <h3 className="mb-1 flex items-center gap-2 font-semibold text-slate-900 dark:text-white">
-              <ClockIcon className="h-5 w-5 text-wa-500" /> ساعات الدعم
+              <ClockIcon className="h-5 w-5 text-wa-500" /> فريق DMS Tech
             </h3>
-            <p className="text-sm text-slate-500 dark:text-slate-400">السبت – الخميس، 9 صباحاً – 6 مساءً (بتوقيت السعودية)</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400">الأداة جزء من منظومة الشركة. يمكنك أيضاً التواصل بخصوص الخدمات والمشاريع عبر موقعنا الرئيسي.</p>
+            <a href={COMPANY_CONTACT.contactUrl} className="mt-3 inline-block text-sm font-medium text-wa-600">زيارة صفحة التواصل الرئيسية ←</a>
           </div>
         </div>
       </div>

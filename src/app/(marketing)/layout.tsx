@@ -27,9 +27,10 @@ export default async function MarketingLayout({ children }: { children: React.Re
 
   return (
     <CountryProvider initialCountry={initialCountry} hasStoredPreference={hasStoredPreference} countries={countries}>
-      <div className="min-h-screen bg-white text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+      <div className="marketing-site min-h-screen bg-white text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+        <a href="#marketing-main" className="marketing-skip">انتقل إلى المحتوى</a>
         <Navbar />
-        <main>{children}</main>
+        <main id="marketing-main">{children}</main>
         <Footer />
         <FloatingWhatsAppButton phone={settings.supportPhone} />
       </div>

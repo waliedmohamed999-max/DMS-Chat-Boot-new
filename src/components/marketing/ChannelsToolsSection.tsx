@@ -31,7 +31,7 @@ function GridItem({
 }) {
   return (
     <div
-      className={`flex items-start gap-2.5 rounded-xl border p-3 transition sm:gap-3 sm:p-4 ${wide ? "col-span-2" : ""} ${
+      className={`dms-tool-card flex items-start gap-2.5 rounded-xl border p-3 transition sm:gap-3 sm:p-4 ${wide ? "sm:col-span-2" : ""} ${
         comingSoon
           ? "border-dashed border-slate-200 bg-slate-50/60 dark:border-white/10 dark:bg-white/[0.02]"
           : "border-slate-200 bg-white hover:-translate-y-0.5 hover:shadow-card dark:border-white/10 dark:bg-slate-900"
@@ -45,11 +45,11 @@ function GridItem({
         <Icon className="h-4 w-4 sm:h-5 sm:w-5" />
       </div>
       <div className="min-w-0">
-        <p className="flex flex-wrap items-center gap-1.5 text-xs font-semibold text-slate-900 sm:text-sm dark:text-white">
+        <p className="flex flex-wrap items-center gap-1.5 text-sm font-semibold text-slate-900 sm:text-sm dark:text-white">
           {title}
           {comingSoon && <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-medium text-slate-500 dark:bg-white/10 dark:text-slate-400">قريباً</span>}
         </p>
-        <p className="mt-0.5 text-[11px] leading-relaxed text-slate-500 sm:text-xs dark:text-slate-400">{body}</p>
+        <p className="mt-0.5 text-sm leading-7 text-slate-500 sm:text-sm dark:text-slate-400">{body}</p>
       </div>
     </div>
   );
@@ -57,7 +57,7 @@ function GridItem({
 
 export function ChannelsToolsSection() {
   return (
-    <section className="py-16">
+    <section className="dms-channels-section py-16">
       <div className="mx-auto max-w-6xl px-4">
         <Reveal className="mx-auto max-w-2xl text-center">
           <h2 className="text-2xl font-bold text-slate-900 sm:text-3xl dark:text-white">القنوات والأدوات في مكان واحد</h2>
@@ -67,13 +67,13 @@ export function ChannelsToolsSection() {
         <div className="mt-10 grid grid-cols-1 gap-8 lg:grid-cols-2">
           <Reveal>
             <h3 className="mb-4 text-sm font-bold uppercase tracking-wide text-wa-600 dark:text-wa-400">القنوات</h3>
-            <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3">
               {CHANNELS.map((c, i) => <GridItem key={c.title} {...c} wide={i === CHANNELS.length - 1 && CHANNELS.length % 2 === 1} />)}
             </div>
           </Reveal>
           <Reveal delay={100}>
             <h3 className="mb-4 text-sm font-bold uppercase tracking-wide text-wa-600 dark:text-wa-400">الأدوات</h3>
-            <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3">
               {TOOLS.map((t, i) => <GridItem key={t.title} {...t} wide={i === TOOLS.length - 1 && TOOLS.length % 2 === 1} />)}
             </div>
           </Reveal>

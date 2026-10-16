@@ -61,7 +61,7 @@ export function RegisterForm({ plans, countries, initialCountry }: { plans: Publ
             <LogoFull size="md" light />
           </div>
           <h1 className="text-2xl font-bold text-white">ابدأ تجربتك المجانية 14 يوماً</h1>
-          <p className="mt-1 text-sm text-slate-400">أنشئ مساحة عمل متجرك على منصة DMS</p>
+          <p className="mt-1 text-sm text-slate-400">أنشئ مساحة عمل متجرك على منصة DMS Tech</p>
         </div>
 
         <form action={formAction} className="card space-y-5 p-6">

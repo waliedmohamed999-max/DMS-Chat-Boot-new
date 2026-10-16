@@ -28,7 +28,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   return (
     <div className="flex h-screen overflow-hidden bg-navy-900">
-      <Sidebar items={navItems} brandName="DMS — لوحة مالك المنصة" brandColor="#25D366" brandInitial="D" logoUrl="/logo.png" />
+      <Sidebar items={navItems} brandName="DMS Tech — لوحة مالك المنصة" brandColor="#25D366" brandInitial="D" logoUrl="/logo.png" />
       <div className="flex flex-1 flex-col overflow-hidden">
         <Topbar
           userName={session.user.name ?? "مدير المنصة"}

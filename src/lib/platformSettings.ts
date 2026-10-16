@@ -1,5 +1,6 @@
 import { rawDb } from "@/lib/db";
 import { encryptSecret, decryptSecret } from "@/lib/crypto";
+import { COMPANY_CONTACT } from "@/lib/companyContact";
 
 // PlatformSettings صف عام وحيد (لا tenantId، غير خاضع لـ RLS) — قراءة/كتابة عبر rawDb آمنة تماماً.
 const SINGLETON_ID = "singleton";
@@ -35,7 +36,7 @@ export async function getPlatformSettings(): Promise<PlatformSettingsData> {
   const row = await rawDb.platformSettings.upsert({
     where: { id: SINGLETON_ID },
     update: {},
-    create: { id: SINGLETON_ID },
+    create: { id: SINGLETON_ID, supportEmail: COMPANY_CONTACT.email, supportPhone: COMPANY_CONTACT.phone },
   });
 
   return {

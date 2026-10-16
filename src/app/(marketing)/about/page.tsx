@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { getSiteContent } from "@/lib/siteContent";
 
 export const metadata: Metadata = {
-  title: "من نحن — DMS",
+  title: "من نحن — DMS Tech",
   description: "قصة منصة واصل، ولماذا بنيناها لمساعدة التجار وأصحاب الأنشطة على تنظيم تواصلهم مع عملائهم عبر واتساب.",
 };
 

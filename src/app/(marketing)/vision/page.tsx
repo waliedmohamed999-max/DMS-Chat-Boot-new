@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import { Reveal } from "@/components/marketing/Reveal";
 
 export const metadata: Metadata = {
-  title: "رؤيتنا ومنهجيتنا — DMS",
-  description: "رؤية DMS لمستقبل أتمتة التواصل التجاري عبر واتساب، ومنهجيتنا في مرافقة كل تاجر من التسجيل حتى النتائج القابلة للقياس.",
+  title: "رؤيتنا ومنهجيتنا — DMS Tech",
+  description: "رؤية DMS Tech لمستقبل أتمتة التواصل التجاري عبر واتساب، ومنهجيتنا في مرافقة كل تاجر من التسجيل حتى النتائج القابلة للقياس.",
 };
 
 const METHOD_STEPS = [

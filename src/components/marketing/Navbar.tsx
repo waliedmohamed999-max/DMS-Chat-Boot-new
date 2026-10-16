@@ -1,150 +1,130 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { ThemeToggle } from "@/components/marketing/ThemeToggle";
-import { CountryGlobeButton, CountryPillRow } from "@/components/marketing/CountrySwitcher";
+import { usePathname } from "next/navigation";
+import { ArrowLeft, ChevronDown, Menu, MessagesSquare, X, Zap } from "lucide-react";
+import { ThemeToggle } from "./ThemeToggle";
 import { LogoFull } from "@/components/Logo";
-
-const NAV_LINKS = [
-  { href: "/services", label: "الخدمات" },
-  { href: "/pricing", label: "الأسعار" },
-  { href: "/about", label: "من نحن" },
-  { href: "/vision", label: "رؤيتنا" },
-  { href: "/contact", label: "تواصل معنا" },
-  { href: "/affiliates", label: "التسويق بالعمولة" },
-];
+import { COMPANY_URL, COMPANY_GROUPS, PRODUCT_LINKS } from "./brand";
+import { CompanyDropdownContent } from "./CompanyDropdownContent";
 
 export function Navbar() {
+  const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+  const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const headerRef = useRef<HTMLElement>(null);
+  const darkHeader = pathname === "/" && !scrolled;
 
-  // يمنع تمرير خلفية الصفحة أثناء فتح قائمة الموبايل — بدونه كان محتوى الصفحة (فقاعات المعاينة في
-  // الـHero مثلاً) يظهر ويتحرك تحت القائمة المنسدلة نصف الشفافة، شكل غير احترافي على الموبايل تحديداً.
+  const cancelDropdownClose = () => {
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+    closeTimer.current = null;
+  };
+  const scheduleDropdownClose = () => {
+    cancelDropdownClose();
+    closeTimer.current = setTimeout(() => setActiveDropdown(null), 150);
+  };
+
   useEffect(() => {
-    document.body.style.overflow = open ? "hidden" : "";
-    return () => {
-      document.body.style.overflow = "";
+    setActiveDropdown(null);
+    setOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    const outside = (event: PointerEvent) => {
+      if (!(event.target instanceof Element) || !event.target.closest(".dms-nav-dropdown")) setActiveDropdown(null);
     };
+    const close = () => setActiveDropdown(null);
+    document.addEventListener("pointerdown", outside);
+    window.addEventListener("scroll", close, { passive: true });
+    window.addEventListener("resize", close);
+    return () => {
+      document.removeEventListener("pointerdown", outside);
+      window.removeEventListener("scroll", close);
+      window.removeEventListener("resize", close);
+      if (closeTimer.current) clearTimeout(closeTimer.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    const update = () => setScrolled(window.scrollY > 48);
+    update();
+    window.addEventListener("scroll", update, { passive: true });
+    return () => window.removeEventListener("scroll", update);
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    panelRef.current?.querySelector<HTMLElement>("a")?.focus();
+    const keydown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { setOpen(false); buttonRef.current?.focus(); }
+      if (e.key === "Tab") {
+        const items = [buttonRef.current, ...Array.from(panelRef.current?.querySelectorAll<HTMLElement>("a,button,summary") ?? [])].filter(Boolean) as HTMLElement[];
+        const first = items[0]; const last = items[items.length - 1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last?.focus(); }
+        if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first?.focus(); }
+      }
+    };
+    const resize = () => { if (window.innerWidth >= 1200) setOpen(false); };
+    window.addEventListener("keydown", keydown);
+    window.addEventListener("resize", resize);
+    return () => { document.body.style.overflow = overflow; window.removeEventListener("keydown", keydown); window.removeEventListener("resize", resize); };
   }, [open]);
 
   return (
     <>
-    <header className="sticky top-0 z-40 border-b border-slate-200/70 bg-white/80 backdrop-blur dark:border-white/10 dark:bg-slate-950/80">
-      <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
-        <Link href="/" className="flex items-center gap-2">
-          <LogoFull size="sm" />
-        </Link>
-
-        <nav className="hidden items-center gap-6 lg:flex">
-          {NAV_LINKS.map((link) =>
-            link.href === "/affiliates" ? (
-              <Link key={link.href} href={link.href} className="text-sm font-bold text-wa-600 transition hover:text-wa-700 dark:text-wa-400 dark:hover:text-wa-300">
-                {link.label}
-              </Link>
-            ) : (
-              <Link key={link.href} href={link.href} className="text-sm font-medium text-slate-600 transition hover:text-wa-600 dark:text-slate-300 dark:hover:text-wa-400">
-                {link.label}
-              </Link>
-            )
-          )}
-        </nav>
-
-        <div className="hidden items-center gap-3 lg:flex">
-          <CountryGlobeButton />
-          <ThemeToggle />
-          <Link href="/login" className="text-sm font-medium text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white">
-            تسجيل الدخول
-          </Link>
-          <Link
-            href="/login"
-            className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-white/15 dark:text-slate-200 dark:hover:bg-white/5"
-          >
-            لوحة التاجر
-          </Link>
-          <Link
-            href="/partners/join"
-            className="rounded-lg bg-wa-500 px-4 py-2 text-sm font-bold text-white shadow-card transition hover:bg-wa-600"
-          >
-            انضم كشريك
-          </Link>
-        </div>
-
-        <div className="flex items-center gap-2 lg:hidden">
-          <CountryGlobeButton />
-          <button
-            type="button"
-            onClick={() => setOpen((o) => !o)}
-            className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-600 dark:border-white/10 dark:text-slate-300"
-            aria-label="القائمة"
-          >
-            {open ? "✕" : "☰"}
-          </button>
-        </div>
-      </div>
-    </header>
-
-    {/* خارج <header> عمداً — الـheader عليه backdrop-blur (backdrop-filter)، وأي عنصر position:fixed
-        داخل عنصر له backdrop-filter/transform/filter يتموضع بالنسبة لذلك العنصر لا الشاشة كاملة
-        (سلوك CSS معياري وليس خللاً في المتصفح) — فكانت القائمة المنسدلة تنحشر داخل ارتفاع الـheader
-        نفسه (~65px) بدل تغطية الشاشة، وتظهر خلفية الصفحة (الـHero) من تحتها. */}
-    {open && (
-        <div className="fixed inset-x-0 bottom-0 top-[65px] z-50 overflow-y-auto bg-white px-4 py-6 lg:hidden dark:bg-slate-950">
-          <nav className="mx-auto flex max-w-sm flex-col gap-1">
-            {NAV_LINKS.map((link) =>
-              link.href === "/affiliates" ? (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  onClick={() => setOpen(false)}
-                  className="rounded-lg px-2 py-3 text-base font-bold text-wa-600 transition hover:bg-wa-50 dark:text-wa-400 dark:hover:bg-white/5"
-                >
-                  {link.label}
-                </Link>
-              ) : (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  onClick={() => setOpen(false)}
-                  className="rounded-lg px-2 py-3 text-base font-medium text-slate-700 transition hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-white/5"
-                >
-                  {link.label}
-                </Link>
-              )
-            )}
-            <div className="mt-3 flex items-center justify-between border-t border-slate-100 px-2 pt-4 dark:border-white/10">
-              <span className="text-sm text-slate-500 dark:text-slate-400">المظهر</span>
-              <ThemeToggle />
-            </div>
-            <div className="mt-3 flex items-center justify-between px-2">
-              <span className="text-sm text-slate-500 dark:text-slate-400">الدولة</span>
-              <CountryPillRow />
-            </div>
-            <div className="mt-4 flex flex-col gap-3">
-              <Link
-                href="/login"
-                onClick={() => setOpen(false)}
-                className="rounded-lg border border-slate-300 px-4 py-3 text-center text-sm font-semibold text-slate-700 dark:border-white/15 dark:text-slate-200"
-              >
-                تسجيل الدخول
-              </Link>
-              <Link
-                href="/login"
-                onClick={() => setOpen(false)}
-                className="rounded-lg border border-slate-300 px-4 py-3 text-center text-sm font-semibold text-slate-700 dark:border-white/15 dark:text-slate-200"
-              >
-                لوحة التاجر
-              </Link>
-              <Link
-                href="/partners/join"
-                onClick={() => setOpen(false)}
-                className="rounded-lg bg-wa-500 px-4 py-3 text-center text-sm font-bold text-white shadow-card"
-              >
-                انضم كشريك
-              </Link>
-            </div>
+      <header ref={headerRef} className={`dms-header ${darkHeader ? "dms-header-dark" : ""}`} onKeyDown={e => {
+        if (e.key === "Escape" && activeDropdown) {
+          headerRef.current?.querySelector<HTMLButtonElement>('.dms-dropdown-trigger[aria-expanded="true"]')?.focus();
+          setActiveDropdown(null);
+        }
+      }}>
+        <div className="dms-company-nav">
+          <a href={COMPANY_URL} aria-label="الموقع الرئيسي لشركة DMS Tech"><LogoFull size="sm" /></a>
+          <nav className="dms-desktop-links" aria-label="موقع DMS Tech الرئيسي">
+            <a href={COMPANY_URL}>الصفحة الرئيسية</a>
+            {COMPANY_GROUPS.map((group, index) => <div key={group.label} className="dms-nav-dropdown"
+              onPointerEnter={event => { if (event.pointerType === "mouse") { cancelDropdownClose(); setActiveDropdown(group.label); } }}
+              onPointerLeave={event => { if (event.pointerType === "mouse") scheduleDropdownClose(); }}
+              onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setActiveDropdown(current => current === group.label ? null : current); }}>
+              <button type="button" className="dms-dropdown-trigger" aria-expanded={activeDropdown === group.label} aria-controls={`dms-company-dropdown-${index}`}
+                onClick={event => { cancelDropdownClose(); setActiveDropdown(current => event.detail === 0 && current === group.label ? null : group.label); }}
+                onKeyDown={event => { if (event.key === "ArrowDown") { event.preventDefault(); cancelDropdownClose(); setActiveDropdown(group.label); requestAnimationFrame(() => document.getElementById(`dms-company-dropdown-${index}`)?.querySelector<HTMLAnchorElement>("a")?.focus()); } }}>
+                {group.label}<ChevronDown size={14} aria-hidden="true" />
+              </button>
+              {activeDropdown === group.label && <div id={`dms-company-dropdown-${index}`} className={`dms-dropdown-panel ${index === 1 ? "dms-dropdown-mega" : ""}`} onClick={() => setActiveDropdown(null)}><CompanyDropdownContent links={group.links} mega={index === 1} /></div>}
+            </div>)}
+            <a href={`${COMPANY_URL}/offers`} className="dms-offers"><span className="dms-offer-badge">خصم</span><Zap size={14} />الباقات والعروض</a>
+            <a href={`${COMPANY_URL}/careers`}>التوظيف</a>
+            <a href={`${COMPANY_URL}/contact`}>اتصل بنا</a>
+            <a href={`${COMPANY_URL}/blog`}>المدونات</a>
           </nav>
+          <div className="dms-company-actions"><div className="dms-language-switch" aria-label="لغة موقع الشركة"><span aria-current="true">عربي</span><a href={`${COMPANY_URL}/en`} lang="en" aria-label="موقع الشركة باللغة الإنجليزية">EN</a></div><a className="dms-quote" href={`${COMPANY_URL}/quote`}>الحصول على عرض سعر</a><a className="dms-offers dms-mobile-offers" href={`${COMPANY_URL}/offers`}><span className="dms-offer-badge">خصم</span><Zap size={14} aria-hidden="true" />العروض</a><button ref={buttonRef} type="button" className="dms-menu-toggle" aria-label="القائمة" aria-expanded={open} aria-controls="marketing-mobile-menu" onClick={() => setOpen(v => !v)}>{open ? <X size={22} /> : <Menu size={22} />}</button></div>
         </div>
-      )}
+        <div className="dms-product-nav">
+          <Link href="/" className="dms-product-name"><MessagesSquare size={19} /><span dir="ltr">DMS Chat Bot</span><span className="dms-product-tag">من أدوات DMS Tech</span></Link>
+          <nav aria-label="التنقل داخل أداة المحادثات" className="dms-product-links">{PRODUCT_LINKS.map(link => <Link key={link.href} href={link.href} aria-current={pathname === link.href ? "page" : undefined}>{link.label}</Link>)}</nav>
+          <div className="dms-product-actions"><ThemeToggle /><Link href="/login" className="dms-login">دخول</Link><Link href="/pricing" className="dms-start">ابدأ الآن<ArrowLeft size={14} /></Link></div>
+        </div>
+      </header>
+      {open && <div id="marketing-mobile-menu" className="dms-mobile-panel" ref={panelRef}>
+        <nav aria-label="قائمة الهاتف">
+          <p className="dms-menu-label">DMS Chat Bot</p>
+          {PRODUCT_LINKS.map(link => <Link key={link.href} href={link.href} onClick={() => setOpen(false)} aria-current={pathname === link.href ? "page" : undefined}>{link.label}<ArrowLeft size={16} /></Link>)}
+          <div className="dms-mobile-account"><Link href="/login" onClick={() => setOpen(false)}>تسجيل الدخول</Link><Link href="/pricing" className="dms-start" onClick={() => setOpen(false)}>ابدأ الآن</Link></div>
+          <p className="dms-menu-label">موقع الشركة</p><a href={COMPANY_URL}>الصفحة الرئيسية لـ DMS Tech<ArrowLeft size={16} /></a>
+          {COMPANY_GROUPS.map(group => <details key={group.label} name="dms-mobile-company"><summary>{group.label}<ChevronDown size={16} /></summary>{group.links.map(link => <a key={link.path} href={COMPANY_URL + link.path}>{link.label}</a>)}</details>)}
+          <a href={`${COMPANY_URL}/offers`}>الباقات والعروض</a><a href={`${COMPANY_URL}/contact`}>اتصل بنا</a><a href={`${COMPANY_URL}/blog`}>المدونات</a><a href={`${COMPANY_URL}/careers`}>التوظيف</a>
+          <div className="dms-mobile-country"><span>المظهر</span><ThemeToggle /></div>
+
+        </nav>
+      </div>}
     </>
   );
 }

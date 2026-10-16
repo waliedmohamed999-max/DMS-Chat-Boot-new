@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 
 /**
  * Fade-in/Slide-up خفيف عند وصول العنصر لنطاق الرؤية أثناء التمرير — بـIntersectionObserver خام
@@ -17,15 +17,17 @@ export function Reveal({
   className?: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  const [visible, setVisible] = useState(false);
 
   useEffect(() => {
     const el = ref.current;
-    if (!el) return;
+    if (!el || !('IntersectionObserver' in window) || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0]?.isIntersecting) {
-          setVisible(true);
+          el.animate(
+            [{ opacity: 0.45, transform: 'translateY(16px)' }, { opacity: 1, transform: 'translateY(0)' }],
+            { duration: 450, delay: Math.min(delay, 300), easing: 'ease-out' }
+          );
           observer.unobserve(el);
         }
       },
@@ -33,13 +35,12 @@ export function Reveal({
     );
     observer.observe(el);
     return () => observer.disconnect();
-  }, []);
+  }, [delay]);
 
   return (
     <div
       ref={ref}
-      style={{ transitionDelay: `${delay}ms` }}
-      className={`transition-all duration-700 ease-out ${visible ? "translate-y-0 opacity-100" : "translate-y-6 opacity-0"} ${className}`}
+      className={className}
     >
       {children}
     </div>

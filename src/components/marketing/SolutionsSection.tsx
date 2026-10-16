@@ -21,13 +21,13 @@ const TEAMS = [
 
 function Card({ icon: Icon, title, body }: { icon: (p: { className?: string }) => React.ReactNode; title: string; body: string }) {
   return (
-    <div className="flex items-start gap-2.5 rounded-xl border border-slate-200 bg-white p-3 transition hover:-translate-y-0.5 hover:shadow-card sm:gap-3 sm:p-4 dark:border-white/10 dark:bg-slate-900">
+    <div className="dms-solution-card flex items-start gap-2.5 rounded-xl border border-slate-200 bg-white p-5 transition hover:-translate-y-0.5 hover:shadow-card sm:gap-3 sm:p-4 dark:border-white/10 dark:bg-slate-900">
       <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-wa-50 text-wa-600 sm:h-10 sm:w-10 dark:bg-wa-500/10 dark:text-wa-400">
         <Icon className="h-4 w-4 sm:h-5 sm:w-5" />
       </div>
       <div className="min-w-0">
-        <p className="text-xs font-semibold text-slate-900 sm:text-sm dark:text-white">{title}</p>
-        <p className="mt-0.5 text-[11px] leading-relaxed text-slate-500 sm:text-xs dark:text-slate-400">{body}</p>
+        <p className="text-sm font-semibold text-slate-900 sm:text-sm dark:text-white">{title}</p>
+        <p className="mt-0.5 text-sm leading-7 text-slate-500 sm:text-sm dark:text-slate-400">{body}</p>
       </div>
     </div>
   );
@@ -35,7 +35,7 @@ function Card({ icon: Icon, title, body }: { icon: (p: { className?: string }) =
 
 export function SolutionsSection() {
   return (
-    <section className="border-y border-slate-100 bg-slate-50/60 py-16 dark:border-white/5 dark:bg-white/[0.02]">
+    <section className="dms-solutions-section border-y border-slate-100 bg-slate-50/60 py-16 dark:border-white/5 dark:bg-white/[0.02]">
       <div className="mx-auto max-w-6xl px-4">
         <Reveal className="mx-auto max-w-2xl text-center">
           <h2 className="text-2xl font-bold text-slate-900 sm:text-3xl dark:text-white">حلول تناسب نشاطك وفريقك</h2>
@@ -45,7 +45,7 @@ export function SolutionsSection() {
         <div className="mt-10 grid grid-cols-1 gap-8 lg:grid-cols-[1.7fr_1fr]">
           <Reveal>
             <h3 className="mb-4 text-sm font-bold uppercase tracking-wide text-wa-600 dark:text-wa-400">حسب القطاع</h3>
-            <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3">
               {INDUSTRIES.map((i) => <Card key={i.title} {...i} />)}
             </div>
           </Reveal>

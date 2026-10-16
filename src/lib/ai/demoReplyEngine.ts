@@ -1,3 +1,4 @@
+import { COMPANY_WHATSAPP_PLANS } from "@/components/marketing/companyPlans";
 import type { Prisma } from "@prisma/client";
 
 /**
@@ -15,20 +16,15 @@ export async function getDemoReply(tx: Prisma.TransactionClient, text: string): 
   // كانت تسقط للرد الافتراضي العام بدل فرع السعر الحقيقي)، فأُضيفت الصيغتان صراحة بدل الاعتماد على
   // المفرد فقط.
   if (/سعر|أسعار|باقة|باقات|تكلفة|اشتراك/.test(normalized)) {
-    const plans = await tx.plan.findMany({
-      where: { isActive: true, isCustomForTenantId: null },
-      orderBy: { priceMonthlySar: "asc" },
-      select: { name: true, priceMonthlySar: true },
-    });
-    if (plans.length === 0) return "عندنا باقات متعددة تناسب كل حجم متجر — تواصل معنا لتفاصيل الأسعار الحالية.";
-    const list = plans.map((p) => `${p.name} بـ${p.priceMonthlySar} ريال شهرياً`).join("، ");
-    return `أسعارنا الحالية: ${list}. تحب تعرف تفاصيل أكتر عن أي باقة؟`;
+    const list = COMPANY_WHATSAPP_PLANS.map(p => `${p.name}: ${p.startingFrom ? "تبدأ من " : ""}${p.monthlySar} ريال شهرياً، أو ${p.annualSar} ريال سنوياً`).join("؛ ");
+    return `باقات واتساب من DMS Tech: ${list}. الأسعار قبل الضريبة ورسوم الاستخدام. العروض الحالية وتفاصيل الطلب: https://dmstech.sa/offers#pkg-whatsapp-automation`;
+
   }
 
   // "الذكاء الاصطناعي" (أداتا تعريف، واحدة على كل كلمة) لا تحتوي "ذكاء اصطناعي" (بلا "ال") كنص فرعي
   // — نفس فئة الخلل بالضبط، اكتُشفت هنا أيضاً بالاختبار الفعلي قبل ما تصل لعميل حقيقي.
   if (/ذكاء اصطناعي|الذكاء الاصطناعي|موظف ذكي|بوت ذكي|الموظف الذكي/.test(normalized)) {
-    return "الموظف الذكي عندنا يرد على عملائك تلقائياً على واتساب، يفهم استفساراتهم، ويحوّلهم لموظف بشري لما الموضوع يحتاج تدخّل حقيقي. متاح من باقة النمو فما فوق.";
+    return "المساعد الذكي يرد من ملفات نشاطك بالعربية والإنجليزية، ويتكامل مع أنظمتك ويحوّل المحادثة للفريق عند الحاجة. متاح ضمن باقة أتمتة الأعمال؛ تفاصيل النطاق ورسوم الاستخدام موضحة في صفحة الباقات.";
   }
 
   if (/واتساب|ربط رقم|ربط الرقم|whatsapp/i.test(normalized)) {

@@ -31,9 +31,9 @@ export function CountryGlobeButton() {
         aria-expanded={open}
         aria-label={`الدولة الحالية: ${COUNTRY_LABELS_AR[country]} — اضغط لتغييرها`}
         title={COUNTRY_LABELS_AR[country]}
-        className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 text-base transition hover:bg-slate-50 dark:border-white/10 dark:hover:bg-white/5"
+        className="flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 text-base transition hover:bg-slate-50 dark:border-white/10 dark:hover:bg-white/5"
       >
-        🌍
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><circle cx="12" cy="12" r="9" /><ellipse cx="12" cy="12" rx="4" ry="9" /><path d="M3 12h18M5 7h14M5 17h14" /></svg>
       </button>
       {open && (
         <div
