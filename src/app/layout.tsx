@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
-import { Cairo, Inter } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 import { Providers } from "./providers";
 
-const cairo = Cairo({ subsets: ["arabic", "latin"], variable: "--font-cairo", weight: ["400", "500", "600", "700", "800"] });
-const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
+// خطوط محلية مضمَّنة في المشروع بدل next/font/google — بيئات بناء بلا وصول لـ fonts.googleapis.com
+// (مثل Hostinger) كانت تفشل في `next build` عند محاولة تنزيل الخط وقت البناء.
+const cairo = localFont({ src: "./fonts/Cairo-Variable.woff2", variable: "--font-cairo", weight: "200 1000", display: "swap" });
+const inter = localFont({ src: "./fonts/Inter-Latin-Variable.woff2", variable: "--font-inter", weight: "100 900", display: "swap" });
 
 export const metadata: Metadata = {
   title: "DMS — Digital Messaging System | CRM واتساب للتجار",
