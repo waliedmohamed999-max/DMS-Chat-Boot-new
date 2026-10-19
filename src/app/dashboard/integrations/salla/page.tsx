@@ -7,7 +7,8 @@ import { sallaInstallUrl } from "@/lib/integrations/salla/api";
 import { ConfirmSubmitButton } from "@/components/dashboard/ConfirmSubmitButton";
 import { isWalletBilled } from "@/lib/billing/wallet";
 import { CommTemplatesForm } from "./CommTemplatesForm";
-import { connectIntegration, disconnectIntegration, resyncIntegration } from "../actions";
+import { connectIntegration, disconnectIntegration } from "../actions";
+import { SallaSyncPanel } from "./SallaSyncPanel";
 
 export const metadata = { title: "ربط سلة — DMS Tech" };
 
@@ -63,7 +64,7 @@ export default async function SallaIntegrationPage() {
   const meta = (integration?.metadataJson ?? {}) as SallaMeta;
   const connected = integration?.status === "CONNECTED";
   const needsReauth = integration?.status === "NEEDS_REAUTH";
-  const installUrl = sallaInstallUrl();
+  const installUrl = await sallaInstallUrl();
   const totalOrders = orderCounts.filter((o) => o.status !== "ABANDONED_CART").reduce((n, o) => n + o._count._all, 0);
   const totalCarts = orderCounts.find((o) => o.status === "ABANDONED_CART")?._count._all ?? 0;
   const cartCampaign = automations.find((c) => c.triggerEvent === "ABANDONED_CART");
@@ -115,10 +116,8 @@ export default async function SallaIntegrationPage() {
                 <Link href="/dashboard/integrations" className="text-accent-400 hover:underline">اربطه من التكاملات</Link>
               </p>
             )}
+            <SallaSyncPanel />
             <div className="flex flex-wrap gap-2">
-              <form action={resyncIntegration.bind(null, "SALLA")}>
-                <button className="btn-secondary text-sm">🔄 مزامنة الآن</button>
-              </form>
               <ConfirmSubmitButton
                 action={disconnectIntegration.bind(null, "SALLA")}
                 confirmMessage="سيتوقف استقبال الطلبات والعملاء من سلة فوراً. لإعادة الربط لاحقاً ستحتاج حذف التطبيق من متجرك على سلة ثم تثبيته من جديد. متأكد؟"

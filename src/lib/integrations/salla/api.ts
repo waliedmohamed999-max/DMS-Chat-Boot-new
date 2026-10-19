@@ -2,15 +2,15 @@ import { IntegrationProvider } from "@prisma/client";
 import { superAdminDb, withTenant } from "@/lib/db";
 import { encryptSecret, decryptSecret } from "@/lib/crypto";
 import { redisConnection } from "@/lib/queue/connection";
+import { getSallaConfig, sallaInstallUrlFor } from "./config";
 
 // قابلتان للتغيير عبر البيئة لأغراض الاختبار المحلي فقط (خادم سلة وهمي) — الافتراضي خوادم سلة الحقيقية.
 export const SALLA_OAUTH_BASE = process.env.SALLA_OAUTH_BASE_URL || "https://accounts.salla.sa/oauth2";
 export const SALLA_API_BASE = process.env.SALLA_API_BASE_URL || "https://api.salla.dev/admin/v2";
 
-/** رابط تثبيت التطبيق من متجر تطبيقات سلة (النمط السهل) — متاح فقط عند ضبط رقم التطبيق. */
-export function sallaInstallUrl(): string | null {
-  const appId = process.env.SALLA_APP_ID?.trim();
-  return appId ? `https://s.salla.sa/apps/install/${encodeURIComponent(appId)}` : null;
+/** رابط تثبيت التطبيق من متجر تطبيقات سلة (النمط السهل) — متاح فقط عند ضبط رقم التطبيق (لوحة الأدمن أو البيئة). */
+export async function sallaInstallUrl(): Promise<string | null> {
+  return sallaInstallUrlFor((await getSallaConfig()).appId);
 }
 
 export type SallaTokens = { accessToken: string; refreshToken: string; expiresAt: Date; scope?: string };
@@ -70,12 +70,13 @@ export async function saveSallaTokens(tenantId: string, tokens: SallaTokens) {
 }
 
 async function requestRefresh(refreshToken: string): Promise<SallaTokens> {
+  const { clientId, clientSecret } = await getSallaConfig();
   const res = await fetch(`${SALLA_OAUTH_BASE}/token`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
     body: new URLSearchParams({
       grant_type: "refresh_token", refresh_token: refreshToken,
-      client_id: process.env.SALLA_CLIENT_ID ?? "", client_secret: process.env.SALLA_CLIENT_SECRET ?? "",
+      client_id: clientId ?? "", client_secret: clientSecret ?? "",
     }),
     signal: AbortSignal.timeout(15_000),
   });

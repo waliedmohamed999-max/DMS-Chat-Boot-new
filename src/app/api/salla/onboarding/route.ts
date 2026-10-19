@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getSallaConfig } from "@/lib/integrations/salla/config";
 import { checkIpRateLimit, checkTenantRateLimit } from "@/lib/rateLimit";
 import { verifyHmacSignature } from "@/lib/crypto";
 import { saveOnboardingStep } from "@/lib/integrations/salla/intent";
@@ -15,7 +16,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ message: "طلبات كثيرة" }, { status: 429 });
   }
 
-  const secret = process.env.SALLA_FUNCTIONS_SECRET;
+  const secret = (await getSallaConfig()).functionsSecret;
   const rawBody = await req.text();
   const signature = req.headers.get("x-dms-signature");
   if (!secret || !signature || !verifyHmacSignature(rawBody, signature, secret)) {

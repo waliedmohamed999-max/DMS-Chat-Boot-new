@@ -6,6 +6,8 @@ import { requireTenantSession } from "@/lib/session";
 import { requireEffectivePermission } from "@/lib/rbac";
 import { withTenant } from "@/lib/db";
 import { writeAuditLog } from "@/lib/audit";
+import { checkIpRateLimit } from "@/lib/rateLimit";
+import { getSallaSyncState, startTrackedSallaSync, type SallaSyncState } from "@/lib/integrations/salla/sync";
 
 const CATEGORIES = ["UTILITY", "AUTHENTICATION", "MARKETING"] as const;
 
@@ -41,4 +43,23 @@ export async function saveSallaCommTemplates(_prev: { ok: boolean; message: stri
     revalidatePath("/dashboard/integrations/salla");
   }
   return result;
+}
+
+/** "مزامنة الآن" من لوحة DMS — نفس المزامنة المتتبَّعة بالخلفية المستخدمة داخل تطبيق سلة. */
+export async function startSallaSyncAction(): Promise<{ started: boolean; sync: SallaSyncState | null; error?: string }> {
+  const session = await requireTenantSession();
+  requireEffectivePermission(session.user.permissions, "integrations.manage");
+  const tenantId = session.user.tenantId;
+  if (!(await checkIpRateLimit(tenantId, "salla-dashboard-sync", 6, 3600)).allowed) {
+    return { started: false, sync: await getSallaSyncState(tenantId), error: "تمت المزامنة عدة مرات خلال الساعة الأخيرة — حاول لاحقاً" };
+  }
+  const started = await startTrackedSallaSync(tenantId, "merchant_dashboard");
+  if (started) await writeAuditLog({ tenantId, userId: session.user.id, action: "integration.salla_sync", targetType: "Integration", targetId: "SALLA" });
+  return { started, sync: await getSallaSyncState(tenantId) };
+}
+
+export async function getSallaSyncStateAction(): Promise<SallaSyncState | null> {
+  const session = await requireTenantSession();
+  requireEffectivePermission(session.user.permissions, "integrations.manage");
+  return getSallaSyncState(session.user.tenantId);
 }

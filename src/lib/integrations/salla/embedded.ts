@@ -2,6 +2,7 @@ import { SignJWT, jwtVerify } from "jose";
 import { IntegrationProvider } from "@prisma/client";
 import { superAdminDb, withTenant } from "@/lib/db";
 import { getAutomationStates, type AutomationState } from "./automations";
+import { getSallaConfig } from "./config";
 
 // قابل للتغيير عبر البيئة للاختبار المحلي فقط (خادم سلة وهمي) — الافتراضي خادم سلة الحقيقي.
 const EXCHANGE_BASE = process.env.SALLA_EXCHANGE_BASE_URL || "https://api.salla.dev/exchange-authority/v1";
@@ -13,7 +14,7 @@ const AUDIENCE = "salla-embedded";
  * لمعرفة التاجر الذي فتح الصفحة (لا يُعتمد على أي قيمة من المتصفح). docs.salla.dev/embedded-sdk/authentication
  */
 export async function introspectEmbeddedToken(token: string): Promise<{ merchantId: string; userId: string | null } | null> {
-  const appId = process.env.SALLA_APP_ID;
+  const appId = (await getSallaConfig()).appId;
   if (!appId || !token) return null;
   const res = await fetch(`${EXCHANGE_BASE}/introspect`, {
     method: "POST",

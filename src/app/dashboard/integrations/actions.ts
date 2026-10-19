@@ -27,7 +27,7 @@ export async function connectIntegration(provider: IntegrationProvider) {
 
   // سلة بالنمط السهل: الربط = تثبيت التطبيق من متجر سلة، والرموز تصل لاحقاً عبر الـwebhook — لا علاقة
   // له بوضع Sandbox العام للمنصة (التطبيق حقيقي متى ضُبط رقمه).
-  const sallaUrl = provider === "SALLA" ? sallaInstallUrl() : null;
+  const sallaUrl = provider === "SALLA" ? await sallaInstallUrl() : null;
   if (sallaUrl) redirect(sallaUrl);
 
   if (await isSandboxMode()) {

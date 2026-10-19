@@ -58,7 +58,10 @@
 
 ## 5) سلة
 
-اتبع `docs/SALLA_APP_SETUP.md` (المتغيرات `SALLA_CLIENT_ID`, `SALLA_CLIENT_SECRET`, `SALLA_WEBHOOK_SECRET`, `SALLA_APP_ID`, `SALLA_FUNCTIONS_SECRET`, `SALLA_PLAN_MAP`).
+1. أنشئ التطبيق في بوابة شركاء سلة حسب `docs/SALLA_APP_SETUP.md`.
+2. لوحة الأدمن ← **تطبيق سلة**: الصق App ID وClient ID وClient Secret وWebhook Secret، ولّد سر الدوال، واربط الباقات — بلا متغيرات Hostinger.
+3. الصق الروابط الظاهرة في نفس الصفحة في بوابة سلة (Webhook، الصفحة المضمَّنة، الدوال، الإرسال عبر واتساب).
+4. ثبّت التطبيق على متجر تجريبي: تبدأ مزامنة البيانات تلقائياً، والتاجر يعيدها من زر "مزامنة بياناتي الآن" داخل التطبيق في لوحة سلة.
 
 ## 6) نقل التجار القدامى (بعد نجاح 2–4)
 

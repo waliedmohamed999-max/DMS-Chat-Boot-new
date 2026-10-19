@@ -1,11 +1,12 @@
 import { IntegrationProvider, Prisma, type Plan, type SubscriptionStatus } from "@prisma/client";
 import { superAdminDb } from "@/lib/db";
+import { getSallaConfig } from "./config";
 
 /**
  * اشتراكات DMS المدفوعة عبر متجر تطبيقات سلة (أحداث app.subscription.* وapp.trial.*): سلة تحصّل المبلغ
  * من التاجر، ونحن نعكس الباقة والفترة على Subscription في DMS — بلا فاتورة DMS (الفاتورة من سلة).
  *
- * مطابقة باقة سلة بباقة DMS بالترتيب: SALLA_PLAN_MAP (JSON اختياري {"اسم باقة سلة": "مفتاح باقة DMS"})
+ * مطابقة باقة سلة بباقة DMS بالترتيب: ربط الباقات من لوحة الأدمن (/admin/salla) أو SALLA_PLAN_MAP ({"اسم باقة سلة": "مفتاح باقة DMS"})
  * ← مفتاح الباقة = item_slug أو اسم الباقة ← اسم الباقة العربي مطابق تماماً.
  */
 
@@ -19,14 +20,14 @@ export type SubscriptionEventResult = { applied: boolean; note: string };
 async function resolveDmsPlan(data: SubData): Promise<Plan | null> {
   const name = (data.plan_name ?? "").trim();
   try {
-    const map = JSON.parse(process.env.SALLA_PLAN_MAP || "{}") as Record<string, string>;
+    const map = (await getSallaConfig()).planMap;
     const mappedKey = map[name] ?? (data.item_slug ? map[data.item_slug] : undefined);
     if (mappedKey) {
       const plan = await superAdminDb.plan.findUnique({ where: { key: mappedKey } });
       if (plan) return plan;
     }
   } catch {
-    console.error("SALLA_PLAN_MAP ليس JSON صالحاً — تم تجاهله");
+    console.error("تعذّرت قراءة ربط باقات سلة — تم تجاهله");
   }
   const keys = [data.item_slug, name.toLowerCase()].filter((k): k is string => !!k);
   for (const key of keys) {
@@ -63,7 +64,7 @@ export async function handleSallaSubscriptionEvent(tenantId: string, event: stri
     case "app.subscription.started":
     case "app.subscription.renewed": {
       const plan = await resolveDmsPlan(data);
-      if (!plan) return { applied: false, note: `باقة سلة "${data.plan_name ?? "?"}" غير مطابقة لأي باقة DMS — أضفها لـ SALLA_PLAN_MAP` };
+      if (!plan) return { applied: false, note: `باقة سلة "${data.plan_name ?? "?"}" غير مطابقة لأي باقة DMS — أضفها في "ربط الباقات" بصفحة تطبيق سلة في لوحة الأدمن` };
       update = {
         status: "ACTIVE", plan: { connect: { id: plan.id } }, cancelAtPeriodEnd: false, cancelReason: null,
         ...(start ? { currentPeriodStart: start } : {}), ...(end ? { currentPeriodEnd: end } : {}),

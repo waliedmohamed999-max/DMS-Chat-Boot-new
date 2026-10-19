@@ -1330,6 +1330,14 @@ model PlatformSettings {
   // دفاعياً فقط. السر مشفَّر بنفس آلية encryptSecret المستخدمة لتوكنات التكاملات الأخرى.
   metaAppId              String?
   encryptedMetaAppSecret String?
+  // تطبيق سلة (Partner App) على مستوى المنصة — يُضبط من لوحة الأدمن (/admin/salla) ويُفضَّل على متغيرات
+  // البيئة SALLA_* (احتياط فقط). الأسرار مشفَّرة بنفس آلية encryptSecret.
+  sallaAppId                    String?
+  sallaClientId                 String?
+  encryptedSallaClientSecret    String?
+  encryptedSallaWebhookSecret   String?
+  encryptedSallaFunctionsSecret String?
+  sallaPlanMapJson              Json? // { "اسم باقة سلة": "planKey" }
   // اسم مزوّد البريد/SMS الفعلي المُهيَّأ — "console" يعني عدم وجود مزوّد حقيقي بعد (طباعة في سجل
   // الخادم فقط، نفس القيد الموثَّق سابقاً في lib/email/send.ts). حقل معلوماتي/تحضيري بحت حتى يُربَط
   // مزوّد حقيقي فعلياً — لا يُغيّر السلوك الفعلي وحده.

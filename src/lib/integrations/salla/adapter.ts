@@ -3,12 +3,14 @@ import type { IntegrationAdapter, SendMessageResult, SyncResult } from "@/lib/in
 import { SANDBOX_SALLA_ORDERS, SANDBOX_SALLA_PRODUCTS, sandboxAccountIdFor } from "@/lib/integrations/fixtures";
 import { encryptSecret, verifyHmacSignature } from "@/lib/crypto";
 import { withTenant } from "@/lib/db";
-import { SALLA_OAUTH_BASE, fetchSallaUserInfo, parseSallaExpires, sallaInstallUrl } from "./api";
+import { SALLA_OAUTH_BASE, fetchSallaUserInfo, parseSallaExpires } from "./api";
+import { getSallaConfig, sallaConfigCached, sallaInstallUrlFor } from "./config";
 import { fullSallaSync } from "./sync";
 
 /** مستقلة عن `PlatformSettings.integrationsMode` العام — نفس القرار وسببه الموثَّق في zid/adapter.ts. */
 function hasRealSallaCredentials(): boolean {
-  return Boolean(process.env.SALLA_CLIENT_ID && process.env.SALLA_CLIENT_SECRET);
+  const c = sallaConfigCached();
+  return Boolean(c.clientId && c.clientSecret);
 }
 
 function sallaRedirectUri(): string {
@@ -25,17 +27,18 @@ export const sallaAdapter: IntegrationAdapter = {
   provider: IntegrationProvider.SALLA,
 
   getAuthorizationUrl(tenantId: string, state?: string): string {
-    const installUrl = sallaInstallUrl();
+    const installUrl = sallaInstallUrlFor(sallaConfigCached().appId);
     if (installUrl) return installUrl;
     if (!hasRealSallaCredentials()) return `/dashboard/integrations?sandbox_connect=SALLA&tenant=${tenantId}`;
     const params = new URLSearchParams({
-      client_id: process.env.SALLA_CLIENT_ID ?? "", response_type: "code", redirect_uri: sallaRedirectUri(),
+      client_id: sallaConfigCached().clientId ?? "", response_type: "code", redirect_uri: sallaRedirectUri(),
       scope: "offline_access", ...(state ? { state } : {}),
     });
     return `${SALLA_OAUTH_BASE}/auth?${params.toString()}`;
   },
 
   async handleAuthorizationCallback(tenantId: string, code: string) {
+    const config = await getSallaConfig();
     if (!hasRealSallaCredentials()) {
       const externalAccountId = sandboxAccountIdFor("salla");
       await withTenant(tenantId, async (tx) => {
@@ -59,7 +62,7 @@ export const sallaAdapter: IntegrationAdapter = {
       headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
       body: new URLSearchParams({
         grant_type: "authorization_code", code,
-        client_id: process.env.SALLA_CLIENT_ID ?? "", client_secret: process.env.SALLA_CLIENT_SECRET ?? "",
+        client_id: config.clientId ?? "", client_secret: config.clientSecret ?? "",
         redirect_uri: sallaRedirectUri(),
       }),
     });
@@ -136,7 +139,7 @@ export const sallaAdapter: IntegrationAdapter = {
   async verifyWebhookSignature(rawBody: string, signatureHeader: string | null): Promise<boolean> {
     // X-Salla-Signature = HMAC-SHA256(rawBody, webhook secret) — موثَّق في docs.salla.dev. مسار الـwebhook
     // نفسه يدعم أيضاً خطة الحماية "Token" (راجع app/api/webhooks/salla/route.ts).
-    const secret = process.env.SALLA_WEBHOOK_SECRET;
+    const secret = (await getSallaConfig()).webhookSecret;
     if (!signatureHeader || !secret) return false;
     return verifyHmacSignature(rawBody, signatureHeader, secret);
   },

@@ -67,6 +67,7 @@ export default async function SetupReadinessPage() {
             <div className="flex flex-wrap items-center gap-3 border-t border-white/5 pt-3">
               {s.testable && (s.key === "core" || s.key === "d360" || s.key === "moyasar") && <TestConnectionButton kind={s.key} />}
               {s.key === "email" && <Link href="/admin/settings" className="text-xs text-accent-400 hover:underline">إرسال بريد تجريبي من إعدادات المنصة ←</Link>}
+              {s.key === "salla" && <Link href="/admin/salla" className="text-xs text-accent-400 hover:underline">ضبط تطبيق سلة ←</Link>}
               {s.key === "pricing" && <Link href="/admin/messaging" className="text-xs text-accent-400 hover:underline">ضبط الأسعار والهامش ←</Link>}
             </div>
           </section>

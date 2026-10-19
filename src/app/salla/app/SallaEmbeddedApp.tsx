@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { EmbeddedSummary } from "@/lib/integrations/salla/embedded";
 import type { AutomationState, SallaAutomationKey } from "@/lib/integrations/salla/automations";
+import type { SallaSyncState } from "@/lib/integrations/salla/sync";
 
 type SdkLike = {
   init(o?: { debug?: boolean }): Promise<unknown>;
@@ -33,6 +34,8 @@ const AUTOMATION_COPY: Record<SallaAutomationKey, { title: string; description: 
 export function SallaEmbeddedApp({ theme }: { theme: "light" | "dark" }) {
   const [view, setView] = useState<View>({ kind: "loading" });
   const [busy, setBusy] = useState<string | null>(null);
+  const [sync, setSync] = useState<SallaSyncState | null>(null);
+  const lastStatusRef = useRef<string | null>(null);
   const sdkRef = useRef<SdkLike | null>(null);
   const sessionRef = useRef<string | null>(null);
   const dark = theme === "dark";
@@ -100,6 +103,56 @@ export function SallaEmbeddedApp({ theme }: { theme: "light" | "dark" }) {
     const body = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(body.error ?? "حدث خطأ");
     return body;
+  }
+
+  const linked = view.kind === "linked";
+  // حالة المزامنة عند فتح التطبيق، ثم متابعة كل 3 ثوانٍ طالما هناك مزامنة جارية (التثبيت يبدأ واحدة تلقائياً).
+  useEffect(() => {
+    if (!linked) return;
+    let stop = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const poll = async () => {
+      try {
+        const { sync: s } = await api("/api/salla/embedded/sync");
+        if (stop) return;
+        if (lastStatusRef.current === "running" && s?.status === "done") refreshSummary();
+        lastStatusRef.current = s?.status ?? null;
+        setSync(s);
+        if (s?.status === "running") timer = setTimeout(poll, 3000);
+      } catch {
+        // انقطاع مؤقت — يحاول المستخدم من الزر
+      }
+    };
+    if (!sync || sync.status === "running") poll();
+    return () => {
+      stop = true;
+      if (timer) clearTimeout(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [linked, sync?.status]);
+
+  async function refreshSummary() {
+    try {
+      const { summary } = await api("/api/salla/embedded/summary");
+      setView({ kind: "linked", summary });
+      toast(true, "اكتملت مزامنة بيانات متجرك");
+    } catch {
+      // تبقى الأرقام السابقة
+    }
+  }
+
+  async function startSync() {
+    setBusy("sync");
+    try {
+      const { started, sync: s } = await api("/api/salla/embedded/sync", { method: "POST" });
+      lastStatusRef.current = s?.status ?? null;
+      setSync(s);
+      toast(true, started ? "بدأت المزامنة — قد تستغرق دقائق لمتجر كبير" : "هناك مزامنة جارية بالفعل");
+    } catch (err) {
+      toast(false, err instanceof Error ? err.message : "حدث خطأ");
+    } finally {
+      setBusy(null);
+    }
   }
 
   async function toggle(a: AutomationState) {
@@ -240,9 +293,31 @@ export function SallaEmbeddedApp({ theme }: { theme: "light" | "dark" }) {
               ))}
             </section>
 
-            {view.summary.store.lastSyncedAt && (
-              <p className={`text-center text-xs ${c.muted}`}>آخر مزامنة كاملة: {new Date(view.summary.store.lastSyncedAt).toLocaleString("ar-SA")}</p>
-            )}
+            <section className={`flex flex-wrap items-center justify-between gap-3 rounded-xl border p-5 ${c.card}`}>
+              <div className="space-y-1">
+                <h2 className="font-semibold">مزامنة بيانات متجرك</h2>
+                {sync?.status === "running" ? (
+                  <p className="text-sm text-[#6d5ef8]">
+                    ⏳ جارٍ سحب {sync.stage === "products" ? "المنتجات" : sync.stage === "customers" ? "العملاء" : "الطلبات"}… ({sync.orders.toLocaleString("ar-SA")} طلب · {sync.products.toLocaleString("ar-SA")} منتج · {sync.customers.toLocaleString("ar-SA")} عميل)
+                  </p>
+                ) : sync?.status === "failed" ? (
+                  <p className="text-sm text-red-500">تعذّرت المزامنة الأخيرة{sync.error ? `: ${sync.error}` : ""} — حاول مرة أخرى.</p>
+                ) : (
+                  <p className={`text-xs ${c.muted}`}>
+                    تسحب الطلبات والمنتجات والعملاء من سلة إلى DMS. التحديثات الجديدة تصل تلقائياً بعدها.
+                    {view.summary.store.lastSyncedAt && <> آخر مزامنة كاملة: {new Date(view.summary.store.lastSyncedAt).toLocaleString("ar-SA")}</>}
+                    {sync?.status === "done" && <> — {sync.orders.toLocaleString("ar-SA")} طلب، {sync.products.toLocaleString("ar-SA")} منتج، {sync.customers.toLocaleString("ar-SA")} عميل</>}
+                  </p>
+                )}
+              </div>
+              <button
+                onClick={startSync}
+                disabled={busy === "sync" || sync?.status === "running"}
+                className="rounded-lg bg-[#6d5ef8] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+              >
+                {sync?.status === "running" ? "جارٍ المزامنة…" : busy === "sync" ? "…" : "🔄 مزامنة بياناتي الآن"}
+              </button>
+            </section>
           </>
         )}
       </div>

@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import { NextRequest, NextResponse } from "next/server";
+import { getSallaConfig } from "@/lib/integrations/salla/config";
 import { Prisma } from "@prisma/client";
 import { superAdminDb } from "@/lib/db";
 import { checkIpRateLimit } from "@/lib/rateLimit";
@@ -24,7 +25,7 @@ export async function POST(req: NextRequest) {
   const payload = safeParse(rawBody);
   const eventType = typeof payload?.event === "string" ? payload.event : "unknown";
 
-  if (!verifySallaRequest(req, rawBody)) {
+  if (!verifySallaRequest(req, rawBody, (await getSallaConfig()).webhookSecret)) {
     await superAdminDb.webhookLog.create({
       data: { provider: "SALLA", eventType, payloadJson: redact(payload), signatureValid: false, errorMessage: "Invalid signature/token" },
     });
@@ -59,8 +60,7 @@ export async function POST(req: NextRequest) {
   }
 }
 
-function verifySallaRequest(req: NextRequest, rawBody: string): boolean {
-  const secret = process.env.SALLA_WEBHOOK_SECRET;
+function verifySallaRequest(req: NextRequest, rawBody: string, secret: string | null): boolean {
   if (!secret) return false; // بلا مفتاح سري مضبوط: رفض كل شيء (fail closed)
   const strategy = (req.headers.get("x-salla-security-strategy") ?? "").toLowerCase();
   const signature = req.headers.get("x-salla-signature");

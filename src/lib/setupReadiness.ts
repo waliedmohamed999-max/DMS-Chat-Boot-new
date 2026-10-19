@@ -1,5 +1,6 @@
 import { superAdminDb } from "@/lib/db";
 import { getPlatformSettings } from "@/lib/platformSettings";
+import { getSallaConfig } from "@/lib/integrations/salla/config";
 
 /**
  * جاهزية الحسابات الخارجية للإطلاق الحقيقي (صفحة /admin/setup): ما المضبوط في البيئة، وما الروابط التي
@@ -18,6 +19,11 @@ export type SetupSection = {
   docs?: string;
 };
 
+function sallaCheck(label: string, source: "admin" | "env" | "none", optional = false): Check {
+  if (source === "none") return { label, level: optional ? "warn" : "missing", detail: optional ? "اختياري — غير مضبوط" : "غير مضبوط" };
+  return { label, level: "ok", detail: source === "admin" ? "من لوحة الأدمن" : "من متغيرات البيئة" };
+}
+
 function env(name: string): string {
   return process.env[name]?.trim() ?? "";
 }
@@ -35,6 +41,7 @@ export function appUrl(): string {
 export async function getSetupSections(): Promise<SetupSection[]> {
   const base = appUrl();
   const settings = await getPlatformSettings();
+  const salla = await getSallaConfig();
   const rates = await superAdminDb.messageRate.findMany({ where: { country: { in: ["SA", "*"] } } });
   const hasRate = (category: string) => rates.some((r) => r.category === category);
 
@@ -101,15 +108,15 @@ export async function getSetupSections(): Promise<SetupSection[]> {
     {
       key: "salla",
       title: "سلة — تطبيق المتجر",
-      description: "تطبيق Partner على portal.salla.partners بالنمط السهل (Easy Mode). التفاصيل في docs/SALLA_APP_SETUP.md.",
+      description: "تطبيق Partner على salla.partners بالنمط السهل (Easy Mode) — المفاتيح تُضبط من صفحة \"تطبيق سلة\" في هذه اللوحة.",
       testable: false,
       checks: [
-        present("SALLA_CLIENT_ID"),
-        present("SALLA_CLIENT_SECRET"),
-        present("SALLA_WEBHOOK_SECRET"),
-        present("SALLA_APP_ID", "SALLA_APP_ID (رابط تثبيت التطبيق)"),
-        present("SALLA_FUNCTIONS_SECRET", "SALLA_FUNCTIONS_SECRET (خطوات التثبيت)", true),
-        present("SALLA_PLAN_MAP", "SALLA_PLAN_MAP (ربط باقات سلة بباقاتنا)", true),
+        sallaCheck("رقم التطبيق (App ID)", salla.sources.appId),
+        sallaCheck("Client ID", salla.sources.clientId),
+        sallaCheck("Client Secret", salla.sources.clientSecret),
+        sallaCheck("Webhook Secret", salla.sources.webhookSecret),
+        sallaCheck("سر دوال خطوات التثبيت", salla.sources.functionsSecret, true),
+        sallaCheck("ربط باقات سلة بباقات DMS", salla.sources.planMap, true),
       ],
       urls: [
         { label: "Webhook URL", value: `${base}/api/webhooks/salla` },
@@ -117,6 +124,7 @@ export async function getSetupSections(): Promise<SetupSection[]> {
         { label: "Onboarding Functions", value: `${base}/api/salla/onboarding` },
         { label: "Communication (WhatsApp)", value: `${base}/api/salla/communication` },
       ],
+      docs: "/admin/salla",
     },
     {
       key: "pricing",

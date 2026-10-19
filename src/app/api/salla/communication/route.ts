@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getSallaConfig } from "@/lib/integrations/salla/config";
 import { Prisma } from "@prisma/client";
 import { superAdminDb } from "@/lib/db";
 import { checkIpRateLimit } from "@/lib/rateLimit";
@@ -16,7 +17,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ message: "طلبات كثيرة" }, { status: 429 });
   }
 
-  const secret = process.env.SALLA_FUNCTIONS_SECRET;
+  const secret = (await getSallaConfig()).functionsSecret;
   const rawBody = await req.text();
   const signature = req.headers.get("x-dms-signature");
   if (!secret || !signature || !verifyHmacSignature(rawBody, signature, secret)) {

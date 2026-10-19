@@ -21,7 +21,14 @@
 | أحداث التطبيق | `app.store.authorize`، `app.installed`، `app.updated`، `app.uninstalled`، `app.settings.updated` |
 | أحداث المتجر | `order.created`، `order.updated`، `order.status.updated`، `order.cancelled`، `order.refunded`، `abandoned.cart`، `customer.created`، `customer.updated`، `product.created`، `product.updated`، `product.deleted`، `product.quantity.low` |
 
-## 3. متغيرات البيئة على الخادم
+## 3. المفاتيح — من لوحة الأدمن
+
+افتح **لوحة الأدمن ← تطبيق سلة** (`/admin/salla`) والصق القيم أدناه ثم "حفظ" — تسري فوراً بلا إعادة نشر،
+والأسرار تُخزَّن مشفَّرة. فعّل "ولّد سراً جديداً" لسر الدوال وانسخه (يُعرض مرة واحدة) إلى كود الدالتين في القسم 4.
+في نفس الصفحة: ربط باقات سلة بباقات DMS، روابط اللصق جاهزة للنسخ، والمتاجر المربوطة مع زر مزامنة.
+
+متغيرات البيئة أدناه ما زالت مدعومة كاحتياط لأي حقل لم يُضبط من اللوحة:
+
 
 | المتغير | المصدر |
 |---|---|
