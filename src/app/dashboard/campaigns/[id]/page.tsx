@@ -5,6 +5,7 @@ import { withTenant } from "@/lib/db";
 import { hasEffectivePermission } from "@/lib/rbac";
 import { linkCampaignConversions } from "@/lib/campaigns/conversions";
 import { retryFailedRecipients, duplicateCampaign, setTriggeredCampaignActive, runTriggerScanNow } from "../actions";
+import { ResumeCampaignButton } from "./ResumeCampaignButton";
 
 const STATUS_LABELS: Record<string, { label: string; className: string }> = {
   DRAFT: { label: "مسودة", className: "bg-slate-500/10 text-slate-400" },
@@ -95,6 +96,8 @@ export default async function CampaignDetailPage(props: { params: Promise<{ id: 
           </div>
         )}
       </div>
+
+      {canManage && campaign.type === "ONE_TIME" && campaign.status === "PAUSED" && <ResumeCampaignButton campaignId={campaign.id} />}
 
       <div className="flex items-center justify-between">
         <div>

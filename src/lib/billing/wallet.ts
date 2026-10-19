@@ -266,3 +266,30 @@ export async function monthlyUsageByTenant(tenantIds?: string[]) {
     margin: round4(Number(r._sum.cost ?? 0) - Number(r._sum.baseCost ?? 0)),
   }]));
 }
+
+/** هل رسائل هذا التاجر تُحاسَب من المحفظة؟ (قناة 360dialog حقيقية متصلة — غير التجريبية). */
+export async function isWalletBilled(tenantId: string): Promise<boolean> {
+  const count = await superAdminDb.integration.count({ where: { tenantId, provider: "D360DIALOG", status: "CONNECTED", isSandbox: false } });
+  return count > 0;
+}
+
+export type CampaignWalletCheck =
+  | { walletBilled: false }
+  | { walletBilled: true; estimate: number; balance: number; sufficient: boolean; error?: string };
+
+/** تقدير تكلفة حملة على المحفظة قبل إطلاقها — يُعرض في المعالج ويُفرض من الخادم عند الإنشاء والاستئناف. */
+export async function checkCampaignWallet(tenantId: string, phones: string[], category: MessageCategory): Promise<CampaignWalletCheck> {
+  if (!(await isWalletBilled(tenantId))) return { walletBilled: false };
+  const balance = Number((await getWallet(tenantId)).balance);
+  try {
+    const estimate = await estimateCampaignCost(phones, category);
+    return { walletBilled: true, estimate, balance, sufficient: balance >= estimate };
+  } catch (err) {
+    return { walletBilled: true, estimate: 0, balance, sufficient: false, error: err instanceof Error ? err.message : "تعذّر حساب التكلفة" };
+  }
+}
+
+export function toMessageCategory(templateCategory: string): MessageCategory {
+  const c = templateCategory.toUpperCase();
+  return c === "UTILITY" || c === "AUTHENTICATION" ? c : "MARKETING";
+}

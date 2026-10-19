@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { getSallaBilling } from "@/lib/integrations/salla/subscriptions";
 import { notFound } from "next/navigation";
 import { requireTenantSession } from "@/lib/session";
@@ -78,6 +79,14 @@ export default async function BillingPage() {
         <h1 className="text-xl font-bold text-white">الفوترة والاشتراك</h1>
         <p className="text-sm text-slate-400">إدارة باقتك واستخدامك وفواتيرك</p>
       </div>
+
+      <Link href="/dashboard/billing/wallet" className="card flex items-center justify-between p-4 transition hover:border-accent-500/40">
+        <div>
+          <p className="font-semibold text-white">👛 محفظة رسائل واتساب</p>
+          <p className="text-xs text-slate-400">الرصيد المسبق لرسائل واتساب الرسمي، الشحن، وسجل الاستهلاك</p>
+        </div>
+        <span className="text-sm text-accent-400">فتح ←</span>
+      </Link>
 
       {sallaBilling && (
         <div className="card border border-accent-500/30 bg-accent-500/5 p-5 text-sm">

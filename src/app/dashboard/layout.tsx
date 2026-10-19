@@ -1,5 +1,6 @@
+import { isWalletBilled } from "@/lib/billing/wallet";
 import { requireTenantSession } from "@/lib/session";
-import { rawDb, withTenant } from "@/lib/db";
+import { rawDb, superAdminDb, withTenant } from "@/lib/db";
 import { ROLE_LABELS_AR, hasEffectivePermission, type Permission } from "@/lib/rbac";
 import { Sidebar, type NavItem } from "@/components/layout/Sidebar";
 import { Topbar } from "@/components/layout/Topbar";
@@ -63,11 +64,22 @@ async function getApplicableAnnouncement(tenantId: string) {
   return applicable[0];
 }
 
+/** تنبيه رصيد المحفظة داخل اللوحة (قناة 360dialog فقط): منخفض تحت حد التنبيه، أو نافد. */
+async function getWalletAlert(tenantId: string): Promise<{ balance: number; empty: boolean } | null> {
+  if (!(await isWalletBilled(tenantId))) return null;
+  const wallet = await superAdminDb.walletBalance.findUnique({ where: { tenantId } });
+  const balance = Number(wallet?.balance ?? 0);
+  const minAlert = Number(wallet?.minAlert ?? 50);
+  if (balance >= minAlert) return null;
+  return { balance, empty: balance < 0.01 };
+}
+
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const session = await requireTenantSession();
-  const [tenant, settings] = await Promise.all([
+  const [tenant, settings, walletAlert] = await Promise.all([
     rawDb.tenant.findUniqueOrThrow({ where: { id: session.user.tenantId } }),
     getPlatformSettings(),
+    getWalletAlert(session.user.tenantId),
   ]);
 
   // وضع الصيانة العام يمنع كل التجار فوراً — باستثناء جلسة انتحال (فريق المنصة يحتاج الدخول
@@ -149,6 +161,16 @@ export default async function DashboardLayout({ children }: { children: React.Re
                   dismissible={activeAnnouncement.dismissible}
                 />
               </div>
+            )}
+            {walletAlert && (
+              <a
+                href="/dashboard/billing/wallet"
+                className={`mb-4 block rounded-lg border px-4 py-3 text-sm ${walletAlert.empty ? "border-danger-500/30 bg-danger-500/10 text-danger-500" : "border-warning-500/30 bg-warning-500/10 text-warning-500"}`}
+              >
+                {walletAlert.empty
+                  ? "⛔ رصيد محفظة رسائل واتساب نفد — رسائل الحملات والقوالب متوقفة. اضغط للشحن."
+                  : `⚠️ رصيد محفظة رسائل واتساب منخفض (${walletAlert.balance.toFixed(2)} ر.س) — اشحن قبل أن تتوقف الحملات.`}
+              </a>
             )}
             {children}
           </main>

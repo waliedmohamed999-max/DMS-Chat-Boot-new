@@ -16,7 +16,7 @@ const STATUS_LABELS: Record<string, { label: string; className: string }> = {
   ERROR: { label: "خطأ", className: "bg-danger-500/10 text-danger-500" },
 };
 
-type SearchParams = { connected?: string; zid_error?: string; salla_error?: string };
+type SearchParams = { connected?: string; zid_error?: string; salla_error?: string; d360_error?: string };
 
 export default async function IntegrationsPage(props: { searchParams: Promise<SearchParams> }) {
   const searchParams = await props.searchParams;
@@ -48,9 +48,9 @@ export default async function IntegrationsPage(props: { searchParams: Promise<Se
           ✅ تم الاتصال الحقيقي بنجاح ({PROVIDER_LABELS_AR[searchParams.connected as IntegrationProvider] ?? searchParams.connected})
         </div>
       )}
-      {(searchParams.zid_error || searchParams.salla_error) && (
+      {(searchParams.zid_error || searchParams.salla_error || searchParams.d360_error) && (
         <div className="rounded-lg border border-danger-500/30 bg-danger-500/10 px-4 py-3 text-sm text-danger-500">
-          ❌ فشل الاتصال الحقيقي: {searchParams.zid_error || searchParams.salla_error}
+          ❌ فشل الاتصال الحقيقي: {searchParams.zid_error || searchParams.salla_error || searchParams.d360_error}
         </div>
       )}
 
@@ -58,12 +58,17 @@ export default async function IntegrationsPage(props: { searchParams: Promise<Se
         {/* PAYMENT_GATEWAY ليس تكاملاً قابلاً للربط من هنا (أُضيف فقط لتصنيف WebhookLog — انظر
             lib/integrations/registry.ts) — يُستبعَد صراحة من قائمة بطاقات "اربط الآن". */}
         {(Object.values(IntegrationProvider) as IntegrationProvider[])
+          // الربط المباشر بـ Meta لم يعد متاحاً للربط الجديد (القناة الرسمية الآن عبر 360dialog) — يظهر فقط لتاجر
+          // مربوط به مسبقاً ليتابع حالته أو يفصله.
           .filter((provider) => provider !== "PAYMENT_GATEWAY")
+          .filter((provider) => provider !== "META_WHATSAPP" || !!byProvider.get(provider)?.externalAccountId || byProvider.get(provider)?.status === "CONNECTED")
+          .sort((a, b) => (a === "D360DIALOG" ? -1 : b === "D360DIALOG" ? 1 : 0))
           .map((provider) => {
           const integration = byProvider.get(provider);
           const status = STATUS_LABELS[integration?.status ?? "DISCONNECTED"]!;
           const isMeta = provider === "META_WHATSAPP";
           const isWhatsappQr = provider === "WHATSAPP_QR";
+          const isD360 = provider === "D360DIALOG";
           const metadata = (integration?.metadataJson ?? null) as {
             qualityRating?: string; messagingTier?: string; displayPhoneNumber?: string; connectedPhoneE164?: string;
           } | null;
@@ -102,6 +107,24 @@ export default async function IntegrationsPage(props: { searchParams: Promise<Se
                 <Link href="/dashboard/integrations/salla" className="mb-2 text-xs font-semibold text-accent-400 hover:underline">
                   إدارة ربط سلة والرسائل التلقائية ←
                 </Link>
+              )}
+
+              {isD360 && integration?.status === "CONNECTED" && (
+                <div className="mb-2 space-y-1 text-xs text-slate-400">
+                  <p dir="ltr" className="text-sm text-slate-200">{metadata?.displayPhoneNumber ?? "—"}</p>
+                  {integration.pendingVerification && <p className="text-warning-500">⏳ الرقم قيد التفعيل لدى واتساب — يجهز عادة خلال دقائق إلى ساعات</p>}
+                  <Link href="/dashboard/billing/wallet" className="text-accent-400 hover:underline">محفظة الرسائل ←</Link>
+                </div>
+              )}
+              {isD360 && integration?.status !== "CONNECTED" && (
+                <div className="mb-2 space-y-2 text-xs text-slate-400">
+                  <p className="text-sm text-slate-300">رقم واتساب رسمي (WhatsApp Business API) عبر DMS — بلا بطاقة دفع في Meta: رسائل القوالب تُخصم من محفظتك، والرد على العملاء مجاني.</p>
+                  <ol className="list-inside list-decimal space-y-1">
+                    <li>اضغط "ربط رقم واتساب" وسجّل الدخول بحساب فيسبوك نشاطك.</li>
+                    <li>اختر الرقم الذي تريد ربطه وأكّده برمز التحقق.</li>
+                    <li>ترجع لهنا تلقائياً والرقم مربوط.</li>
+                  </ol>
+                </div>
               )}
 
               {isWhatsappQr && integration?.status === "CONNECTED" && (
@@ -156,8 +179,8 @@ export default async function IntegrationsPage(props: { searchParams: Promise<Se
                     </ConfirmSubmitButton>
                   </>
                 ) : !isMeta && !isWhatsappQr ? (
-                  <form action={connectIntegration.bind(null, provider)}>
-                    <button className="btn-primary w-full text-xs">ربط الآن</button>
+                  <form action={connectIntegration.bind(null, provider)} className="w-full">
+                    <button className="btn-primary w-full text-xs">{isD360 ? "🟢 ربط رقم واتساب" : "ربط الآن"}</button>
                   </form>
                 ) : null}
               </div>

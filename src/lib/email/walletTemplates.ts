@@ -17,3 +17,14 @@ export function walletLowBalanceEmail(input: { to: string; name: string; balance
     html: `<p>مرحباً ${escapeHtml(input.name)}،</p><p>رصيد محفظة رسائل واتساب في DMS Tech أصبح <strong>${balance} ر.س</strong>، أقل من حد التنبيه (${threshold} ر.س). عند نفاد الرصيد تتوقف رسائل الحملات والقوالب تلقائياً.</p><p><a href="${url}" style="display:inline-block;background:#6d5ef8;color:#ffffff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:bold">شحن المحفظة</a></p>`,
   };
 }
+
+/** إيصال شحن محفظة ناجح عبر بوابة الدفع. */
+export function walletRechargeReceiptEmail(input: { to: string; name: string; amount: number; balance: number; reference: string }): EmailInput {
+  const url = `${baseUrl()}/dashboard/billing/wallet`;
+  return {
+    to: input.to,
+    subject: `تم شحن محفظة رسائل واتساب بـ ${input.amount.toFixed(2)} ر.س`,
+    text: `مرحباً ${input.name}،\n\nتم شحن محفظة رسائل واتساب في DMS Tech بمبلغ ${input.amount.toFixed(2)} ر.س. الرصيد الحالي: ${input.balance.toFixed(2)} ر.س.\nمرجع الدفع: ${input.reference}\n\nسجل الحركات: ${url}`,
+    html: `<p>مرحباً ${escapeHtml(input.name)}،</p><p>تم شحن محفظة رسائل واتساب في DMS Tech بمبلغ <strong>${input.amount.toFixed(2)} ر.س</strong>. الرصيد الحالي: <strong>${input.balance.toFixed(2)} ر.س</strong>.</p><p style="font-size:12px;color:#64748b">مرجع الدفع: <span dir="ltr">${escapeHtml(input.reference)}</span></p><p><a href="${url}">سجل الحركات</a></p>`,
+  };
+}

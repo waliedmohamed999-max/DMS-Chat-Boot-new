@@ -1,5 +1,6 @@
 "use server";
 
+import { checkCampaignWallet, toMessageCategory, type CampaignWalletCheck } from "@/lib/billing/wallet";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireTenantSession } from "@/lib/session";
@@ -35,6 +36,44 @@ export async function previewAudienceCount(input: { audienceType: "ALL" | "SEGME
   requireEffectivePermission(session.user.permissions, "campaigns.view");
   const tenantId = session.user.tenantId;
   return withTenant(tenantId, (tx) => tx.contact.count({ where: resolveAudienceWhere(tenantId, input.audienceType, input.filter) }));
+}
+
+/** تقدير تكلفة الحملة على محفظة الرسائل (قناة 360dialog فقط) — يُعرض في خطوة المراجعة بالمعالج. */
+export async function previewCampaignWalletCost(input: { audienceType: "ALL" | "SEGMENT"; filter: SegmentFilter; templateId: string }): Promise<CampaignWalletCheck> {
+  const session = await requireTenantSession();
+  requireEffectivePermission(session.user.permissions, "campaigns.view");
+  const tenantId = session.user.tenantId;
+  const [template, phones] = await withTenant(tenantId, (tx) =>
+    Promise.all([
+      tx.messageTemplate.findUnique({ where: { id: input.templateId, tenantId }, select: { category: true } }),
+      tx.contact.findMany({ where: resolveAudienceWhere(tenantId, input.audienceType, input.filter), select: { phoneE164: true } }),
+    ])
+  );
+  if (!template) return { walletBilled: false };
+  return checkCampaignWallet(tenantId, phones.map((c) => c.phoneE164), toMessageCategory(template.category));
+}
+
+/** استئناف حملة لمرة واحدة توقفت لنفاد رصيد المحفظة (PAUSED) — تُكمل من حيث توقفت (المستلمون السابقون يُتخطَّون). */
+export async function resumePausedCampaign(campaignId: string): Promise<{ success: true } | { success: false; error: string }> {
+  const session = await requireTenantSession();
+  requireEffectivePermission(session.user.permissions, "campaigns.manage");
+  const tenantId = session.user.tenantId;
+  const campaign = await withTenant(tenantId, (tx) => tx.campaign.findUnique({ where: { id: campaignId, tenantId }, include: { template: true, recipients: { select: { contactId: true } }, segment: true } }));
+  if (!campaign || campaign.type !== "ONE_TIME" || campaign.status !== "PAUSED") return { success: false, error: "الحملة ليست متوقفة بانتظار الاستئناف" };
+
+  const sentTo = new Set(campaign.recipients.map((r) => r.contactId));
+  const filter = (campaign.segment?.filterJson as SegmentFilter | null) ?? null;
+  const remaining = (await withTenant(tenantId, (tx) => tx.contact.findMany({ where: resolveAudienceWhere(tenantId, campaign.audienceType, filter), select: { id: true, phoneE164: true } })))
+    .filter((c) => !sentTo.has(c.id));
+  const check = await checkCampaignWallet(tenantId, remaining.map((c) => c.phoneE164), toMessageCategory(campaign.template.category));
+  if (check.walletBilled && !check.sufficient) {
+    return { success: false, error: check.error ?? `الرصيد ${check.balance.toFixed(2)} ر.س لا يغطي باقي الحملة (${check.estimate.toFixed(2)} ر.س لـ ${remaining.length} مستلم). اشحن المحفظة أولاً.` };
+  }
+  await withTenant(tenantId, (tx) => tx.campaign.update({ where: { id: campaignId }, data: { status: "SCHEDULED" } }));
+  await enqueueCampaignSend({ tenantId, campaignId });
+  await writeAuditLog({ tenantId, userId: session.user.id, action: "campaign.resume", targetType: "Campaign", targetId: campaignId, metaJson: { remaining: remaining.length } });
+  revalidatePath(`/dashboard/campaigns/${campaignId}`);
+  return { success: true };
 }
 
 export type ImportCampaignAudienceResult =
@@ -160,6 +199,16 @@ export async function createCampaign(input: CreateCampaignInput): Promise<{ camp
     if (!isUnlimited(limits.maxAudiencePerCampaign) && audienceCount > limits.maxAudiencePerCampaign) {
       throw new CampaignLimitError(
         `حجم الجمهور (${audienceCount}) يتجاوز الحد المسموح لحملة واحدة في باقتك (${limits.maxAudiencePerCampaign}). رقّي باقتك أو قلّص الجمهور.`
+      );
+    }
+
+    // قناة 360dialog: تكلفة الحملة المتوقعة على المحفظة يجب أن يغطيها الرصيد قبل الإطلاق (فرض من الخادم).
+    const audiencePhones = await tx.contact.findMany({ where: resolveAudienceWhere(tenantId, audienceType, filter), select: { phoneE164: true } });
+    const walletCheck = await checkCampaignWallet(tenantId, audiencePhones.map((c) => c.phoneE164), toMessageCategory(template.category));
+    if (walletCheck.walletBilled && !walletCheck.sufficient) {
+      throw new CampaignLimitError(
+        walletCheck.error ??
+          `رصيد محفظة الرسائل غير كافٍ لهذه الحملة: التكلفة المتوقعة ${walletCheck.estimate.toFixed(2)} ر.س والرصيد ${walletCheck.balance.toFixed(2)} ر.س. اشحن المحفظة من صفحة الفوترة.`
       );
     }
 

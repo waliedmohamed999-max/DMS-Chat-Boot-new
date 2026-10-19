@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   createCampaign,
   previewAudienceCount,
+  previewCampaignWalletCost,
   previewTriggerMatchCount,
   importCampaignAudienceFromExcel,
   type ImportCampaignAudienceResult,
@@ -117,6 +118,18 @@ export function CampaignWizard({
     previewTriggerMatchCount(triggerEvent, { inactiveDays }).then(setTriggerMatchCount);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [type, stepKey, triggerEvent, inactiveDays]);
+
+  // تكلفة الحملة على محفظة الرسائل (قناة 360dialog فقط) — تُحسب عند الوصول لخطوة التأكيد.
+  const [walletCheck, setWalletCheck] = useState<Awaited<ReturnType<typeof previewCampaignWalletCost>> | null>(null);
+  useEffect(() => {
+    if (type !== "ONE_TIME" || stepKey !== "confirm" || !templateId) return;
+    setWalletCheck(null);
+    previewCampaignWalletCost({ audienceType, filter, templateId }).then(setWalletCheck).catch(() => setWalletCheck({ walletBilled: false })); // الخادم يفرض الرصيد عند الإنشاء على أي حال
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [type, stepKey, templateId, audienceType, stage, tagIds.join(","), activityMode, activityDays, orderEnabled, orderStatus, orderWithinDays]);
+  const walletBlocks = walletCheck?.walletBilled === true && !walletCheck.sufficient;
+  // حملة لمرة واحدة: زر الإطلاق ينتظر انتهاء فحص المحفظة (لحظات) بدل أن يبقى متاحاً قبل ظهور التكلفة.
+  const walletChecking = type === "ONE_TIME" && stepKey === "confirm" && walletCheck === null;
 
   const selectedTemplate = templates.find((t) => t.id === templateId);
   const previewText = selectedTemplate?.bodyText.replace(/\{\{1\}\}/g, "عميلك") ?? "";
@@ -506,6 +519,19 @@ export function CampaignWizard({
                   <p className="font-medium text-white">{triggerEvent === "ABANDONED_CART" ? "سلة متروكة" : triggerEvent === "NEW_CUSTOMER" ? "ترحيب بعميل جديد من المتجر" : `عميل غير نشط منذ ${inactiveDays} يوم`}</p>
                 </div>
               )}
+              {walletCheck?.walletBilled && (
+                <div className={`rounded-lg border p-3 text-sm ${walletBlocks ? "border-danger-500/30 bg-danger-500/10" : "border-white/5 bg-navy-900"}`}>
+                  <p className="text-slate-400">التكلفة المتوقعة على محفظة الرسائل</p>
+                  <p className="font-medium text-white" dir="ltr">{walletCheck.estimate.toFixed(2)} SAR</p>
+                  <p className="mt-1 text-xs text-slate-500">الرصيد الحالي: <span dir="ltr">{walletCheck.balance.toFixed(2)} SAR</span></p>
+                  {walletBlocks && (
+                    <p className="mt-2 text-xs text-danger-500">
+                      {walletCheck.error ?? "الرصيد لا يكفي لهذه الحملة."}{" "}
+                      <a href="/dashboard/billing/wallet" className="font-semibold underline">اشحن المحفظة</a>
+                    </p>
+                  )}
+                </div>
+              )}
               <div className="rounded-lg border border-white/5 bg-navy-900 p-3 text-sm">
                 <p className="text-slate-400">الجدولة</p>
                 <p className="font-medium text-white">
@@ -513,7 +539,7 @@ export function CampaignWizard({
                 </p>
               </div>
 
-              <button onClick={handleSubmit} disabled={isPending} className="btn-primary w-full">
+              <button onClick={handleSubmit} disabled={isPending || walletBlocks || walletChecking} className="btn-primary w-full disabled:opacity-50">
                 {isPending ? "جارٍ التنفيذ..." : type === "TRIGGERED" ? "🚀 تفعيل الحملة الآلية" : scheduleMode === "now" ? "🚀 إرسال الآن" : "📅 جدولة الحملة"}
               </button>
             </div>

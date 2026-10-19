@@ -5,6 +5,8 @@ import { withTenant } from "@/lib/db";
 import { hasEffectivePermission } from "@/lib/rbac";
 import { sallaInstallUrl } from "@/lib/integrations/salla/api";
 import { ConfirmSubmitButton } from "@/components/dashboard/ConfirmSubmitButton";
+import { isWalletBilled } from "@/lib/billing/wallet";
+import { CommTemplatesForm } from "./CommTemplatesForm";
 import { connectIntegration, disconnectIntegration, resyncIntegration } from "../actions";
 
 export const metadata = { title: "ربط سلة — DMS Tech" };
@@ -14,6 +16,7 @@ type SallaMeta = {
   linkMethod?: string; installedAt?: string; uninstalledAt?: string;
   whatsappNumber?: string; requestedAutomations?: { abandonedCart?: boolean; welcome?: boolean };
   billing?: { source?: string; planName?: string | null; endDate?: string | null };
+  commTemplates?: Record<string, string | undefined>;
 };
 
 const LINK_METHOD_LABELS: Record<string, string> = {
@@ -52,6 +55,10 @@ export default async function SallaIntegrationPage() {
       tx.webhookLog.findMany({ where: { tenantId, provider: "SALLA" }, orderBy: { createdAt: "desc" }, take: 15 }),
     ])
   );
+  const walletBilled = await isWalletBilled(tenantId);
+  const approvedTemplates = walletBilled
+    ? await withTenant(tenantId, (tx) => tx.messageTemplate.findMany({ where: { tenantId, status: "APPROVED" }, select: { id: true, name: true, category: true, bodyText: true }, orderBy: { name: "asc" } }))
+    : [];
 
   const meta = (integration?.metadataJson ?? {}) as SallaMeta;
   const connected = integration?.status === "CONNECTED";
@@ -171,6 +178,19 @@ export default async function SallaIntegrationPage() {
         />
         <p className="text-xs text-slate-500">إشعارات حالة الطلب (تم الشحن، تم التوصيل…) تأتي في المرحلة القادمة عبر قناة التواصل الرسمية في سلة.</p>
       </div>
+
+      {walletBilled && (
+        <div className="card space-y-4 p-6">
+          <div>
+            <h2 className="font-semibold text-white">قوالب رسائل متجرك على واتساب الرسمي</h2>
+            <p className="text-xs text-slate-400">
+              رسائل متجرك من سلة تُرسل كرد مجاني إذا راسلك العميل خلال آخر 24 ساعة؛ وغير ذلك يشترط واتساب قالباً معتمداً.
+              اختر قالباً لكل فئة يحتوي المتغير {"{{1}}"} ليوضع فيه نص الرسالة القادم من سلة.
+            </p>
+          </div>
+          <CommTemplatesForm templates={approvedTemplates} current={meta.commTemplates ?? {}} />
+        </div>
+      )}
 
       {/* سجل الأحداث */}
       <div className="card p-6">

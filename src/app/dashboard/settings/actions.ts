@@ -16,7 +16,12 @@ const inviteSchema = z.object({
   role: z.enum(["ADMIN", "AGENT"]),
 });
 
-export async function inviteTeamMember(formData: FormData) {
+export type InviteResult = { ok: true } | { ok: false; error: string };
+
+export async function inviteTeamMember(formData: FormData): Promise<InviteResult> {
+  // الأخطاء تُعاد كقيمة لا تُرمى: Next.js يُخفي رسائل الاستثناءات من Server Actions في الإنتاج (فتظهر
+  // للتاجر رسالة عامة وخطأ 500 بدل السبب الفعلي، مثل بلوغ حد أعضاء الباقة).
+  try {
   const session = await requireTenantSession();
   requirePermission(session.user.role, "team.manage");
 
@@ -65,6 +70,10 @@ export async function inviteTeamMember(formData: FormData) {
   });
 
   revalidatePath("/dashboard/settings");
+  return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "تعذّرت دعوة العضو" };
+  }
 }
 
 export async function changeUserRole(userId: string, role: "ADMIN" | "AGENT") {

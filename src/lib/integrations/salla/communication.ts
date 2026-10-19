@@ -4,6 +4,7 @@ import { checkTenantRateLimit } from "@/lib/rateLimit";
 import { resolveWhatsappAdapter } from "@/lib/integrations/registry";
 import { getTenantCampaignLimits } from "@/lib/campaigns/limits";
 import { sallaPhoneToE164 } from "./mappers";
+import type { SendOptions } from "@/lib/integrations/types";
 
 /**
  * تطبيق تواصل (Communication App): التاجر يختار DMS كقناة واتساب لمتجره في سلة، فتمرّر سلة كل رسائل
@@ -68,8 +69,9 @@ export async function handleSallaCommunication(payload: CommPayload): Promise<Co
   const isOtp = OTP_TYPES.has(data.type ?? "");
   const isMarketing = MARKETING_TYPES.has(data.type ?? "");
   // فئة تسعير Meta للرسالة (قناة 360dialog تخصمها من المحفظة؛ القنوات الأخرى تتجاهلها).
-  const sendOptions = { category: isOtp ? "AUTHENTICATION" : isMarketing ? "MARKETING" : "UTILITY" } as const;
+  const category = isOtp ? "AUTHENTICATION" : isMarketing ? "MARKETING" : "UTILITY";
   const adapter = await resolveWhatsappAdapter(tenantId);
+  const route = await buildCommRouter(tenantId, merchantId, category, content, data.meta);
   let sent = 0;
   let skipped = 0;
   const errors: string[] = [];
@@ -83,6 +85,11 @@ export async function handleSallaCommunication(payload: CommPayload): Promise<Co
 
     if (isOtp) {
       // رمز التحقق: إرسال مباشر بلا إنشاء جهة اتصال ولا حفظ النص في أي مكان.
+      const sendOptions = await route(phoneE164);
+      if (!sendOptions) {
+        errors.push(NO_TEMPLATE_ERROR(category));
+        continue;
+      }
       const result = await adapter.sendMessage(tenantId, phoneE164, content, undefined, sendOptions);
       await withTenant(tenantId, (tx) => tx.subscription.updateMany({ where: { tenantId }, data: { messagesUsedThisPeriod: { increment: 1 } } }));
       if (result.success) sent++;
@@ -99,6 +106,11 @@ export async function handleSallaCommunication(payload: CommPayload): Promise<Co
       continue;
     }
 
+    const sendOptions = await route(phoneE164);
+    if (!sendOptions) {
+      errors.push(NO_TEMPLATE_ERROR(category));
+      continue;
+    }
     // الإرسال خارج أي معاملة قاعدة بيانات — طلب HTTP بطيء لواتساب لا يجب أن يُبقي معاملة مفتوحة.
     const result = await adapter.sendMessage(tenantId, phoneE164, content, undefined, sendOptions);
     await withTenant(tenantId, async (tx) => {
@@ -124,4 +136,41 @@ export async function handleSallaCommunication(payload: CommPayload): Promise<Co
 
   if (sent === 0 && errors.length > 0) return { ok: false, status: 502, error: errors[0]! };
   return { ok: true, sent, skipped };
+}
+
+type CommCategory = "AUTHENTICATION" | "MARKETING" | "UTILITY";
+const CATEGORY_AR: Record<CommCategory, string> = { AUTHENTICATION: "رموز التحقق", MARKETING: "التسويق", UTILITY: "إشعارات الطلبات" };
+const NO_TEMPLATE_ERROR = (c: CommCategory) =>
+  `العميل خارج نافذة الـ24 ساعة ولا يوجد قالب واتساب معتمد مختار لرسائل ${CATEGORY_AR[c]} — اختره من صفحة ربط سلة في DMS`;
+
+/**
+ * يحدد طريقة إرسال رسالة سلة لكل مستلم. القنوات غير المحاسَبة بالمحفظة (QR، Meta القديم) ترسل النص كما هو.
+ * القناة الرسمية (360dialog) لا تقبل نصاً حراً إلا داخل نافذة خدمة العميل (24 ساعة من آخر رسالة منه)، فـ:
+ *  - النافذة مفتوحة ⇐ نص حر كرد خدمة (مجاني).
+ *  - النافذة مغلقة ⇐ القالب المعتمد الذي اختاره التاجر لهذه الفئة (metadata.commTemplates)، ونص سلة في متغيره
+ *    الأول — ورمز التحقق نفسه في قوالب المصادقة.
+ *  - لا قالب مختار ⇐ null (لا إرسال ولا خصم، ويظهر السبب للتاجر في سجل أحداث سلة).
+ */
+async function buildCommRouter(tenantId: string, merchantId: string, category: CommCategory, content: string, meta?: Record<string, unknown>) {
+  const walletBilled = (await superAdminDb.integration.count({ where: { tenantId, provider: "D360DIALOG", status: "CONNECTED", isSandbox: false } })) > 0;
+  if (!walletBilled) return async (_phone: string): Promise<SendOptions | null> => ({ category });
+
+  const salla = await superAdminDb.integration.findFirst({ where: { provider: IntegrationProvider.SALLA, externalAccountId: merchantId, tenantId }, select: { metadataJson: true } });
+  const templateId = ((salla?.metadataJson ?? {}) as { commTemplates?: Partial<Record<CommCategory, string>> }).commTemplates?.[category];
+  const template = templateId
+    ? await superAdminDb.messageTemplate.findFirst({ where: { id: templateId, tenantId, status: "APPROVED" }, select: { name: true, language: true } })
+    : null;
+  const param = category === "AUTHENTICATION" && meta?.code != null ? String(meta.code) : content;
+
+  return async (phoneE164: string): Promise<SendOptions | null> => {
+    const conversation = await superAdminDb.conversation.findFirst({
+      where: { tenantId, contact: { phoneE164 } },
+      select: { sessionWindowExpiresAt: true },
+    });
+    if (category !== "AUTHENTICATION" && conversation?.sessionWindowExpiresAt && conversation.sessionWindowExpiresAt > new Date()) {
+      return { category: "SERVICE" };
+    }
+    if (!template) return null;
+    return { category, template: { name: template.name, language: template.language, bodyParams: [param] } };
+  };
 }

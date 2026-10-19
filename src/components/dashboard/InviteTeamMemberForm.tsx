@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 
-export function InviteTeamMemberForm({ inviteTeamMember }: { inviteTeamMember: (formData: FormData) => Promise<void> }) {
+export function InviteTeamMemberForm({ inviteTeamMember }: { inviteTeamMember: (formData: FormData) => Promise<{ ok: true } | { ok: false; error: string }> }) {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
@@ -10,7 +10,8 @@ export function InviteTeamMemberForm({ inviteTeamMember }: { inviteTeamMember: (
     setError(null);
     startTransition(async () => {
       try {
-        await inviteTeamMember(formData);
+        const result = await inviteTeamMember(formData);
+        if (!result.ok) setError(result.error);
       } catch (e) {
         setError(e instanceof Error ? e.message : "تعذّرت دعوة العضو");
       }
