@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import { Prisma } from "@prisma/client";
 import { superAdminDb } from "@/lib/db";
 import { getPlatformSettings } from "@/lib/platformSettings";
@@ -207,3 +208,61 @@ export async function maybeNotifyLowBalance(tenantId: string) {
 export const CATEGORY_LABELS: Record<MessageCategory, string> = {
   MARKETING: "تسويقية", UTILITY: "خدمية", AUTHENTICATION: "مصادقة", SERVICE: "رد خدمة",
 };
+
+/**
+ * تعديل يدوي من مالك المنصة (تعويض، تصحيح، شحن بتحويل بنكي). موجب = إضافة، سالب = خصم — الخصم
+ * مشروط ذرّياً بكفاية الرصيد (لا رصيد سالب أبداً). يُسجَّل في الدفتر وسجل التدقيق بهوية المنفّذ.
+ */
+export async function adjustWallet(tenantId: string, amountSar: number, reason: string, actorUserId: string): Promise<number> {
+  const amount = round4(amountSar);
+  if (!amount) throw new Error("أدخل مبلغاً غير صفري");
+  if (!reason.trim()) throw new Error("سبب التعديل مطلوب");
+  const description = `تعديل يدوي: ${reason.trim().slice(0, 200)}`;
+
+  let balance: number;
+  if (amount > 0) {
+    balance = (await creditWallet(tenantId, amount, { type: "ADJUSTMENT", idempotencyKey: `adj:${crypto.randomUUID()}`, description })).balance;
+  } else {
+    await getWallet(tenantId);
+    balance = await superAdminDb.$transaction(async (tx) => {
+      const rows = await tx.$queryRaw<Array<{ balance: Prisma.Decimal }>>`
+        UPDATE "WalletBalance" SET "balance" = "balance" - ${dec(-amount)}, "updatedAt" = NOW()
+        WHERE "tenantId" = ${tenantId} AND "balance" >= ${dec(-amount)}
+        RETURNING "balance"`;
+      if (rows.length === 0) throw new Error("الرصيد الحالي أقل من مبلغ الخصم المطلوب");
+      await tx.walletTransaction.create({
+        data: { tenantId, type: "ADJUSTMENT", amount: dec(amount), balanceAfter: rows[0]!.balance, description },
+      });
+      return Number(rows[0]!.balance);
+    });
+  }
+  await superAdminDb.auditLog.create({
+    data: { tenantId, userId: actorUserId, action: "wallet.manual_adjustment", targetType: "WalletBalance", targetId: tenantId, metaJson: { amount, reason: reason.trim(), balanceAfter: balance } },
+  });
+  return balance;
+}
+
+export async function setWalletMinAlert(tenantId: string, minAlert: number) {
+  if (!(minAlert >= 0)) throw new Error("حد التنبيه يجب أن يكون صفراً أو أكثر");
+  await getWallet(tenantId);
+  await superAdminDb.walletBalance.update({ where: { tenantId }, data: { minAlert: dec(minAlert), lowBalanceNotifiedAt: null } });
+}
+
+export function startOfMonth(d = new Date()) {
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1));
+}
+
+/** استهلاك الشهر الحالي لكل تاجر: عدد الرسائل المدفوعة، المحصَّل منه، وصافي هامش المنصة. */
+export async function monthlyUsageByTenant(tenantIds?: string[]) {
+  const rows = await superAdminDb.messageUsage.groupBy({
+    by: ["tenantId"],
+    where: { createdAt: { gte: startOfMonth() }, status: { in: ["CHARGED", "FREE"] }, ...(tenantIds ? { tenantId: { in: tenantIds } } : {}) },
+    _count: { _all: true },
+    _sum: { cost: true, baseCost: true },
+  });
+  return new Map(rows.map((r) => [r.tenantId, {
+    messages: r._count._all,
+    revenue: round4(Number(r._sum.cost ?? 0)),
+    margin: round4(Number(r._sum.cost ?? 0) - Number(r._sum.baseCost ?? 0)),
+  }]));
+}
