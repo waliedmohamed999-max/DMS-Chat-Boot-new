@@ -65,6 +65,18 @@ const EMBED_HEADERS = [
   { key: "Content-Security-Policy", value: EMBED_CSP },
 ];
 
+// صفحة DMS داخل لوحة تحكم سلة (/salla/app — "الصفحات المضمنة" في بوابة شركاء سلة): نفس CSP العام
+// لكن التضمين مسموح من نطاقات سلة فقط (لوحة التاجر s.salla.sa وبقية نطاقات سلة)، وبلا X-Frame-Options
+// (DENY كان سيمنع التضمين؛ frame-ancestors هي البديل الحديث ويتجاوزها المتصفح تلقائياً).
+const SALLA_EMBEDDED_CSP = CSP.replace("frame-ancestors 'none'", "frame-ancestors https://s.salla.sa https://*.salla.sa https://salla.sa https://*.salla.dev");
+const SALLA_EMBEDDED_HEADERS = [
+  { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains; preload" },
+  { key: "X-Content-Type-Options", value: "nosniff" },
+  { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+  { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), payment=()" },
+  { key: "Content-Security-Policy", value: SALLA_EMBEDDED_CSP },
+];
+
 const nextConfig = {
   distDir: process.env.NEXT_DIST_DIR || ".next",
   reactStrictMode: true,
@@ -83,8 +95,9 @@ const nextConfig = {
       // استبعاد صريح لمسار /embed عبر regex سلبي (وليس الاعتماد على ترتيب استبدال رؤوس متشابهة
       // المفتاح بين قاعدتين متطابقتين لنفس المسار) — واضح ومضمون بصرف النظر عن تفاصيل دمج Next.js
       // الداخلية لرؤوس متعددة القواعد المتطابقة.
-      { source: "/:path((?!embed/).*)", headers: SECURITY_HEADERS },
+      { source: "/:path((?!embed/|salla/app).*)", headers: SECURITY_HEADERS },
       { source: "/embed/:path*", headers: EMBED_HEADERS },
+      { source: "/salla/app", headers: SALLA_EMBEDDED_HEADERS },
     ];
   },
 };

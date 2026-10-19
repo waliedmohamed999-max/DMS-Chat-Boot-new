@@ -27,3 +27,14 @@ export function sallaStoreLinkedEmail(input: { to: string; ownerName: string; st
     html: `<p>مرحباً ${escapeHtml(input.ownerName)}،</p><p>تم ربط متجر "<strong>${escapeHtml(input.storeName)}</strong>" على سلة بحسابك في DMS Tech تلقائياً لأن البريد الإلكتروني متطابق. الطلبات والعملاء والمنتجات تُزامَن الآن.</p><p><a href="${url}">متابعة حالة الربط</a></p><p style="font-size:12px;color:#64748b">لو لم تثبّت التطبيق بنفسك، احذفه من متجرك على سلة وتواصل معنا فوراً.</p>`,
   };
 }
+
+/** متجر سلة طلب الربط بحساب DMS بريده مختلف عن بريد المتجر — لا ربط قبل تأكيد صاحب هذا البريد. */
+export function sallaLinkConfirmEmail(input: { to: string; ownerName: string; storeName: string; confirmToken: string }): EmailInput {
+  const url = `${baseUrl()}/salla/confirm-link/${input.confirmToken}`;
+  return {
+    to: input.to,
+    subject: `تأكيد ربط متجر "${input.storeName}" على سلة بحسابك في DMS Tech`,
+    text: `مرحباً ${input.ownerName}،\n\nثُبِّت تطبيق DMS Tech على متجر "${input.storeName}" في سلة، وطُلب ربطه بحسابك. لن يُربط المتجر إلا بعد تأكيدك من الرابط التالي (صالح 7 أيام):\n${url}\n\nلو لم تطلب هذا، تجاهل الرسالة ولن يحدث أي ربط.`,
+    html: `<p>مرحباً ${escapeHtml(input.ownerName)}،</p><p>ثُبِّت تطبيق DMS Tech على متجر "<strong>${escapeHtml(input.storeName)}</strong>" في سلة، وطُلب ربطه بحسابك. لن يُربط المتجر إلا بعد تأكيدك.</p><p><a href="${url}" style="display:inline-block;background:#6d5ef8;color:#ffffff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:bold">مراجعة وتأكيد الربط</a></p><p style="font-size:12px;color:#64748b">الرابط صالح 7 أيام. لو لم تطلب هذا، تجاهل الرسالة ولن يحدث أي ربط.</p>`,
+  };
+}

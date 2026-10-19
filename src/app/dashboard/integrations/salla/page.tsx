@@ -12,10 +12,12 @@ export const metadata = { title: "ربط سلة — DMS Tech" };
 type SallaMeta = {
   storeName?: string | null; storeDomain?: string | null; storeEmail?: string | null; merchantId?: string;
   linkMethod?: string; installedAt?: string; uninstalledAt?: string;
+  whatsappNumber?: string; requestedAutomations?: { abandonedCart?: boolean; welcome?: boolean };
 };
 
 const LINK_METHOD_LABELS: Record<string, string> = {
   email_match: "رُبط تلقائياً بحسابك (نفس البريد)",
+  email_confirmed: "رُبط بتأكيد من بريدك",
   new_account: "أُنشئ الحساب من تثبيت تطبيق سلة",
   oauth_custom: "ربط مباشر من لوحة DMS",
   sandbox: "ربط تجريبي (Sandbox)",
@@ -93,6 +95,12 @@ export default async function SallaIntegrationPage() {
               <Info label="آخر مزامنة كاملة" value={integration?.lastSyncedAt ? new Date(integration.lastSyncedAt).toLocaleString("ar-SA") : "جارية…"} />
               <Info label="صلاحية رمز الوصول" value={integration?.tokenExpiresAt ? `حتى ${new Date(integration.tokenExpiresAt).toLocaleDateString("ar-SA")} (تتجدد تلقائياً)` : "—"} />
             </dl>
+            {meta.whatsappNumber && (
+              <p className="text-xs text-slate-400">
+                رقم واتساب المتجر (من خطوات تثبيت التطبيق): <span dir="ltr" className="text-slate-200">{meta.whatsappNumber}</span> —{" "}
+                <Link href="/dashboard/integrations" className="text-accent-400 hover:underline">اربطه من التكاملات</Link>
+              </p>
+            )}
             <div className="flex flex-wrap gap-2">
               <form action={resyncIntegration.bind(null, "SALLA")}>
                 <button className="btn-secondary text-sm">🔄 مزامنة الآن</button>
@@ -144,12 +152,14 @@ export default async function SallaIntegrationPage() {
           title="🛒 استرداد السلة المتروكة"
           description="رسالة لكل عميل ترك سلته في متجرك دون إتمام الطلب."
           campaign={cartCampaign}
+          requested={meta.requestedAutomations?.abandonedCart}
           createHref="/dashboard/campaigns/new?trigger=ABANDONED_CART"
         />
         <Automation
           title="👋 ترحيب بالعميل الجديد"
           description="رسالة ترحيب مرة واحدة لكل عميل جديد يصل من متجرك بعد التفعيل."
           campaign={welcomeCampaign}
+          requested={meta.requestedAutomations?.welcome}
           createHref="/dashboard/campaigns/new?trigger=NEW_CUSTOMER"
         />
         <p className="text-xs text-slate-500">إشعارات حالة الطلب (تم الشحن، تم التوصيل…) تأتي في المرحلة القادمة عبر قناة التواصل الرسمية في سلة.</p>
@@ -207,9 +217,9 @@ function Stat({ label, value, sub, href }: { label: string; value: number; sub?:
 }
 
 function Automation({
-  title, description, campaign, createHref,
+  title, description, campaign, createHref, requested,
 }: {
-  title: string; description: string; createHref: string;
+  title: string; description: string; createHref: string; requested?: boolean;
   campaign?: { id: string; name: string; status: string };
 }) {
   const status = campaign ? CAMPAIGN_STATUS_LABELS[campaign.status] : undefined;
@@ -218,6 +228,7 @@ function Automation({
       <div>
         <p className="font-medium text-white">{title}</p>
         <p className="text-xs text-slate-400">{description}</p>
+        {!campaign && requested && <p className="mt-1 text-xs text-warning-500">طلبت تفعيلها من سلة — اختر قالب واتساب لإكمال التفعيل.</p>}
       </div>
       {campaign ? (
         <div className="flex items-center gap-3">

@@ -9,9 +9,11 @@ import { sendEmail } from "@/lib/email/send";
 import { sallaAccountCreatedEmail, sallaStoreLinkedEmail } from "@/lib/email/sallaTemplates";
 import { fetchSallaUserInfo, parseSallaExpires, type SallaStoreInfo } from "./api";
 import { startInitialSallaSync } from "./sync";
+import { applyIntentToTenant, requestLinkConfirmation } from "./intent";
 
 export type SallaAuthorizeResult =
   | { outcome: "refreshed" | "linked_existing" | "created_account"; tenantId: string }
+  | { outcome: "awaiting_confirmation"; email: string }
   | { outcome: "conflict"; reason: string };
 
 type AuthorizeData = { access_token?: string; refresh_token?: string; expires?: unknown; scope?: string };
@@ -57,6 +59,7 @@ export async function handleSallaAuthorize(merchantId: string, data: AuthorizeDa
       where: { id: existing.id },
       data: { ...tokenData, metadataJson: mergeMeta(existing.metadataJson, { scope: data.scope ?? null, reauthorizedAt: new Date().toISOString() }) },
     });
+    await applyIntentToTenant(merchantId, existing.tenantId);
     return { outcome: "refreshed", tenantId: existing.tenantId };
   }
 
@@ -64,6 +67,20 @@ export async function handleSallaAuthorize(merchantId: string, data: AuthorizeDa
   if (!store.email) return { outcome: "conflict", reason: "لم تُرسل سلة بريداً لصاحب المتجر — تعذّر تحديد الحساب" };
   const storeName = store.storeName ?? `متجر سلة ${merchantId}`;
   const meta = storeMeta(store, merchantId, data.scope);
+
+  // خطوة الإعداد "لديك حساب DMS ببريد مختلف؟" — لا ربط تلقائي ببريد كتبه المُثبِّت، بل رابط تأكيد
+  // لصاحب ذلك البريد (lib/integrations/salla/intent.ts) والرموز محفوظة مشفَّرة بانتظار التأكيد.
+  const intent = await superAdminDb.sallaInstallIntent.findUnique({ where: { merchantId } });
+  if (intent?.requestedEmail && intent.requestedEmail !== store.email) {
+    const owner = await superAdminDb.user.findUnique({ where: { email: intent.requestedEmail } });
+    if (owner && owner.role === "OWNER" && owner.tenantId && owner.isActive) {
+      await requestLinkConfirmation({
+        merchantId, owner: { email: owner.email, name: owner.name }, storeName,
+        encryptedAccessToken: tokenData.encryptedAccessToken, encryptedRefreshToken: tokenData.encryptedRefreshToken, tokenExpiresAt: tokenData.tokenExpiresAt,
+      });
+      return { outcome: "awaiting_confirmation", email: owner.email };
+    }
+  }
 
   const user = await superAdminDb.user.findUnique({ where: { email: store.email } });
 
@@ -90,12 +107,14 @@ export async function handleSallaAuthorize(merchantId: string, data: AuthorizeDa
     await sendEmail(sallaStoreLinkedEmail({ to: user.email, ownerName: user.name, storeName })).catch((err) =>
       console.error("salla linked email failed:", err)
     );
+    await applyIntentToTenant(merchantId, tenantId);
     startInitialSallaSync(tenantId);
     return { outcome: "linked_existing", tenantId };
   }
 
   // (3) حساب جديد
   const tenantId = await createTenantFromSalla(store, storeName, merchantId, tokenData, meta);
+  await applyIntentToTenant(merchantId, tenantId);
   startInitialSallaSync(tenantId);
   return { outcome: "created_account", tenantId };
 }

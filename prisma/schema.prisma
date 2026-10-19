@@ -1547,3 +1547,26 @@ model Payout {
 
   @@index([affiliateId, status])
 }
+
+/// بيانات تثبيت تطبيق DMS من سلة قبل/أثناء ربطه بحساب — خطوات الإعداد (onboarding) تُرسَل قبل حدث
+/// app.store.authorize، فتُحفظ هنا بمعرّف التاجر. عند طلب ربط ببريد مختلف عن بريد المتجر، تُحفظ رموز
+/// الوصول هنا مشفَّرة إلى أن يؤكد صاحب ذلك البريد الربط من رابط في بريده (منع ربط متجر بحساب شخص آخر).
+/// ليس جدولاً مستأجَراً (قبل معرفة التاجر) — يُقرأ ويُكتب عبر superAdminDb فقط.
+model SallaInstallIntent {
+  id                    String    @id @default(cuid())
+  merchantId            String    @unique
+  requestedEmail        String?
+  whatsappNumber        String?
+  wantsAbandonedCart    Boolean?
+  wantsWelcome          Boolean?
+  status                String    @default("PENDING") // PENDING | AWAITING_CONFIRMATION | LINKED
+  storeName             String?
+  encryptedAccessToken  String?
+  encryptedRefreshToken String?
+  tokenExpiresAt        DateTime?
+  confirmTokenHash      String?   @unique
+  confirmExpiresAt      DateTime?
+  tenantId              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+}
