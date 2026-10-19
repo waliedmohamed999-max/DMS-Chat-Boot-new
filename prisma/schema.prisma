@@ -98,6 +98,9 @@ model Tenant {
   referral               Referral?
   tenantChatSessions     TenantChatSession[]
   tenantChatMessages     TenantChatMessage[]
+  walletBalance          WalletBalance?
+  walletTransactions     WalletTransaction[]
+  messageUsage           MessageUsage[]
 
   @@index([status])
 }
@@ -1092,6 +1095,9 @@ enum IntegrationProvider {
   // مزوّد بوابة الدفع — يُعاد استخدام WebhookLog/provider الموجود أصلاً لتسجيل أحداث webhook الدفع
   // (نجاح/فشل/استرداد) بدل بناء جدول سجلّ منفصل، رغم أنه ليس "تكامل" بنفس معنى Zid/Salla تماماً.
   PAYMENT_GATEWAY
+  // واتساب الرسمي عبر 360dialog (مزوّد حلول أعمال BSP) — القناة الافتراضية لكل ربط جديد. رسائله تُحاسَب
+  // من محفظة التاجر المسبقة الدفع (lib/billing/wallet.ts) بدل بطاقة التاجر في Meta.
+  D360DIALOG
 }
 
 enum IntegrationStatus {
@@ -1128,6 +1134,8 @@ model Integration {
   // WHATSAPP_QR فقط: تُضبط عند نجاح الاتصال فعلياً (connection: "open")، تقرأها مهمة الحذف
   // التلقائي المتكررة في worker.ts لقطع الجلسة ومسح بياناتها بعد مدة التجربة الموحّدة.
   qrTrialExpiresAt      DateTime?
+  channelId             String?             @unique // معرّف قناة 360dialog (D360DIALOG فقط)
+  webhookTokenHash      String?             @unique // SHA-256 لرمز رابط webhook رسائل القناة (D360DIALOG فقط)
   createdAt             DateTime            @default(now())
   updatedAt             DateTime            @updatedAt
 
@@ -1302,6 +1310,8 @@ model PlatformSettings {
   // صف وحيد ثابت المعرّف — لا يوجد أكثر من إعداد عام واحد للمنصة بأكملها.
   id                     String   @id @default("singleton")
   integrationsMode       String   @default("sandbox") // "sandbox" | "live" — يتحكم فعلياً في كل adapters التكامل
+  walletMarkupBps        Int      @default(3000) // هامش الربح على تكلفة رسائل Meta بنقاط الأساس (3000 = 30%)
+  walletMinRechargeSar   Int      @default(200) // الحد الأدنى لشحن المحفظة بالريال
   maintenanceMode        Boolean  @default(false)
   maintenanceMessage     String?
   supportEmail           String   @default("support@platform.sa")
@@ -1569,4 +1579,62 @@ model SallaInstallIntent {
   tenantId              String?
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
+}
+
+/// محفظة رسائل مسبقة الدفع لكل تاجر (قناة 360dialog). الرصيد بالريال بدقة 4 خانات عشرية لأن تكلفة الرسالة
+/// الواحدة قد تكون أجزاء من الهللة. كل تغيير في الرصيد يمر عبر lib/billing/wallet.ts ويُسجَّل في WalletTransaction.
+model WalletBalance {
+  id                   String    @id @default(cuid())
+  tenantId             String    @unique
+  tenant               Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  balance              Decimal   @default(0) @db.Decimal(14, 4)
+  currency             String    @default("SAR")
+  minAlert             Decimal   @default(50) @db.Decimal(14, 4) // عتبة تنبيه انخفاض الرصيد
+  lowBalanceNotifiedAt DateTime? // آخر تنبيه أُرسل — يُصفَّر عند الشحن فوق العتبة (تنبيه واحد لكل هبوط)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+}
+
+/// دفتر حركات المحفظة (لا يُحذف ولا يُعدَّل). amount موجب للإضافة وسالب للخصم.
+model WalletTransaction {
+  id             String   @id @default(cuid())
+  tenantId       String
+  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  type           String // RECHARGE | DEBIT | REFUND | ADJUSTMENT
+  amount         Decimal  @db.Decimal(14, 4)
+  balanceAfter   Decimal  @db.Decimal(14, 4)
+  description    String?
+  reference      String? // معرّف الدفعة (Moyasar) أو MessageUsage المرتبط
+  idempotencyKey String?  @unique // يمنع تطبيق نفس الشحنة/الاسترداد مرتين
+  createdAt      DateTime @default(now())
+
+  @@index([tenantId, createdAt])
+}
+
+/// سجل تكلفة كل رسالة أُرسلت عبر قناة مُحاسَبة بالمحفظة — للشفافية والفوترة.
+model MessageUsage {
+  id         String   @id @default(cuid())
+  tenantId   String
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  messageId  String? // معرّف رسالة واتساب (wamid) بعد نجاح الإرسال
+  category   String // MARKETING | UTILITY | AUTHENTICATION | SERVICE
+  country    String // رمز الدولة من رقم المستلم (SA, AE, EG…)
+  baseCost   Decimal  @db.Decimal(14, 4) // سعر Meta بالريال قبل الهامش
+  cost       Decimal  @db.Decimal(14, 4) // المخصوم من التاجر (بعد الهامش)
+  status     String // CHARGED | REFUNDED | FREE
+  createdAt  DateTime @default(now())
+
+  @@index([tenantId, createdAt])
+}
+
+/// أسعار Meta لكل رسالة حسب الدولة والفئة (بالريال، تسعير لكل رسالة منذ يوليو 2025). تُضبط من لوحة الأدمن
+/// حسب بطاقة أسعار Meta الرسمية — country = "*" سعر افتراضي لأي دولة غير مضبوطة.
+model MessageRate {
+  id          String   @id @default(cuid())
+  country     String
+  category    String // MARKETING | UTILITY | AUTHENTICATION
+  baseRateSar Decimal  @db.Decimal(14, 4)
+  updatedAt   DateTime @updatedAt
+
+  @@unique([country, category])
 }

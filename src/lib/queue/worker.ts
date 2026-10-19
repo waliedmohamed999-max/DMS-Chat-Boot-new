@@ -31,13 +31,17 @@ const TRIGGER_SCAN_INTERVAL_MS = 5 * 60 * 1000;
 
 type CampaignWithRelations = Prisma.CampaignGetPayload<{ include: { segment: true; template: true } }>;
 
-/** يرسل رسالة واحدة لجهة اتصال ضمن حملة، ويحدّث حالة المستلم + عدادات الحملة + حصة الرسائل الشهرية. */
+/**
+ * يرسل رسالة واحدة لجهة اتصال ضمن حملة، ويحدّث حالة المستلم + عدادات الحملة + حصة الرسائل الشهرية.
+ * "blocked" = لم يُرسل شيء لسبب يخص الحملة كلها (رصيد محفظة غير كافٍ / سعر غير مضبوط في قناة 360dialog):
+ * لا يُسجَّل المستلم كفاشل ولا تُحتسب الحصة، فيُرسَل له عند استئناف الحملة بعد الشحن.
+ */
 async function sendToContact(
   tx: Prisma.TransactionClient,
   tenantId: string,
   campaign: CampaignWithRelations,
   contact: { id: string; name: string; phoneE164: string }
-): Promise<"sent" | "failed"> {
+): Promise<"sent" | "failed" | "blocked"> {
   const rateLimit = await checkTenantRateLimit(tenantId, "campaign-send", TENANT_SEND_LIMIT, TENANT_SEND_WINDOW_SECONDS);
   if (!rateLimit.allowed) {
     throw new Error(`تجاوز حد الإرسال المسموح للمستأجر ${tenantId} — سيُعاد المحاولة تلقائياً`);
@@ -45,7 +49,17 @@ async function sendToContact(
 
   const personalizedBody = campaign.template.bodyText.replace("{{1}}", contact.name);
   const adapter = await resolveWhatsappAdapter(tenantId);
-  const result = await adapter.sendMessage(tenantId, contact.phoneE164, personalizedBody);
+  // القالب المعتمد نفسه (اسم/لغة/متغيرات) وفئته للتسعير — قناة 360dialog ترسله كقالب فعلي وتخصم سعره من
+  // المحفظة؛ القنوات الأخرى تتجاهل هذه الخيارات وترسل النص كما كانت.
+  const result = await adapter.sendMessage(tenantId, contact.phoneE164, personalizedBody, undefined, {
+    category: toTemplateCategory(campaign.template.category),
+    template: {
+      name: campaign.template.name,
+      language: campaign.template.language,
+      bodyParams: campaign.template.bodyText.includes("{{1}}") ? [contact.name] : [],
+    },
+  });
+  if (result.errorCode === "INSUFFICIENT_BALANCE" || result.errorCode === "RATE_NOT_CONFIGURED") return "blocked";
   const now = new Date();
 
   const recipientData = result.success
@@ -113,7 +127,8 @@ async function processCampaign(job: Job<CampaignSendJob>) {
       const contacts = await tx.contact.findMany({ where: { tenantId, id: { in: contactIds } } });
       for (const contact of contacts) {
         if (remainingQuota <= 0) break; // توقف صامت عند نفاد الحصة — الدفعة التالية تُكمل لاحقاً
-        await sendToContact(tx, tenantId, campaign, contact);
+        // رصيد المحفظة نفد: يبقى باقي المستلمين PENDING ويُكملون عند استئناف الحملة بعد الشحن.
+        if ((await sendToContact(tx, tenantId, campaign, contact)) === "blocked") break;
         remainingQuota--;
       }
       return;
@@ -127,6 +142,7 @@ async function processCampaign(job: Job<CampaignSendJob>) {
     const contacts = await tx.contact.findMany({ where });
 
     let quotaExhausted = false;
+    let walletBlocked = false;
     for (const contact of contacts) {
       const existing = await tx.campaignRecipient.findUnique({
         where: { campaignId_contactId: { campaignId, contactId: contact.id } },
@@ -134,15 +150,22 @@ async function processCampaign(job: Job<CampaignSendJob>) {
       if (existing) continue;
 
       if (remainingQuota <= 0) { quotaExhausted = true; break; }
-      await sendToContact(tx, tenantId, campaign, contact);
+      if ((await sendToContact(tx, tenantId, campaign, contact)) === "blocked") { walletBlocked = true; break; }
       remainingQuota--;
     }
 
+    // نفاد رصيد المحفظة ⇐ PAUSED (وليس FAILED): الاستئناف بعد الشحن يعيد تشغيل نفس المهمة، والمستلمون
+    // الذين وصلتهم الرسالة مسبقاً يُتخطَّون (CampaignRecipient قائم) فيُكمل من حيث توقف تماماً.
     await tx.campaign.update({
       where: { id: campaignId },
-      data: { status: quotaExhausted ? "FAILED" : "COMPLETED" },
+      data: { status: walletBlocked ? "PAUSED" : quotaExhausted ? "FAILED" : "COMPLETED" },
     });
   });
+}
+
+function toTemplateCategory(category: string): "MARKETING" | "UTILITY" | "AUTHENTICATION" {
+  const c = category.toUpperCase();
+  return c === "UTILITY" || c === "AUTHENTICATION" ? c : "MARKETING";
 }
 
 export const campaignWorker = new Worker<CampaignSendJob>(

@@ -29,6 +29,9 @@ export type PlatformSettingsData = {
   platformChatVoiceReplyEnabled: boolean;
   platformVoiceCallEnabled: boolean;
   platformDemoModeEnabled: boolean;
+  /** هامش ربح المنصة على تكلفة رسائل Meta (نقاط أساس، 3000 = 30%) — محفظة قناة 360dialog. */
+  walletMarkupBps: number;
+  walletMinRechargeSar: number;
 };
 
 /** يجلب إعدادات المنصة العامة، وينشئ الصف الافتراضي تلقائياً إن لم يوجد بعد (أول تشغيل). */
@@ -41,6 +44,8 @@ export async function getPlatformSettings(): Promise<PlatformSettingsData> {
 
   return {
     integrationsMode: row.integrationsMode === "live" ? "live" : "sandbox",
+    walletMarkupBps: row.walletMarkupBps,
+    walletMinRechargeSar: row.walletMinRechargeSar,
     maintenanceMode: row.maintenanceMode,
     maintenanceMessage: row.maintenanceMessage,
     supportEmail: row.supportEmail,

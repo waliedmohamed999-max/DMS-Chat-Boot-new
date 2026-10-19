@@ -67,6 +67,8 @@ export async function handleSallaCommunication(payload: CommPayload): Promise<Co
 
   const isOtp = OTP_TYPES.has(data.type ?? "");
   const isMarketing = MARKETING_TYPES.has(data.type ?? "");
+  // فئة تسعير Meta للرسالة (قناة 360dialog تخصمها من المحفظة؛ القنوات الأخرى تتجاهلها).
+  const sendOptions = { category: isOtp ? "AUTHENTICATION" : isMarketing ? "MARKETING" : "UTILITY" } as const;
   const adapter = await resolveWhatsappAdapter(tenantId);
   let sent = 0;
   let skipped = 0;
@@ -81,7 +83,7 @@ export async function handleSallaCommunication(payload: CommPayload): Promise<Co
 
     if (isOtp) {
       // رمز التحقق: إرسال مباشر بلا إنشاء جهة اتصال ولا حفظ النص في أي مكان.
-      const result = await adapter.sendMessage(tenantId, phoneE164, content);
+      const result = await adapter.sendMessage(tenantId, phoneE164, content, undefined, sendOptions);
       await withTenant(tenantId, (tx) => tx.subscription.updateMany({ where: { tenantId }, data: { messagesUsedThisPeriod: { increment: 1 } } }));
       if (result.success) sent++;
       else errors.push(result.error ?? "فشل الإرسال");
@@ -98,7 +100,7 @@ export async function handleSallaCommunication(payload: CommPayload): Promise<Co
     }
 
     // الإرسال خارج أي معاملة قاعدة بيانات — طلب HTTP بطيء لواتساب لا يجب أن يُبقي معاملة مفتوحة.
-    const result = await adapter.sendMessage(tenantId, phoneE164, content);
+    const result = await adapter.sendMessage(tenantId, phoneE164, content, undefined, sendOptions);
     await withTenant(tenantId, async (tx) => {
       await tx.subscription.updateMany({ where: { tenantId }, data: { messagesUsedThisPeriod: { increment: 1 } } });
       const now = new Date();

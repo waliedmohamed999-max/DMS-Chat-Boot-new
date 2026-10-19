@@ -10,6 +10,19 @@ export type SendMessageResult = {
   success: boolean;
   externalMessageId?: string;
   error?: string;
+  /** سبب فشل مُصنَّف يتصرف عليه المتصل (مثل إيقاف حملة عند INSUFFICIENT_BALANCE بدل إكمالها). */
+  errorCode?: "INSUFFICIENT_BALANCE" | "RATE_NOT_CONFIGURED" | "NOT_CONNECTED" | "PROVIDER_ERROR";
+};
+
+/**
+ * خيارات إرسال اختيارية — تستخدمها القنوات المُحاسَبة بالمحفظة (360dialog) لتحديد سعر الرسالة، وإرسال
+ * قالب معتمد فعلياً بدل نص حر خارج نافذة الـ24 ساعة. القنوات الأخرى تتجاهلها (نفس سلوكها السابق).
+ */
+export type SendOptions = {
+  /** فئة تسعير Meta — الافتراضي SERVICE (رد حر داخل نافذة الخدمة، مجاني). */
+  category?: "MARKETING" | "UTILITY" | "AUTHENTICATION" | "SERVICE";
+  /** قالب واتساب معتمد: الاسم واللغة وقيم متغيرات النص بالترتيب ({{1}}، {{2}}…). */
+  template?: { name: string; language: string; bodyParams?: string[] };
 };
 
 /** مرفق اختياري لرسالة بوت: إما زر رابط باسم مخصَّص، أو وسائط (صورة/فيديو/ملف) — لا يجتمعان في نفس
@@ -38,7 +51,7 @@ export interface IntegrationAdapter {
 
   /** يرسل رسالة واتساب فعلية (أو محاكاة في sandbox) لجهة اتصال. `attachment` اختياري (رابط بزر أو
    * وسائط) — انظر تعليق `MessageAttachment` أعلاه لتفاصيل الفرق بين القنوات. */
-  sendMessage(tenantId: string, phoneE164: string, body: string, attachment?: MessageAttachment): Promise<SendMessageResult>;
+  sendMessage(tenantId: string, phoneE164: string, body: string, attachment?: MessageAttachment, options?: SendOptions): Promise<SendMessageResult>;
 
   /** اختياري: مؤشر "يكتب الآن..." — لا كل قناة تدعمه فعلياً (انظر تطبيقات meta/whatsappQr). يُستدعى
    * دفاعياً دائماً عبر `?.()` من المتصل، فلا حاجة لتطبيقه في كل adapter. */
