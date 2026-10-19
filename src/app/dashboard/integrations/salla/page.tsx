@@ -13,6 +13,7 @@ type SallaMeta = {
   storeName?: string | null; storeDomain?: string | null; storeEmail?: string | null; merchantId?: string;
   linkMethod?: string; installedAt?: string; uninstalledAt?: string;
   whatsappNumber?: string; requestedAutomations?: { abandonedCart?: boolean; welcome?: boolean };
+  billing?: { source?: string; planName?: string | null; endDate?: string | null };
 };
 
 const LINK_METHOD_LABELS: Record<string, string> = {
@@ -95,6 +96,12 @@ export default async function SallaIntegrationPage() {
               <Info label="آخر مزامنة كاملة" value={integration?.lastSyncedAt ? new Date(integration.lastSyncedAt).toLocaleString("ar-SA") : "جارية…"} />
               <Info label="صلاحية رمز الوصول" value={integration?.tokenExpiresAt ? `حتى ${new Date(integration.tokenExpiresAt).toLocaleDateString("ar-SA")} (تتجدد تلقائياً)` : "—"} />
             </dl>
+            {meta.billing?.source === "salla" && (
+              <p className="text-xs text-slate-400">
+                💳 اشتراكك يُدار عبر متجر تطبيقات سلة{meta.billing.planName ? ` — باقة ${meta.billing.planName}` : ""}
+                {meta.billing.endDate ? ` حتى ${new Date(meta.billing.endDate).toLocaleDateString("ar-SA")}` : ""}.
+              </p>
+            )}
             {meta.whatsappNumber && (
               <p className="text-xs text-slate-400">
                 رقم واتساب المتجر (من خطوات تثبيت التطبيق): <span dir="ltr" className="text-slate-200">{meta.whatsappNumber}</span> —{" "}

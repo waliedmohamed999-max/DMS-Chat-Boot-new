@@ -2,6 +2,7 @@ import { IntegrationProvider } from "@prisma/client";
 import { superAdminDb, withTenant } from "@/lib/db";
 import { handleSallaAuthorize, handleSallaUninstall } from "./install";
 import { setAutomationEnabled, type SallaAutomationKey } from "./automations";
+import { handleSallaSubscriptionEvent } from "./subscriptions";
 import { deleteSallaProduct, upsertSallaAbandonedCart, upsertSallaCustomer, upsertSallaOrder, upsertSallaProduct } from "./mappers";
 
 export type SallaEventPayload = { event?: string; merchant?: string | number; created_at?: string; data?: Record<string, any> };
@@ -44,6 +45,12 @@ export async function processSallaEvent(payload: SallaEventPayload): Promise<Sal
   });
   if (!integration) return { tenantId: null, note: "لم يتم إيجاد متجر سلة مطابق", unmatched: true };
   const tenantId = integration.tenantId;
+  // أحداث الفوترة تُطبَّق حتى لو فُصل الربط (إلغاء/انتهاء الاشتراك قد يصل بعد حذف التطبيق).
+  if (event.startsWith("app.subscription.") || event.startsWith("app.trial.")) {
+    const r = await handleSallaSubscriptionEvent(tenantId, event, data);
+    return { tenantId, note: r.note, unmatched: !r.applied && /غير مطابقة/.test(r.note) };
+  }
+
   if (integration.status === "DISCONNECTED") return { tenantId, note: "الربط مفصول — تم تجاهل الحدث" };
 
   if (INFO_EVENTS.has(event)) return { tenantId, note: "تم الاستلام" };

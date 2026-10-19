@@ -1,3 +1,4 @@
+import { getSallaBilling } from "@/lib/integrations/salla/subscriptions";
 import { notFound } from "next/navigation";
 import { requireTenantSession } from "@/lib/session";
 import { withTenant, rawDb } from "@/lib/db";
@@ -25,6 +26,7 @@ export default async function BillingPage() {
   if (!hasEffectivePermission(session.user.permissions, "billing.view")) notFound();
   const canManage = hasPermission(session.user.role, "billing.manage");
   const tenantId = session.user.tenantId;
+  const sallaBilling = await getSallaBilling(tenantId);
 
   const [tenant, subscription, invoices, catalogPlans, pendingCustomPlanRequest, paymentMethod, activeUserCount, connectedWhatsappCount, publishedFlowCount] =
     await Promise.all([
@@ -76,6 +78,16 @@ export default async function BillingPage() {
         <h1 className="text-xl font-bold text-white">الفوترة والاشتراك</h1>
         <p className="text-sm text-slate-400">إدارة باقتك واستخدامك وفواتيرك</p>
       </div>
+
+      {sallaBilling && (
+        <div className="card border border-accent-500/30 bg-accent-500/5 p-5 text-sm">
+          <p className="font-bold text-accent-400">🛍️ اشتراكك يُدار عبر متجر تطبيقات سلة</p>
+          <p className="mt-1 text-slate-300">
+            {sallaBilling.planName ? `باقة ${sallaBilling.planName}` : "باقتك"}
+            {sallaBilling.endDate ? ` حتى ${new Date(sallaBilling.endDate).toLocaleDateString("ar-SA")}` : ""} — الدفع والفواتير من سلة. لتغيير الباقة أو الإلغاء افتح صفحة تطبيق DMS Tech في لوحة متجرك على سلة.
+          </p>
+        </div>
+      )}
 
       {subscription?.status === "TRIALING" && (
         <div className="card border border-accent-500/30 bg-accent-500/5 p-5">
