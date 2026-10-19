@@ -1,6 +1,7 @@
 import { superAdminDb } from "@/lib/db";
 import { getPlatformSettings } from "@/lib/platformSettings";
 import { getSallaConfig } from "@/lib/integrations/salla/config";
+import { getZidConfig } from "@/lib/integrations/zid/config";
 
 /**
  * جاهزية الحسابات الخارجية للإطلاق الحقيقي (صفحة /admin/setup): ما المضبوط في البيئة، وما الروابط التي
@@ -10,7 +11,7 @@ import { getSallaConfig } from "@/lib/integrations/salla/config";
 export type CheckLevel = "ok" | "warn" | "missing";
 export type Check = { label: string; level: CheckLevel; detail?: string };
 export type SetupSection = {
-  key: "core" | "email" | "d360" | "moyasar" | "salla" | "pricing";
+  key: "core" | "email" | "d360" | "moyasar" | "salla" | "zid" | "pricing";
   title: string;
   description: string;
   checks: Check[];
@@ -42,6 +43,7 @@ export async function getSetupSections(): Promise<SetupSection[]> {
   const base = appUrl();
   const settings = await getPlatformSettings();
   const salla = await getSallaConfig();
+  const zid = await getZidConfig();
   const rates = await superAdminDb.messageRate.findMany({ where: { country: { in: ["SA", "*"] } } });
   const hasRate = (category: string) => rates.some((r) => r.category === category);
 
@@ -125,6 +127,25 @@ export async function getSetupSections(): Promise<SetupSection[]> {
         { label: "Communication (WhatsApp)", value: `${base}/api/salla/communication` },
       ],
       docs: "/admin/salla",
+    },
+    {
+      key: "zid",
+      title: "زد — تطبيق المتجر",
+      description: "تطبيق Partner على partner.zid.sa (OAuth) — المفاتيح تُضبط من صفحة \"تطبيق زد\" في هذه اللوحة.",
+      testable: false,
+      checks: [
+        sallaCheck("Client ID", zid.sources.clientId),
+        sallaCheck("Client Secret", zid.sources.clientSecret),
+        sallaCheck("سر أحداث متجر التطبيقات (X-DMS-Zid-Token)", zid.sources.marketSecret),
+        sallaCheck("رقم التطبيق (App ID)", zid.sources.appId, true),
+        sallaCheck("ربط باقات زد بباقات DMS", zid.sources.planMap, true),
+      ],
+      urls: [
+        { label: "Application URL", value: `${base}/api/zid/install` },
+        { label: "Redirect URL", value: `${base}/api/zid/oauth/callback` },
+        { label: "App Market Webhooks", value: `${base}/api/webhooks/zid/market` },
+      ],
+      docs: "/admin/zid",
     },
     {
       key: "pricing",

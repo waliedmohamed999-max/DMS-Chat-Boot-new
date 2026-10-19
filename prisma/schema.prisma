@@ -51,6 +51,7 @@ enum TenantJoinSource {
   PARTNER_APPLICATION // عبر نظام طلبات الشركاء العام (/partners/apply) بعد اعتماد فريق المبيعات
   MANUAL_ADMIN
   SALLA_APP // أُنشئ تلقائياً عند تثبيت تطبيق DMS من متجر تطبيقات سلة (app.store.authorize)
+  ZID_APP // أُنشئ تلقائياً عند تثبيت تطبيق DMS من متجر تطبيقات زد (OAuth من رابط التطبيق)
 }
 
 model Tenant {
@@ -1338,6 +1339,12 @@ model PlatformSettings {
   encryptedSallaWebhookSecret   String?
   encryptedSallaFunctionsSecret String?
   sallaPlanMapJson              Json? // { "اسم باقة سلة": "planKey" }
+  // تطبيق زد (Partner App) — نفس نمط سلة: لوحة الأدمن (/admin/zid) أولاً ومتغيرات ZID_* احتياط.
+  zidAppId                      String?
+  zidClientId                   String?
+  encryptedZidClientSecret      String?
+  encryptedZidMarketSecret      String? // قيمة الترويسة المخصّصة X-DMS-Zid-Token لأحداث متجر التطبيقات
+  zidPlanMapJson                Json?
   // اسم مزوّد البريد/SMS الفعلي المُهيَّأ — "console" يعني عدم وجود مزوّد حقيقي بعد (طباعة في سجل
   // الخادم فقط، نفس القيد الموثَّق سابقاً في lib/email/send.ts). حقل معلوماتي/تحضيري بحت حتى يُربَط
   // مزوّد حقيقي فعلياً — لا يُغيّر السلوك الفعلي وحده.

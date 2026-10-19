@@ -121,6 +121,11 @@ export default async function IntegrationsPage(props: { searchParams: Promise<Se
                   إدارة ربط سلة والرسائل التلقائية ←
                 </Link>
               )}
+              {provider === "ZID" && (
+                <Link href="/dashboard/integrations/zid" className="mb-2 text-xs font-semibold text-accent-400 hover:underline">
+                  إدارة ربط زد والمزامنة ←
+                </Link>
+              )}
 
               {isD360 && integration?.status === "CONNECTED" && (
                 <div className="mb-2 space-y-1 text-xs text-slate-400">

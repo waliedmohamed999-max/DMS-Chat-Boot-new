@@ -77,6 +77,12 @@ const SALLA_EMBEDDED_HEADERS = [
   { key: "Content-Security-Policy", value: SALLA_EMBEDDED_CSP },
 ];
 
+// صفحة تطبيق DMS لتاجر زد (/zid/app): زد يفتح "رابط التطبيق" في تبويب أو داخل لوحة التاجر — التضمين
+// مسموح من نطاقات زد فقط.
+const ZID_APP_HEADERS = SALLA_EMBEDDED_HEADERS.map((h) =>
+  h.key === "Content-Security-Policy" ? { ...h, value: CSP.replace("frame-ancestors 'none'", "frame-ancestors https://web.zid.sa https://*.zid.sa https://zid.sa") } : h
+);
+
 const nextConfig = {
   distDir: process.env.NEXT_DIST_DIR || ".next",
   reactStrictMode: true,
@@ -95,9 +101,10 @@ const nextConfig = {
       // استبعاد صريح لمسار /embed عبر regex سلبي (وليس الاعتماد على ترتيب استبدال رؤوس متشابهة
       // المفتاح بين قاعدتين متطابقتين لنفس المسار) — واضح ومضمون بصرف النظر عن تفاصيل دمج Next.js
       // الداخلية لرؤوس متعددة القواعد المتطابقة.
-      { source: "/:path((?!embed/|salla/app).*)", headers: SECURITY_HEADERS },
+      { source: "/:path((?!embed/|salla/app|zid/app).*)", headers: SECURITY_HEADERS },
       { source: "/embed/:path*", headers: EMBED_HEADERS },
       { source: "/salla/app", headers: SALLA_EMBEDDED_HEADERS },
+      { source: "/zid/app", headers: ZID_APP_HEADERS },
     ];
   },
 };

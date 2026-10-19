@@ -1,6 +1,6 @@
 "use server";
 
-import { assertNotSallaBilled, getSallaBilling, SALLA_BILLED_MESSAGE } from "@/lib/integrations/salla/subscriptions";
+import { assertNotMarketplaceBilled, getMarketplaceBilling, marketplaceBilledMessage } from "@/lib/integrations/marketplaceBilling";
 import { revalidatePath } from "next/cache";
 import { requireTenantSession } from "@/lib/session";
 import { withTenant, rawDb } from "@/lib/db";
@@ -57,7 +57,8 @@ export async function changePlan(planId: string): Promise<ChangePlanResult> {
   const session = await requireTenantSession();
   requirePermission(session.user.role, "billing.manage");
   const tenantId = session.user.tenantId;
-  if (await getSallaBilling(tenantId)) return { success: false, error: SALLA_BILLED_MESSAGE };
+  const marketplaceBilling = await getMarketplaceBilling(tenantId);
+  if (marketplaceBilling) return { success: false, error: marketplaceBilledMessage(marketplaceBilling) };
 
   const tenant = await rawDb.tenant.findUniqueOrThrow({ where: { id: tenantId }, select: { country: true } });
   const currency = COUNTRY_TO_CURRENCY[tenant.country];
@@ -165,7 +166,7 @@ export async function cancelSubscriptionAtPeriodEnd(reason: string) {
   const session = await requireTenantSession();
   requirePermission(session.user.role, "billing.manage");
   const tenantId = session.user.tenantId;
-  await assertNotSallaBilled(tenantId);
+  await assertNotMarketplaceBilled(tenantId);
 
   await withTenant(tenantId, (tx) =>
     tx.subscription.update({ where: { tenantId }, data: { cancelAtPeriodEnd: true, cancelReason: reason || null } })
@@ -191,7 +192,7 @@ export async function pauseSubscription(reason: string) {
   const session = await requireTenantSession();
   requirePermission(session.user.role, "billing.manage");
   const tenantId = session.user.tenantId;
-  await assertNotSallaBilled(tenantId);
+  await assertNotMarketplaceBilled(tenantId);
 
   const pausedUntil = new Date(Date.now() + PAUSE_DURATION_DAYS * 86400000);
   await withTenant(tenantId, (tx) =>
