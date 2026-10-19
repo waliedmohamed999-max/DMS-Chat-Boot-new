@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withTenant } from "@/lib/db";
-import { checkIpRateLimit } from "@/lib/rateLimit";
+import { checkIpRateLimit, clientIp } from "@/lib/rateLimit";
 
 // نفس النصّين الحرفيين المُستخدَمين في realtime-token/route.ts (بداية) وChatWidget.tsx::endCall
 // (نهاية، مُعاد استخدامه حرفياً في صفحة الـembed) — علامتان صريحتان بدل حقل DateTime منفصل لبداية
@@ -18,7 +18,7 @@ export async function POST(
 ) {
   const params = await props.params;
   const { tenantId, sessionId } = params;
-  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || req.headers.get("x-real-ip") || "unknown";
+  const ip = clientIp(req.headers);
   const ipLimit = await checkIpRateLimit(ip, "tenant-voice-transcript", 60, 60);
   if (!ipLimit.allowed) return NextResponse.json({ error: "طلبات كثيرة جداً" }, { status: 429 });
 

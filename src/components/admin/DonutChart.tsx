@@ -1,4 +1,4 @@
-const COLORS = ["#6D5EF8", "#22C55E", "#F59E0B", "#EF4444", "#06B6D4", "#EC4899", "#8B5CF6", "#10B981"];
+const COLORS = ["var(--chart-primary, #6D5EF8)", "var(--chart-secondary, #22C55E)", "var(--chart-warning, #F59E0B)", "var(--chart-danger, #EF4444)", "#06B6D4", "#EC4899", "#8B5CF6", "#10B981"];
 
 /**
  * دونات SVG بسيط بلا أي مكتبة رسم بياني (لا توجد مكتبة كهذه في المشروع أصلاً — قرار موثَّق في

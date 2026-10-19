@@ -129,7 +129,7 @@ export default async function AdminSallaPage() {
                         <span className="text-accent-400">جارية… {n(sync.orders)} طلب · {n(sync.products)} منتج · {n(sync.customers)} عميل</span>
                       ) : sync ? (
                         <span className={sync.status === "failed" ? "text-danger-500" : ""}>
-                          {sync.status === "failed" ? "فشلت" : `${n(sync.orders)} طلب · ${n(sync.products)} منتج · ${n(sync.customers)} عميل`}
+                          {sync.status === "failed" ? "فشلت" : `${n(sync.orders)} طلب · ${n(sync.products)} منتج · ${n(sync.customers)} عميل · ${n(sync.carts ?? 0)} سلة`}
                         </span>
                       ) : null}
                       {s.lastSyncedAt && <p>آخر مزامنة كاملة: {s.lastSyncedAt.toLocaleString("ar-SA")}</p>}

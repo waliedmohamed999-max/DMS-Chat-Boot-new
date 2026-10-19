@@ -35,7 +35,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const navItems = ALL_NAV_ITEMS.filter((item) => !item.requires || hasEffectivePermission(session.user.permissions, item.requires));
 
   return (
-    <div className="flex h-screen overflow-hidden bg-navy-900">
+    <div className="dashboard-theme flex h-screen overflow-hidden bg-navy-900">
       <Sidebar items={navItems} brandName="DMS Tech — لوحة مالك المنصة" brandColor="#25D366" brandInitial="D" logoUrl="/logo.png" />
       <div className="flex flex-1 flex-col overflow-hidden">
         <Topbar

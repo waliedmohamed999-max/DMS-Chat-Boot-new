@@ -8,7 +8,7 @@ import { disconnectNumber, refreshD360Channel } from "./actions";
 
 export const metadata = { title: "أرقام واتساب — DMS Tech" };
 
-const PROVIDER_LABELS: Record<string, string> = { D360DIALOG: "360dialog (عبر DMS)", META_WHATSAPP: "Meta مباشر (قديم)", WHATSAPP_QR: "QR تجريبي" };
+const PROVIDER_LABELS: Record<string, string> = { D360DIALOG: "360dialog (عبر DMS)", META_WHATSAPP: "Meta مباشر (قديم)" };
 const FILTERS = [
   { key: "all", label: "الكل" },
   { key: "issues", label: "بها مشكلة" },
@@ -27,7 +27,7 @@ export default async function AdminNumbersPage(props: { searchParams: Promise<{ 
   const { filter = "all" } = await props.searchParams;
 
   const integrations = await superAdminDb.integration.findMany({
-    where: { provider: { in: ["D360DIALOG", "META_WHATSAPP", "WHATSAPP_QR"] }, status: { not: "DISCONNECTED" } },
+    where: { provider: { in: ["D360DIALOG", "META_WHATSAPP"] }, status: { not: "DISCONNECTED" } },
     include: { tenant: { select: { id: true, name: true, status: true } } },
     orderBy: { updatedAt: "desc" },
   });

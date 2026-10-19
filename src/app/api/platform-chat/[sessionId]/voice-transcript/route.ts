@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { rawDb } from "@/lib/db";
-import { checkIpRateLimit } from "@/lib/rateLimit";
+import { checkIpRateLimit, clientIp } from "@/lib/rateLimit";
 
 /** يخزّن جزءاً مكتملاً من نص مكالمة صوتية حية (زائر أو مساعد) كـPlatformChatMessage عادية — Realtime
  * API يفرّغ الصوت تلقائياً كجزء من تدفق أحداثه (راجع ChatWidget.tsx)، فلا حاجة لاستدعاء Whisper هنا
  * إطلاقاً. بهذا يظهر transcript المكالمة كاملاً في /admin/chats بلا أي تعديل على تلك الصفحة. */
 export async function POST(req: NextRequest, props: { params: Promise<{ sessionId: string }> }) {
  const params = await props.params;
- const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || req.headers.get("x-real-ip") || "unknown";
+ const ip = clientIp(req.headers);
  const ipLimit = await checkIpRateLimit(ip, "platform-voice-transcript", 60, 60);
  if (!ipLimit.allowed) return NextResponse.json({ error: "طلبات كثيرة جداً" }, { status: 429 });
 

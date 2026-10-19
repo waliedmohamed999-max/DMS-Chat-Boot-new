@@ -2,7 +2,7 @@ import crypto from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { superAdminDb, withTenant } from "@/lib/db";
-import { checkIpRateLimit, checkTenantRateLimit } from "@/lib/rateLimit";
+import { checkIpRateLimit, checkTenantRateLimit, clientIp } from "@/lib/rateLimit";
 import { findZidIntegrationByWebhookAuth, ZID_STORE_EVENTS } from "@/lib/integrations/zid/api";
 import { processZidStoreEvent } from "@/lib/integrations/zid/events";
 
@@ -12,7 +12,7 @@ import { processZidStoreEvent } from "@/lib/integrations/zid/events";
  * SHA-256 للحدث+الجسم؛ فشل المعالجة يعيد 500 فيعيد زد الإرسال.
  */
 export async function POST(req: NextRequest) {
-  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || req.headers.get("x-real-ip") || "unknown";
+  const ip = clientIp(req.headers);
   if (!(await checkIpRateLimit(ip, "webhook-zid", 600, 60)).allowed) return new NextResponse("Rate limit exceeded", { status: 429 });
 
   const event = req.nextUrl.searchParams.get("event") ?? "unknown";

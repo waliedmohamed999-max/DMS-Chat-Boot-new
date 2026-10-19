@@ -43,13 +43,22 @@ export async function completePartnerSetup(token: string, formData: FormData): P
     return { success: false, error: "رابط إعداد الحساب غير صالح أو منتهي الصلاحية. تواصل مع الدعم للحصول على رابط جديد." };
   }
 
-  await superAdminDb.$transaction(async (tx) => {
-    await tx.user.update({
-      where: { id: setupToken.userId },
-      data: { passwordHash: await bcrypt.hash(password, 10) },
+  const passwordHash = await bcrypt.hash(password, 10);
+  // استهلاك الرابط ذرّياً (شرط usedAt = null داخل نفس التحديث): طلبان متزامنان بنفس الرابط لا يضبطان
+  // كلمتي مرور مختلفتين — الثاني يجد الرابط مستهلكاً فيُرفض.
+  const consumed = await superAdminDb.$transaction(async (tx) => {
+    const claim = await tx.accountSetupToken.updateMany({
+      where: { id: setupToken.id, usedAt: null, expiresAt: { gt: new Date() } },
+      data: { usedAt: new Date() },
     });
-    await tx.accountSetupToken.update({ where: { id: setupToken.id }, data: { usedAt: new Date() } });
+    if (claim.count !== 1) return false;
+    // كلمة مرور جديدة ⇒ كل الجلسات السابقة (ربما لمن سرق القديمة) تُبطل فوراً.
+    await tx.user.update({ where: { id: setupToken.userId }, data: { passwordHash, sessionsValidFrom: new Date() } });
+    return true;
   });
+  if (!consumed) {
+    return { success: false, error: "رابط إعداد الحساب غير صالح أو منتهي الصلاحية. تواصل مع الدعم للحصول على رابط جديد." };
+  }
 
   return { success: true };
 }

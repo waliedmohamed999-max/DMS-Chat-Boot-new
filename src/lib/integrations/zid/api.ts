@@ -117,6 +117,25 @@ export async function fetchZidProfile(bundle: ZidTokenBundle): Promise<ZidStoreP
 }
 
 const LOCK_TTL_MS = 30_000;
+/** refresh_token في زد صالح سنة من إصداره (رمز الوصول 3 سنوات) — يُجدَّد استباقياً بعد 300 يوم. */
+const REFRESH_TOKEN_RENEW_AFTER_MS = 300 * 24 * 3600 * 1000;
+
+function metaOf(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+}
+
+/** وقت إصدار الرموز الحالية: آخر تجديد، أو آخر تفويض/تثبيت. */
+export function zidTokensIssuedAt(metadataJson: unknown): Date | null {
+  const m = metaOf(metadataJson);
+  const raw = (m.tokensIssuedAt ?? m.reauthorizedAt ?? m.installedAt) as string | undefined;
+  const d = raw ? new Date(raw) : null;
+  return d && !Number.isNaN(d.getTime()) ? d : null;
+}
+
+function refreshTokenAging(metadataJson: unknown): boolean {
+  const issued = zidTokensIssuedAt(metadataJson);
+  return !!issued && Date.now() - issued.getTime() > REFRESH_TOKEN_RENEW_AFTER_MS;
+}
 
 /** حزمة رموز صالحة للمتجر — تُجدَّد تلقائياً قبل انتهائها بيوم (تحت قفل؛ refresh_token يُستخدم مرة واحدة). */
 export async function getValidZidBundle(tenantId: string): Promise<{ bundle: ZidTokenBundle; storeId: string | null }> {
@@ -124,7 +143,7 @@ export async function getValidZidBundle(tenantId: string): Promise<{ bundle: Zid
     withTenant(tenantId, (tx) => tx.integration.findUnique({ where: { tenantId_provider: { tenantId, provider: IntegrationProvider.ZID } } }));
   let integration = await load();
   if (!integration?.encryptedAccessToken) throw new Error("لا يوجد ربط زد فعّال لهذا التاجر");
-  const fresh = !integration.tokenExpiresAt || integration.tokenExpiresAt.getTime() - Date.now() > 24 * 3600 * 1000;
+  const fresh = (!integration.tokenExpiresAt || integration.tokenExpiresAt.getTime() - Date.now() > 24 * 3600 * 1000) && !refreshTokenAging(integration.metadataJson);
   if (fresh || !integration.encryptedRefreshToken) return { bundle: decryptZidTokenBundle(integration.encryptedAccessToken), storeId: integration.externalAccountId };
 
   const lockKey = `zid-refresh:${tenantId}`;
@@ -143,7 +162,10 @@ export async function getValidZidBundle(tenantId: string): Promise<{ bundle: Zid
   try {
     const tokens = await tokenRequest({ grant_type: "refresh_token", refresh_token: decryptSecret(integration.encryptedRefreshToken) });
     await withTenant(tenantId, (tx) =>
-      tx.integration.update({ where: { tenantId_provider: { tenantId, provider: IntegrationProvider.ZID } }, data: { ...tokenFieldsFrom(tokens), lastError: null } })
+      tx.integration.update({
+        where: { tenantId_provider: { tenantId, provider: IntegrationProvider.ZID } },
+        data: { ...tokenFieldsFrom(tokens), lastError: null, metadataJson: { ...metaOf(integration!.metadataJson), tokensIssuedAt: new Date().toISOString() } },
+      })
     );
     return { bundle: { authorization: tokens.authorization, accessToken: tokens.access_token }, storeId: integration.externalAccountId };
   } catch (err) {

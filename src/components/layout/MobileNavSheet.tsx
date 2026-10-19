@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { clsx } from "clsx";
+import { NavigationIcon, isNavigationActive } from "./NavigationIcon";
 import type { NavItem } from "@/components/layout/Sidebar";
 
 /**
@@ -42,11 +43,12 @@ export function MobileNavSheet({
         {title && <p className="mb-3 px-1 text-xs font-semibold text-slate-400">{title}</p>}
         <div className="grid grid-cols-4 gap-3">
           {items.map((item) => {
-            const active = pathname === item.href || pathname?.startsWith(item.href + "/");
+            const active = isNavigationActive(pathname, item.href);
             return (
               <Link
                 key={item.href}
                 href={item.href}
+              aria-current={active ? "page" : undefined}
                 onClick={onClose}
                 className={clsx(
                   "flex flex-col items-center gap-1.5 rounded-xl p-3 text-center text-[11px] font-medium transition",

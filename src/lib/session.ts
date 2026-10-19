@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 import { authOptions } from "@/lib/auth";
@@ -6,7 +7,26 @@ import { getPlatformSession } from "@/lib/platformAuth";
 import { superAdminDb, withTenant } from "@/lib/db";
 import { isPlatformRole, resolveEffectivePermissions, type Permission } from "@/lib/rbac";
 
-export type ImpersonationInfo = { active: true; superAdminName: string; tenantName: string } | { active: false };
+/**
+ * الحالة الحية للمستخدم صاحب الجلسة: موجود ومفعّل، والجلسة صادرة بعد آخر تغيير لكلمة المرور
+ * (User.sessionsValidFrom). `cache` يجعلها استعلاماً واحداً لكل طلب مهما تكرر الاستدعاء.
+ */
+const loadSessionState = cache(async (userId: string) =>
+  superAdminDb.user.findUnique({ where: { id: userId }, select: { isActive: true, sessionsValidFrom: true } })
+);
+
+export async function isSessionStillValid(userId: string | undefined, issuedAtSeconds: number | undefined): Promise<boolean> {
+  if (!userId) return false;
+  const state = await loadSessionState(userId);
+  if (!state || !state.isActive) return false;
+  if (state.sessionsValidFrom) {
+    // iat بالثواني (مقرَّب لأسفل) — نقارن على مستوى الثانية حتى لا تُرفض جلسة أُصدرت في نفس ثانية التغيير.
+    if (issuedAtSeconds === undefined || issuedAtSeconds < Math.floor(state.sessionsValidFrom.getTime() / 1000)) return false;
+  }
+  return true;
+}
+
+export type ImpersonationInfo ={ active: true; superAdminName: string; tenantName: string } | { active: false };
 
 /**
  * يفحص أولاً وجود جلسة انتحال هوية فعّالة (كوكي منفصل عن next-auth) قبل الرجوع للجلسة الحقيقية.
@@ -36,6 +56,10 @@ export async function getCurrentSession() {
 
   const session = await getServerSession(authOptions);
   if (!session?.user) return session;
+  // JWT صالح التوقيع لا يكفي: عضو عُطِّل أو حُذف، أو غُيّرت كلمة مروره بعد إصدار الجلسة (تسريب محتمل)،
+  // يجب أن يفقد الوصول فوراً — وليس بعد انتهاء الجلسة (حتى 7 أيام). يُفحص هنا لأن كل صفحة/action/API
+  // تمر من getCurrentSession.
+  if (!(await isSessionStillValid(session.user.id, session.user.iat))) return null;
   return {
     ...session,
     user: { ...session.user, impersonation: { active: false } as ImpersonationInfo },
@@ -123,7 +147,7 @@ export async function requireSuperAdminSession() {
   const platformUser = await getPlatformSession();
   if (platformUser) {
     const freshStaff = await loadFreshPlatformStaff(platformUser.id);
-    if (!freshStaff || !freshStaff.isActive || !isPlatformRole(freshStaff.role)) {
+    if (!freshStaff || !freshStaff.isActive || !isPlatformRole(freshStaff.role) || !(await isSessionStillValid(platformUser.id, platformUser.iat))) {
       // لا يُستدعى clearPlatformSession() هنا عمداً: Next.js يمنع تعديل الكوكيز أثناء تصيير مكوّن
       // خادم (requireSuperAdminSession تُستدعى من صفحات/layouts، وليس فقط من Server Actions) —
       // "Cookies can only be modified in a Server Action or Route Handler"، خطأ 500 حقيقي اكتُشف

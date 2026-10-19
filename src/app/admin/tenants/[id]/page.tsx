@@ -81,7 +81,7 @@ export default async function TenantDetailPage(props: { params: Promise<{ id: st
   );
 
   const chatbotLimits = (tenant.subscription?.plan.chatbotLimitsJson as ChatbotLimits | null) ?? DEFAULT_STARTER_CHATBOT_LIMITS;
-  const connectedWhatsappCount = tenant.integrations.filter((i) => (i.provider === "META_WHATSAPP" || i.provider === "WHATSAPP_QR") && i.status === "CONNECTED").length;
+  const connectedWhatsappCount = tenant.integrations.filter((i) => (i.provider === "META_WHATSAPP" || i.provider === "D360DIALOG") && i.status === "CONNECTED").length;
   const usage = tenant.subscription
     ? {
         messages: { used: tenant.subscription.messagesUsedThisPeriod, max: tenant.subscription.plan.maxMessagesPerMonth },

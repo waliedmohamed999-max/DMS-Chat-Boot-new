@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSallaConfig } from "@/lib/integrations/salla/config";
-import { checkIpRateLimit, checkTenantRateLimit } from "@/lib/rateLimit";
+import { checkIpRateLimit, checkTenantRateLimit, clientIp } from "@/lib/rateLimit";
 import { verifyHmacSignature } from "@/lib/crypto";
 import { saveOnboardingStep } from "@/lib/integrations/salla/intent";
 
@@ -11,7 +11,7 @@ import { saveOnboardingStep } from "@/lib/integrations/salla/intent";
  * الرد: 200 {ok:true} أو 422 {message, fields:{<معرّف الحقل>: [رسائل]}} لتعرضها الدالة تحت كل حقل.
  */
 export async function POST(req: NextRequest) {
-  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  const ip = clientIp(req.headers);
   if (!(await checkIpRateLimit(ip, "salla-onboarding", 120, 60)).allowed) {
     return NextResponse.json({ message: "طلبات كثيرة" }, { status: 429 });
   }

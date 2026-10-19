@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withTenant } from "@/lib/db";
-import { checkIpRateLimit, checkTenantRateLimit } from "@/lib/rateLimit";
+import { checkIpRateLimit, checkTenantRateLimit, clientIp } from "@/lib/rateLimit";
 import { mintRealtimeClientSecret } from "@/lib/ai/openaiClient";
 import { buildTenantVoiceCallInstructions, getOrCreateAiAgentConfig } from "@/lib/ai/aiAgentConfig";
 import { parseChatbotLimits, isUnlimited } from "@/lib/planLimits";
@@ -41,7 +41,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ tenantId
       return NextResponse.json({ error: "تم استهلاك كامل حصة دقائق المكالمة الصوتية لهذا الشهر" }, { status: 403 });
     }
 
-    const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || req.headers.get("x-real-ip") || "unknown";
+    const ip = clientIp(req.headers);
     const ipLimit = await checkIpRateLimit(ip, "tenant-voice-call-start", 3, 600);
     if (!ipLimit.allowed) {
       return NextResponse.json({ error: "عدد مكالمات كبير جداً من عنوانك الحالي — حاول مرة أخرى بعد قليل" }, { status: 429 });

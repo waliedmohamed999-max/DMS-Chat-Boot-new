@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { superAdminDb } from "@/lib/db";
-import { checkIpRateLimit } from "@/lib/rateLimit";
+import { checkIpRateLimit, clientIp } from "@/lib/rateLimit";
 import { verifyD360PartnerSignature } from "@/lib/integrations/d360/client";
 
 /**
@@ -10,7 +10,7 @@ import { verifyD360PartnerSignature } from "@/lib/integrations/d360/client";
  * للإرسال)، phone_number_quality_changed. القناة تُطابَق بـ channelId المحفوظ عند الربط.
  */
 export async function POST(req: NextRequest) {
-  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  const ip = clientIp(req.headers);
   if (!(await checkIpRateLimit(ip, "webhook-d360-partner", 300, 60)).allowed) return new NextResponse("Rate limit exceeded", { status: 429 });
 
   const rawBody = await req.text();

@@ -1,6 +1,18 @@
 import { redisConnection } from "@/lib/queue/connection";
 
 /**
+ * عنوان IP الحقيقي للعميل خلف وكيل الاستضافة. أول قيمة في X-Forwarded-For يكتبها العميل نفسه (قابلة
+ * للتزوير — كانت تسمح بتجاوز كل حدود المعدّل بتغيير الترويسة في كل طلب)؛ الوكيل الموثوق يُلحق IP
+ * المتصل الفعلي في **آخر** القائمة. TRUSTED_PROXY_HOPS = عدد الوكلاء الموثوقين أمام التطبيق (افتراضي 1).
+ */
+export function clientIp(headers: Headers): string {
+  const hops = Math.max(1, Number(process.env.TRUSTED_PROXY_HOPS) || 1);
+  const chain = (headers.get("x-forwarded-for") ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+  if (chain.length) return chain[Math.max(0, chain.length - hops)]!;
+  return headers.get("x-real-ip")?.trim() || "unknown";
+}
+
+/**
  * منطق العدّاد المشترك (INCR + EXPIRE بنافذة زمنية ثابتة) بين كل أنواع تحديد المعدَّل في هذا الملف —
  * بسيط عمداً بدل sliding-window أدق، لأن الهدف حد تقريبي يمنع الإساءة وليس دقة billing.
  */

@@ -4,7 +4,7 @@ import { headers } from "next/headers";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { superAdminDb, rawDb } from "@/lib/db";
-import { checkTenantRateLimit } from "@/lib/rateLimit";
+import { checkTenantRateLimit, clientIp } from "@/lib/rateLimit";
 import { sendEmail } from "@/lib/email/send";
 import { partnerApplicationReceivedEmail } from "@/lib/email/partnerTemplates";
 import { resolveReferralAffiliateId } from "@/lib/affiliates/referralCapture";
@@ -59,7 +59,7 @@ export async function submitPartnerApplication(formData: FormData): Promise<Subm
     return { success: false, error: "يجب الموافقة على الشروط والأحكام للمتابعة." };
   }
 
-  const ip = (await headers()).get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  const ip = clientIp(await headers());
   const rateLimit = await checkTenantRateLimit(ip, "partner-apply", 5, 3600);
   if (!rateLimit.allowed) {
     return { success: false, error: "عدد محاولات كبير جداً من عنوانك الحالي — حاول مرة أخرى بعد ساعة." };

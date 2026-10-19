@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withTenant } from "@/lib/db";
-import { checkIpRateLimit } from "@/lib/rateLimit";
+import { checkIpRateLimit, clientIp } from "@/lib/rateLimit";
 
 /** نقطة polling خفيفة — نظير /api/platform-chat/[sessionId]/messages، لكن عبر withTenant() لأن هذه
  * بيانات تاجر حقيقية خاضعة لـRLS. تُستخدَم من الـiframe المُضمَّن في موقع التاجر ومن
@@ -11,7 +11,7 @@ export async function GET(
 ) {
   const params = await props.params;
   const { tenantId, sessionId } = params;
-  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || req.headers.get("x-real-ip") || "unknown";
+  const ip = clientIp(req.headers);
   const ipLimit = await checkIpRateLimit(ip, "tenant-chat-poll", 60, 60);
   if (!ipLimit.allowed) return NextResponse.json({ error: "طلبات كثيرة جداً" }, { status: 429 });
 

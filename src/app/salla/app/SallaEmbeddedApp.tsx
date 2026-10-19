@@ -298,7 +298,7 @@ export function SallaEmbeddedApp({ theme }: { theme: "light" | "dark" }) {
                 <h2 className="font-semibold">مزامنة بيانات متجرك</h2>
                 {sync?.status === "running" ? (
                   <p className="text-sm text-[#6d5ef8]">
-                    ⏳ جارٍ سحب {sync.stage === "products" ? "المنتجات" : sync.stage === "customers" ? "العملاء" : "الطلبات"}… ({sync.orders.toLocaleString("ar-SA")} طلب · {sync.products.toLocaleString("ar-SA")} منتج · {sync.customers.toLocaleString("ar-SA")} عميل)
+                    ⏳ جارٍ سحب {sync.stage === "products" ? "المنتجات" : sync.stage === "customers" ? "العملاء" : sync.stage === "carts" ? "السلات المتروكة" : "الطلبات"}… ({sync.orders.toLocaleString("ar-SA")} طلب · {sync.products.toLocaleString("ar-SA")} منتج · {sync.customers.toLocaleString("ar-SA")} عميل · {(sync.carts ?? 0).toLocaleString("ar-SA")} سلة)
                   </p>
                 ) : sync?.status === "failed" ? (
                   <p className="text-sm text-red-500">تعذّرت المزامنة الأخيرة{sync.error ? `: ${sync.error}` : ""} — حاول مرة أخرى.</p>
@@ -306,7 +306,7 @@ export function SallaEmbeddedApp({ theme }: { theme: "light" | "dark" }) {
                   <p className={`text-xs ${c.muted}`}>
                     تسحب الطلبات والمنتجات والعملاء من سلة إلى DMS. التحديثات الجديدة تصل تلقائياً بعدها.
                     {view.summary.store.lastSyncedAt && <> آخر مزامنة كاملة: {new Date(view.summary.store.lastSyncedAt).toLocaleString("ar-SA")}</>}
-                    {sync?.status === "done" && <> — {sync.orders.toLocaleString("ar-SA")} طلب، {sync.products.toLocaleString("ar-SA")} منتج، {sync.customers.toLocaleString("ar-SA")} عميل</>}
+                    {sync?.status === "done" && <> — {sync.orders.toLocaleString("ar-SA")} طلب، {sync.products.toLocaleString("ar-SA")} منتج، {sync.customers.toLocaleString("ar-SA")} عميل، {(sync.carts ?? 0).toLocaleString("ar-SA")} سلة</>}
                   </p>
                 )}
               </div>

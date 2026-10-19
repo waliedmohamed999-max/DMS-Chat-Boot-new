@@ -53,11 +53,11 @@ export function SallaSyncPanel() {
       </button>
       {running && (
         <span className="text-accent-400">
-          جارٍ سحب {sync.stage === "products" ? "المنتجات" : sync.stage === "customers" ? "العملاء" : "الطلبات"} — {n(sync.orders)} طلب · {n(sync.products)} منتج · {n(sync.customers)} عميل
+          جارٍ سحب {sync.stage === "products" ? "المنتجات" : sync.stage === "customers" ? "العملاء" : sync.stage === "carts" ? "السلات المتروكة" : "الطلبات"} — {n(sync.orders)} طلب · {n(sync.products)} منتج · {n(sync.customers)} عميل · {n(sync.carts ?? 0)} سلة
         </span>
       )}
       {sync?.status === "done" && (
-        <span className="text-slate-400">آخر مزامنة: {n(sync.orders)} طلب · {n(sync.products)} منتج · {n(sync.customers)} عميل</span>
+        <span className="text-slate-400">آخر مزامنة: {n(sync.orders)} طلب · {n(sync.products)} منتج · {n(sync.customers)} عميل · {n(sync.carts ?? 0)} سلة</span>
       )}
       {sync?.status === "failed" && <span className="text-danger-500">فشلت: {sync.error}</span>}
       {error && <span className="text-warning-500">{error}</span>}

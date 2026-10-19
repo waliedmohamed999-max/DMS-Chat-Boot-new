@@ -4,7 +4,6 @@ import { d360Adapter } from "@/lib/integrations/d360/adapter";
 import { metaAdapter } from "@/lib/integrations/meta/adapter";
 import { zidAdapter } from "@/lib/integrations/zid/adapter";
 import { sallaAdapter } from "@/lib/integrations/salla/adapter";
-import { whatsappQrAdapter } from "@/lib/integrations/whatsappQr/adapter";
 import { withTenant } from "@/lib/db";
 
 // PAYMENT_GATEWAY ليس تكاملاً حقيقياً بمعنى "اتصال/فصل" من صفحة التكاملات — أُضيف لقيم
@@ -33,66 +32,52 @@ const paymentGatewayStubAdapter: IntegrationAdapter = {
   },
 };
 
-const registry: Record<IntegrationProvider, IntegrationAdapter> = {
+const registry: Partial<Record<IntegrationProvider, IntegrationAdapter>> = {
   META_WHATSAPP: metaAdapter,
   ZID: zidAdapter,
   SALLA: sallaAdapter,
-  WHATSAPP_QR: whatsappQrAdapter,
   PAYMENT_GATEWAY: paymentGatewayStubAdapter,
   D360DIALOG: d360Adapter,
 };
 
 export function getIntegrationAdapter(provider: IntegrationProvider): IntegrationAdapter {
-  return registry[provider];
+  const adapter = registry[provider];
+  if (!adapter) throw new Error("Unsupported integration provider");
+  return adapter;
 }
 
-export const PROVIDER_LABELS_AR: Record<IntegrationProvider, string> = {
+export const PROVIDER_LABELS_AR: Partial<Record<IntegrationProvider, string>> = {
   META_WHATSAPP: "واتساب (Meta Cloud API)",
   ZID: "زد",
   SALLA: "سلة",
-  WHATSAPP_QR: "واتساب تجريبي (QR)",
   PAYMENT_GATEWAY: "بوابة الدفع",
   D360DIALOG: "واتساب الرسمي (عبر DMS)",
 };
 
-export const PROVIDER_ICONS: Record<IntegrationProvider, string> = {
+export const PROVIDER_ICONS: Partial<Record<IntegrationProvider, string>> = {
   META_WHATSAPP: "💬",
   ZID: "🟩",
   SALLA: "⬛",
-  WHATSAPP_QR: "📱",
   PAYMENT_GATEWAY: "💳",
   D360DIALOG: "✅",
 };
 
-/**
- * يختار محوّل الإرسال الفعلي حسب ما هو متصل فعلياً لهذا المستأجر — الرسمي (Meta) له الأولوية دائماً
- * إن كان متصلاً، والقناة التجريبية QR بديل مؤقت فقط. تُستخدَم في worker.ts (إرسال الحملات) وفي
- * dashboard/inbox/actions.ts (الردود اليدوية) بدل الاستيراد الثابت لـmetaAdapter الذي كان موجوداً
- * سابقاً بلا أي اختيار حسب حالة الاتصال الفعلية — تاجر لم يربط أي شيء يحصل على نفس سلوك اليوم تماماً
- * (metaAdapter كافتراضي، والذي يتصرف بوضع sandbox تلقائياً بلا اتصال حقيقي).
- */
+/** Select an official WhatsApp integration, preferring 360dialog. */
 export async function resolveWhatsappAdapter(tenantId: string): Promise<IntegrationAdapter> {
   const integrations = await withTenant(tenantId, (tx) =>
     tx.integration.findMany({
-      where: { tenantId, provider: { in: ["D360DIALOG", "META_WHATSAPP", "WHATSAPP_QR"] }, status: "CONNECTED" },
+      where: { tenantId, provider: { in: ["D360DIALOG", "META_WHATSAPP"] }, status: "CONNECTED" },
     })
   );
-  // 360dialog (القناة الرسمية الجديدة عبر DMS) أولاً، ثم الربط المباشر القديم بـ Meta، ثم QR.
   if (integrations.some((i) => i.provider === "D360DIALOG")) return d360Adapter;
-  if (integrations.some((i) => i.provider === "META_WHATSAPP")) return metaAdapter;
-  if (integrations.some((i) => i.provider === "WHATSAPP_QR")) return whatsappQrAdapter;
   return metaAdapter;
 }
 
-/**
- * رقم واتساب الحقيقي المتصل فعلياً لهذا التاجر (لعرضه في معاينات واجهة المستخدم — مثل معاينة
- * الموبايل في محرر الشات بوت)، أو `null` إن لم يربط أي رقم حقيقي بعد. الرسمي (Meta) له الأولوية،
- * ثم القناة التجريبية (QR)، بنفس ترتيب أولوية `resolveWhatsappAdapter` أعلاه.
- */
+/** Return the phone number of an official WhatsApp integration. */
 export async function getConnectedPhoneNumber(tenantId: string): Promise<string | null> {
   const integrations = await withTenant(tenantId, (tx) =>
     tx.integration.findMany({
-      where: { tenantId, provider: { in: ["D360DIALOG", "META_WHATSAPP", "WHATSAPP_QR"] }, status: "CONNECTED" },
+      where: { tenantId, provider: { in: ["D360DIALOG", "META_WHATSAPP"] }, status: "CONNECTED" },
     })
   );
   const d360 = integrations.find((i) => i.provider === "D360DIALOG");
@@ -104,11 +89,6 @@ export async function getConnectedPhoneNumber(tenantId: string): Promise<string 
   if (meta) {
     const metadata = meta.metadataJson as { displayPhoneNumber?: string } | null;
     if (metadata?.displayPhoneNumber) return metadata.displayPhoneNumber;
-  }
-  const qr = integrations.find((i) => i.provider === "WHATSAPP_QR");
-  if (qr) {
-    const metadata = qr.metadataJson as { connectedPhoneE164?: string } | null;
-    if (metadata?.connectedPhoneE164) return metadata.connectedPhoneE164;
   }
   return null;
 }

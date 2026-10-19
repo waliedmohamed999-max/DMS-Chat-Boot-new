@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { checkIpRateLimit } from "@/lib/rateLimit";
+import { checkIpRateLimit, clientIp } from "@/lib/rateLimit";
 import { getPlatformSettings } from "@/lib/platformSettings";
 import { mintRealtimeClientSecret } from "@/lib/ai/openaiClient";
 import { buildPlatformVoiceCallInstructions } from "@/lib/ai/platformVoiceCallInstructions";
@@ -16,7 +16,7 @@ const GLOBAL_CALLS_PER_MINUTE = 20;
 /** يصدر توكن Realtime API مؤقتاً لبدء مكالمة صوتية حية — بلا تسجيل دخول، بنفس نمط بقية نقاط
  * platform-chat. لا يُرجع مفتاح OpenAI الحقيقي بأي حال — فقط توكن مؤقت صالح لجلسة واحدة قصيرة. */
 export async function POST(req: NextRequest) {
-  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || req.headers.get("x-real-ip") || "unknown";
+  const ip = clientIp(req.headers);
 
   const ipLimit = await checkIpRateLimit(ip, "platform-voice-call-start", 3, 600);
   if (!ipLimit.allowed) {

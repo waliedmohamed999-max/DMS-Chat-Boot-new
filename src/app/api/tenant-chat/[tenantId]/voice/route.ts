@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { checkIpRateLimit } from "@/lib/rateLimit";
+import { checkIpRateLimit, clientIp } from "@/lib/rateLimit";
 import { getOpenAiClient } from "@/lib/ai/openaiClient";
 import { getTenantChatbotLimits } from "@/lib/planLimits";
 import { withTenant } from "@/lib/db";
@@ -15,7 +15,7 @@ const MAX_AUDIO_BYTES = 10 * 1024 * 1024; // 10MB — نفس حد /api/platform-
 export async function POST(req: NextRequest, props: { params: Promise<{ tenantId: string }> }) {
   const params = await props.params;
   const tenantId = params.tenantId;
-  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || req.headers.get("x-real-ip") || "unknown";
+  const ip = clientIp(req.headers);
   const ipLimit = await checkIpRateLimit(ip, "tenant-chat-voice", 10, 60);
   if (!ipLimit.allowed) {
     return NextResponse.json({ error: "عدد رسائل صوتية كبير جداً من عنوانك الحالي — حاول مرة أخرى بعد قليل" }, { status: 429 });

@@ -7,7 +7,6 @@ import { IntegrationProvider } from "@prisma/client";
 import { connectIntegration, disconnectIntegration, resyncIntegration } from "./actions";
 import { MetaConnectionWizard, ConnectionHealthPanel } from "@/components/dashboard/MetaConnectionPanel";
 import { ConfirmSubmitButton } from "@/components/dashboard/ConfirmSubmitButton";
-import { WhatsappQrConnectPanel } from "@/components/dashboard/WhatsappQrConnectPanel";
 import { getTenantMigration } from "@/lib/integrations/migration";
 import { MigrationCard } from "./MigrationCard";
 
@@ -31,7 +30,7 @@ export default async function IntegrationsPage(props: { searchParams: Promise<Se
 
   const [integrations, webhookLogs] = await withTenant(tenantId, async (tx) => {
     return Promise.all([
-      tx.integration.findMany({ where: { tenantId } }),
+      tx.integration.findMany({ where: { tenantId, provider: { not: "WHATSAPP_QR" } } }),
       tx.webhookLog.findMany({ where: { tenantId }, orderBy: { createdAt: "desc" }, take: 10 }),
     ]);
   });
@@ -73,17 +72,17 @@ export default async function IntegrationsPage(props: { searchParams: Promise<Se
         {(Object.values(IntegrationProvider) as IntegrationProvider[])
           // الربط المباشر بـ Meta لم يعد متاحاً للربط الجديد (القناة الرسمية الآن عبر 360dialog) — يظهر فقط لتاجر
           // مربوط به مسبقاً ليتابع حالته أو يفصله.
-          .filter((provider) => provider !== "PAYMENT_GATEWAY")
+          .filter((provider) => provider !== "PAYMENT_GATEWAY" && provider !== "WHATSAPP_QR")
           .filter((provider) => provider !== "META_WHATSAPP" || !!byProvider.get(provider)?.externalAccountId || byProvider.get(provider)?.status === "CONNECTED")
           .sort((a, b) => (a === "D360DIALOG" ? -1 : b === "D360DIALOG" ? 1 : 0))
           .map((provider) => {
           const integration = byProvider.get(provider);
           const status = STATUS_LABELS[integration?.status ?? "DISCONNECTED"]!;
           const isMeta = provider === "META_WHATSAPP";
-          const isWhatsappQr = provider === "WHATSAPP_QR";
+
           const isD360 = provider === "D360DIALOG";
           const metadata = (integration?.metadataJson ?? null) as {
-            qualityRating?: string; messagingTier?: string; displayPhoneNumber?: string; connectedPhoneE164?: string;
+            qualityRating?: string; messagingTier?: string; displayPhoneNumber?: string;
           } | null;
 
           return (
@@ -145,16 +144,6 @@ export default async function IntegrationsPage(props: { searchParams: Promise<Se
                 </div>
               )}
 
-              {isWhatsappQr && integration?.status === "CONNECTED" && (
-                <div className="mb-2 space-y-1 text-xs text-slate-400">
-                  <p dir="ltr" className="text-slate-300">{metadata?.connectedPhoneE164}</p>
-                  {integration.qrTrialExpiresAt && (
-                    <p>
-                      تنتهي التجربة: {new Date(integration.qrTrialExpiresAt).toLocaleString("ar-SA")}
-                    </p>
-                  )}
-                </div>
-              )}
 
               {isMeta && integration?.status === "CONNECTED" && (
                 <ConnectionHealthPanel
@@ -171,13 +160,12 @@ export default async function IntegrationsPage(props: { searchParams: Promise<Se
                 {isMeta && integration?.status !== "CONNECTED" && (
                   <MetaConnectionWizard connectSandbox={connectIntegration.bind(null, provider)} />
                 )}
-                {isWhatsappQr && integration?.status !== "CONNECTED" && <WhatsappQrConnectPanel />}
               </div>
 
               <div className="mt-4 flex gap-2">
                 {integration?.status === "CONNECTED" ? (
                   <>
-                    {provider !== "META_WHATSAPP" && provider !== "WHATSAPP_QR" && (
+                    {provider !== "META_WHATSAPP" && (
                       <form action={resyncIntegration.bind(null, provider)}>
                         <button className="btn-secondary text-xs">إعادة مزامنة</button>
                       </form>
@@ -187,8 +175,6 @@ export default async function IntegrationsPage(props: { searchParams: Promise<Se
                       confirmMessage={
                         isMeta
                           ? "قطع الاتصال سيوقف استقبال وإرسال رسائل واتساب فوراً لهذا التاجر. هل أنت متأكد؟"
-                          : isWhatsappQr
-                          ? "سيُسجَّل الخروج من جلسة واتساب التجريبية فوراً وتُمسَح بياناتها. هل أنت متأكد؟"
                           : "هل تريد فعلاً قطع الاتصال بهذا التكامل؟"
                       }
                       className="btn-danger text-xs"
@@ -196,7 +182,7 @@ export default async function IntegrationsPage(props: { searchParams: Promise<Se
                       قطع الاتصال
                     </ConfirmSubmitButton>
                   </>
-                ) : !isMeta && !isWhatsappQr ? (
+                ) : !isMeta ? (
                   <form action={connectIntegration.bind(null, provider)} className="w-full">
                     <button className="btn-primary w-full text-xs">{isD360 ? "🟢 ربط رقم واتساب" : "ربط الآن"}</button>
                   </form>

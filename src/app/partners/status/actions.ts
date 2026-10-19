@@ -2,7 +2,7 @@
 
 import { headers } from "next/headers";
 import { superAdminDb } from "@/lib/db";
-import { checkTenantRateLimit } from "@/lib/rateLimit";
+import { checkTenantRateLimit, clientIp } from "@/lib/rateLimit";
 
 export type PartnerStatusResult =
   | { found: true; status: "PENDING" | "APPROVED" | "REJECTED" | "NEEDS_INFO"; reviewerNote: string | null; createdAt: string; storeName: string }
@@ -19,7 +19,7 @@ export async function checkPartnerApplicationStatus(formData: FormData): Promise
     return { found: false, error: "رقم الطلب والبريد الإلكتروني مطلوبان" };
   }
 
-  const ip = (await headers()).get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  const ip = clientIp(await headers());
   const rateLimit = await checkTenantRateLimit(ip, "partner-status-check", 20, 3600);
   if (!rateLimit.allowed) {
     return { found: false, error: "عدد محاولات كبير جداً — حاول لاحقاً." };

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSallaConfig } from "@/lib/integrations/salla/config";
 import { Prisma } from "@prisma/client";
 import { superAdminDb } from "@/lib/db";
-import { checkIpRateLimit } from "@/lib/rateLimit";
+import { checkIpRateLimit, clientIp } from "@/lib/rateLimit";
 import { verifyHmacSignature } from "@/lib/crypto";
 import { handleSallaCommunication, redactCommunication } from "@/lib/integrations/salla/communication";
 
@@ -12,7 +12,7 @@ import { handleSallaCommunication, redactCommunication } from "@/lib/integration
  * الرد: 200 {ok, sent, skipped} أو حالة خطأ مع {message} — الدالة تعيد النجاح/الفشل لسلة بناءً عليه.
  */
 export async function POST(req: NextRequest) {
-  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  const ip = clientIp(req.headers);
   if (!(await checkIpRateLimit(ip, "salla-communication-ip", 1200, 60)).allowed) {
     return NextResponse.json({ message: "طلبات كثيرة" }, { status: 429 });
   }

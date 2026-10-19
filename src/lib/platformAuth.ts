@@ -15,6 +15,8 @@ export type PlatformSessionUser = {
   role: "SUPER_ADMIN" | "PLATFORM_SUPPORT" | "PLATFORM_BILLING";
   name: string | null;
   email: string;
+  /** وقت إصدار الجلسة (ثوانٍ) — يُقارن بـUser.sessionsValidFrom. */
+  iat?: number;
 };
 
 /**
@@ -53,6 +55,7 @@ export async function getPlatformSession(): Promise<PlatformSessionUser | null> 
       role: payload.role as PlatformSessionUser["role"],
       name: (payload.name as string | null) ?? null,
       email: payload.email as string,
+      iat: typeof payload.iat === "number" ? payload.iat : undefined,
     };
   } catch {
     // توقيع غير صالح/منتهي — يُعامَل كغياب جلسة، وليس خطأ يوقف الصفحة.

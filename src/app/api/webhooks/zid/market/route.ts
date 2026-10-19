@@ -2,7 +2,7 @@ import crypto from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { superAdminDb } from "@/lib/db";
-import { checkIpRateLimit } from "@/lib/rateLimit";
+import { checkIpRateLimit, clientIp } from "@/lib/rateLimit";
 import { timingSafeStringEqual } from "@/lib/crypto";
 import { getZidConfig } from "@/lib/integrations/zid/config";
 import { processZidMarketEvent, type ZidMarketPayload } from "@/lib/integrations/zid/market";
@@ -12,7 +12,7 @@ import { processZidMarketEvent, type ZidMarketPayload } from "@/lib/integrations
  * X-DMS-Zid-Token = السر المولَّد في لوحة الأدمن ← تطبيق زد. بلا سر مضبوط: رفض كل شيء (fail closed).
  */
 export async function POST(req: NextRequest) {
-  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  const ip = clientIp(req.headers);
   if (!(await checkIpRateLimit(ip, "webhook-zid-market", 300, 60)).allowed) return new NextResponse("Rate limit exceeded", { status: 429 });
 
   const rawBody = await req.text();

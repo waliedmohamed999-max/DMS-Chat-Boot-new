@@ -3,7 +3,7 @@
 import { headers } from "next/headers";
 import { z } from "zod";
 import { rawDb } from "@/lib/db";
-import { checkTenantRateLimit } from "@/lib/rateLimit";
+import { checkTenantRateLimit, clientIp } from "@/lib/rateLimit";
 import { sendEmail } from "@/lib/email/send";
 import { getPlatformSettings } from "@/lib/platformSettings";
 import { INQUIRY_TYPES } from "./constants";
@@ -42,7 +42,7 @@ export async function submitContactMessage(formData: FormData): Promise<ContactF
     return { success: false, error: "تعذّر إرسال الرسالة، أعد المحاولة." };
   }
 
-  const ip = (await headers()).get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  const ip = clientIp(await headers());
   const rateLimit = await checkTenantRateLimit(ip, "contact-message", 5, 3600);
   if (!rateLimit.allowed) {
     return { success: false, error: "عدد رسائل كبير جداً من عنوانك الحالي — حاول مرة أخرى بعد ساعة." };

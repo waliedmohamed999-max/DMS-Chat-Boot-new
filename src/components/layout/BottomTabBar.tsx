@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { clsx } from "clsx";
+import { NavigationIcon, isNavigationActive } from "./NavigationIcon";
 import type { NavItem } from "@/components/layout/Sidebar";
 import { MobileNavSheet } from "@/components/layout/MobileNavSheet";
 
@@ -18,7 +19,7 @@ export function BottomTabBar({ items }: { items: NavItem[] }) {
   const [moreOpen, setMoreOpen] = useState(false);
   const primary = items.slice(0, PRIMARY_COUNT);
   const rest = items.slice(PRIMARY_COUNT);
-  const moreActive = rest.some((item) => pathname === item.href || pathname?.startsWith(item.href + "/"));
+  const moreActive = rest.some((item) => isNavigationActive(pathname, item.href));
 
   return (
     <>
@@ -27,17 +28,18 @@ export function BottomTabBar({ items }: { items: NavItem[] }) {
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
         {primary.map((item) => {
-          const active = pathname === item.href || pathname?.startsWith(item.href + "/");
+          const active = isNavigationActive(pathname, item.href);
           return (
             <Link
               key={item.href}
               href={item.href}
+              aria-current={active ? "page" : undefined}
               className={clsx(
                 "flex flex-1 flex-col items-center justify-center gap-0.5 py-2 text-[11px] font-medium transition",
                 active ? "text-wa-400" : "text-slate-500"
               )}
             >
-              <span className="text-lg">{item.icon}</span>
+              <NavigationIcon href={item.href} className="h-5 w-5" />
               {item.label}
             </Link>
           );

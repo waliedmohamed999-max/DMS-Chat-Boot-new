@@ -1,5 +1,6 @@
 import { Worker, Queue, type Job } from "bullmq";
 import { redisConnection } from "@/lib/queue/connection";
+import "@/lib/queue/integrationMaintenance"; // صيانة يومية لرموز متاجر سلة وزد
 import { withTenant, superAdminDb } from "@/lib/db";
 import { resolveWhatsappAdapter } from "@/lib/integrations/registry";
 import { checkTenantRateLimit } from "@/lib/rateLimit";
@@ -11,9 +12,6 @@ import { applyStatusUpdate } from "@/lib/integrations/meta/webhookHandler";
 import type { MessageStatusSimJob } from "@/lib/queue/messageStatusQueue";
 import { applyTemplateDecision, simulateTemplateDecision } from "@/lib/integrations/meta/templates";
 import type { TemplateStatusSimJob } from "@/lib/queue/templateStatusQueue";
-import { startSession as startWhatsappQrSession, stopSession as stopWhatsappQrSession } from "@/lib/integrations/whatsappQr/sessionManager";
-import type { WhatsappQrJobData } from "@/lib/integrations/whatsappQr/queue";
-import { scanAndExpireQrTrials } from "@/lib/integrations/whatsappQr/expireTrial";
 import { scanAndResetStuckChatbotSessions } from "@/lib/chatbot/timeoutScan";
 import { scanAndExpireSubscriptions } from "@/lib/billing/expireSubscriptions";
 import { recognizeRevenueForActiveInvoices } from "@/lib/accounting/revenueRecognition";
@@ -219,63 +217,6 @@ const templateStatusWorker = new Worker<TemplateStatusSimJob>(
 );
 templateStatusWorker.on("failed", (job, err) => console.error("❌ فشل تحديث حالة قالب محاكاة:", err.message));
 
-// قناة واتساب التجريبية (QR/Baileys) — الـsocket الحي يعيش حصراً هنا داخل عملية العامل (وليس عملية
-// Next.js القصيرة العمر). الأوامر "ابدأ/أوقف" تصل من Next.js عبر هذين الطابورين
-// (lib/integrations/whatsappQr/queue.ts)، والحالة اللحظية (QR الحالي/متصل) تُكتب مباشرة في Redis
-// لتستطلعها واجهة Next.js (لا حاجة لـWorker يعيد شيئاً هنا، فقط ينفّذ الأمر).
-const whatsappQrStartWorker = new Worker<WhatsappQrJobData>(
-  "whatsapp-qr-start",
-  async (job) => startWhatsappQrSession(job.data.tenantId),
-  { connection: redisConnection, concurrency: 5 }
-);
-whatsappQrStartWorker.on("failed", (job, err) => console.error(`❌ فشل بدء جلسة القناة التجريبية للمستأجر ${job?.data.tenantId}:`, err.message));
-
-const whatsappQrStopWorker = new Worker<WhatsappQrJobData>(
-  "whatsapp-qr-stop",
-  async (job) => stopWhatsappQrSession(job.data.tenantId),
-  { connection: redisConnection, concurrency: 5 }
-);
-whatsappQrStopWorker.on("failed", (job, err) => console.error(`❌ فشل إيقاف جلسة القناة التجريبية للمستأجر ${job?.data.tenantId}:`, err.message));
-
-// فحص دوري (كل 30 دقيقة) لقطع جلسات QR التجريبية المنتهية صلاحيتها ومسح بيانات اعتمادها —
-// نفس نمط triggerScanQueue/scheduleTriggerScan أعلاه حرفياً.
-const QR_TRIAL_EXPIRY_SCAN_INTERVAL_MS = 30 * 60 * 1000;
-const qrTrialExpiryWorker = new Worker("whatsapp-qr-trial-expiry-scan", async () => scanAndExpireQrTrials(), {
-  connection: redisConnection,
-  concurrency: 1,
-});
-qrTrialExpiryWorker.on("failed", (job, err) => console.error("❌ فشل فحص انتهاء القنوات التجريبية:", err.message));
-
-const qrTrialExpiryQueue = new Queue("whatsapp-qr-trial-expiry-scan", { connection: redisConnection });
-async function scheduleQrTrialExpiryScan() {
-  await qrTrialExpiryQueue.add("scan", {}, {
-    repeat: { every: QR_TRIAL_EXPIRY_SCAN_INTERVAL_MS },
-    jobId: "recurring-qr-trial-expiry-scan",
-  });
-}
-scheduleQrTrialExpiryScan().catch((err) => console.error("❌ تعذّرت جدولة فحص انتهاء القنوات التجريبية:", err));
-
-// استئناف جلسات QR المتصلة فعلياً وقت توقف عملية العامل السابقة — الـsocket الحي يعيش في الذاكرة فقط
-// (يُفقَد عند أي إعادة تشغيل)، لكن بيانات الاعتماد محفوظة مشفَّرة في القاعدة (encryptedSessionData)،
-// فيُعاد الاتصال تلقائياً بلا حاجة لمسح QR جديد — بدون هذا، أي إعادة تشغيل للعامل كانت ستترك القناة
-// "متصلة" ظاهرياً في القاعدة لكن بلا socket فعلي يستقبل/يرسل أي شيء.
-async function resumeConnectedQrSessions() {
-  const connected = await superAdminDb.integration.findMany({
-    where: { provider: "WHATSAPP_QR", status: "CONNECTED" },
-    select: { tenantId: true },
-  });
-  for (const { tenantId } of connected) {
-    try {
-      await startWhatsappQrSession(tenantId);
-    } catch (err) {
-      console.error(`❌ فشل استئناف جلسة القناة التجريبية للمستأجر ${tenantId}:`, err);
-    }
-  }
-}
-resumeConnectedQrSessions().catch((err) => console.error("❌ فشل استئناف جلسات القناة التجريبية:", err));
-
-// فحص دوري (كل 10 دقائق) لإعادة أي محادثة شات بوت واقفة عند عقدة "سؤال" منذ وقت طويل بلا رد إلى
-// تحكّم بشري — بنفس نمط triggerScanQueue/scheduleTriggerScan أعلاه حرفياً.
 const CHATBOT_TIMEOUT_SCAN_INTERVAL_MS = 10 * 60 * 1000;
 const chatbotTimeoutWorker = new Worker("chatbot-session-timeout-scan", async () => scanAndResetStuckChatbotSessions(), {
   connection: redisConnection,

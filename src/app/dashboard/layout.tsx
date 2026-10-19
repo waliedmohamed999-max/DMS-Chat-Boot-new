@@ -86,7 +86,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   // فعلياً للتحقق من المشكلة أثناء الصيانة نفسها).
   if (settings.maintenanceMode && !session.user.impersonation.active) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-navy-900 px-4">
+      <div className="dashboard-theme flex min-h-screen items-center justify-center bg-navy-900 px-4">
         <div className="card w-full max-w-md p-8 text-center">
           <div className="mb-4 text-5xl">🛠️</div>
           <h1 className="mb-2 text-lg font-bold text-white">المنصة تحت الصيانة حالياً</h1>
@@ -126,7 +126,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const allowedNavItems = NAV_ITEMS.filter((item) => !item.requires || hasEffectivePermission(session.user.permissions, item.requires));
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-navy-900">
+    <div className="dashboard-theme flex h-screen flex-col overflow-hidden bg-navy-900">
       {session.user.impersonation.active && (
         <ImpersonationBanner tenantName={session.user.impersonation.tenantName} superAdminName={session.user.impersonation.superAdminName} />
       )}

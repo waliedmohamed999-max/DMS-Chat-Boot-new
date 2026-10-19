@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { checkIpRateLimit } from "@/lib/rateLimit";
+import { checkIpRateLimit, clientIp } from "@/lib/rateLimit";
 
 // دول مدعومة فعلياً على المنصة فقط — أي دولة أخرى يكتشفها البحث الجغرافي تُتجاهَل (يبقى الافتراضي:
 // السعودية) بدل عرض مبدّل عملة لدولة لا تدعمها المنصة أصلاً.
@@ -13,8 +13,7 @@ const SUPPORTED_COUNTRIES = new Set(["SA", "AE", "EG"]);
  */
 export async function GET(req: NextRequest) {
   try {
-    const forwardedFor = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-    const ip = forwardedFor || req.headers.get("x-real-ip");
+    const ip = clientIp(req.headers);
 
     // بيئة محلية/بلا IP حقيقي قابل للتحديد — لا معنى لاستدعاء خدمة خارجية.
     if (!ip || ip === "127.0.0.1" || ip === "::1" || ip.startsWith("192.168.") || ip.startsWith("10.")) {

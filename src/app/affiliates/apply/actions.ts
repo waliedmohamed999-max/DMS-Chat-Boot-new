@@ -4,7 +4,7 @@ import bcrypt from "bcryptjs";
 import { headers } from "next/headers";
 import { z } from "zod";
 import { rawDb } from "@/lib/db";
-import { checkTenantRateLimit } from "@/lib/rateLimit";
+import { checkTenantRateLimit, clientIp } from "@/lib/rateLimit";
 import { generateReferralCode } from "@/lib/affiliates/referralCode";
 
 const applySchema = z.object({
@@ -38,7 +38,7 @@ export async function submitAffiliateApplication(formData: FormData): Promise<Su
     return { success: false, error: "يجب الموافقة على الشروط والأحكام للمتابعة." };
   }
 
-  const ip = (await headers()).get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  const ip = clientIp(await headers());
   const rateLimit = await checkTenantRateLimit(ip, "affiliate-apply", 5, 3600);
   if (!rateLimit.allowed) {
     return { success: false, error: "عدد محاولات كبير جداً من عنوانك الحالي — حاول مرة أخرى بعد ساعة." };

@@ -12,7 +12,7 @@ export async function checkDowngradeAllowed(tx: Prisma.TransactionClient, tenant
 
   const [activeUserCount, connectedWhatsappCount, publishedFlowCount] = await Promise.all([
     tx.user.count({ where: { tenantId, isActive: true } }),
-    tx.integration.count({ where: { tenantId, provider: { in: ["META_WHATSAPP", "WHATSAPP_QR"] }, status: "CONNECTED" } }),
+    tx.integration.count({ where: { tenantId, provider: { in: ["D360DIALOG", "META_WHATSAPP"] }, status: "CONNECTED" } }),
     tx.chatbotFlow.count({ where: { tenantId, status: "PUBLISHED" } }),
   ]);
 

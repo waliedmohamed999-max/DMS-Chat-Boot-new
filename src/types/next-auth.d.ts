@@ -6,6 +6,8 @@ declare module "next-auth" {
       id: string;
       role: string;
       tenantId: string | null;
+      /** وقت إصدار الجلسة (ثوانٍ) — يُقارن بـUser.sessionsValidFrom لإبطال الجلسات القديمة. */
+      iat?: number;
     } & DefaultSession["user"];
   }
 

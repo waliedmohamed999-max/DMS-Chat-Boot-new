@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { superAdminDb } from "@/lib/db";
-import { checkIpRateLimit } from "@/lib/rateLimit";
+import { checkIpRateLimit, clientIp } from "@/lib/rateLimit";
 import { timingSafeStringEqual } from "@/lib/crypto";
 import { applyPaidRechargeInvoice } from "@/lib/billing/moyasar";
 
@@ -11,7 +11,7 @@ import { applyPaidRechargeInvoice } from "@/lib/billing/moyasar";
  * MOYASAR_WEBHOOK_SECRET يُشترط أيضاً تطابق secret_token (طبقة حماية إضافية).
  */
 export async function POST(req: NextRequest) {
-  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  const ip = clientIp(req.headers);
   if (!(await checkIpRateLimit(ip, "moyasar-callback", 120, 60)).allowed) return new NextResponse("Rate limit exceeded", { status: 429 });
 
   const body = await req.json().catch(() => null);

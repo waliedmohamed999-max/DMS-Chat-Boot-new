@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { checkIpRateLimit } from "@/lib/rateLimit";
+import { checkIpRateLimit, clientIp } from "@/lib/rateLimit";
 import { processTenantChatMessage } from "@/lib/tenantChat";
 
 export async function POST(req: NextRequest, props: { params: Promise<{ tenantId: string }> }) {
   const params = await props.params;
   const tenantId = params.tenantId;
-  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || req.headers.get("x-real-ip") || "unknown";
+  const ip = clientIp(req.headers);
   const ipLimit = await checkIpRateLimit(ip, "tenant-chat-message", 30, 60);
   if (!ipLimit.allowed) {
     return NextResponse.json({ error: "عدد رسائل كبير جداً من عنوانك الحالي — حاول مرة أخرى بعد قليل" }, { status: 429 });

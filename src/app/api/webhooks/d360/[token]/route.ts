@@ -2,7 +2,7 @@ import crypto from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { superAdminDb, withTenant } from "@/lib/db";
-import { checkIpRateLimit, checkTenantRateLimit } from "@/lib/rateLimit";
+import { checkIpRateLimit, checkTenantRateLimit, clientIp } from "@/lib/rateLimit";
 import { parseMetaWebhookPayload, applyParsedMetaWebhook } from "@/lib/integrations/meta/webhookHandler";
 import { runChatbotEngine } from "@/lib/chatbot/engine";
 
@@ -12,7 +12,7 @@ import { runChatbotEngine } from "@/lib/chatbot/engine";
  * فريد في الرابط (يُضبط لكل قناة عند ربطها، ويُخزَّن مُجزَّأً SHA-256) — لا يُقبل أي رابط آخر.
  */
 export async function POST(req: NextRequest, props: { params: Promise<{ token: string }> }) {
-  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  const ip = clientIp(req.headers);
   if (!(await checkIpRateLimit(ip, "webhook-d360", 1200, 60)).allowed) return new NextResponse("Rate limit exceeded", { status: 429 });
 
   const { token } = await props.params;

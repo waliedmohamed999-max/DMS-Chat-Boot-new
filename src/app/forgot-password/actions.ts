@@ -3,7 +3,7 @@
 import { headers } from "next/headers";
 import { superAdminDb } from "@/lib/db";
 import { sendPasswordResetLink } from "@/lib/auth/passwordReset";
-import { checkIpRateLimit, checkTenantRateLimit } from "@/lib/rateLimit";
+import { checkIpRateLimit, checkTenantRateLimit, clientIp } from "@/lib/rateLimit";
 
 export type RequestResetResult = { success: true } | { success: false; error: string };
 
@@ -17,7 +17,7 @@ export async function requestPasswordReset(formData: FormData): Promise<RequestR
   const email = String(formData.get("email") ?? "").toLowerCase().trim();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { success: false, error: "أدخل بريداً إلكترونياً صحيحاً" };
 
-  const ip = (await headers()).get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  const ip = clientIp(await headers());
   const ipLimit = await checkIpRateLimit(ip, "password-reset", 10, 3600);
   if (!ipLimit.allowed) return { success: false, error: "عدد طلبات كبير جداً — حاول مرة أخرى بعد ساعة." };
   const emailLimit = await checkTenantRateLimit(email, "password-reset", 3, 3600);

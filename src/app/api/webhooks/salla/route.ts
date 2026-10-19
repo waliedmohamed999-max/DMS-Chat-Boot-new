@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSallaConfig } from "@/lib/integrations/salla/config";
 import { Prisma } from "@prisma/client";
 import { superAdminDb } from "@/lib/db";
-import { checkIpRateLimit } from "@/lib/rateLimit";
+import { checkIpRateLimit, clientIp } from "@/lib/rateLimit";
 import { timingSafeStringEqual, verifyHmacSignature } from "@/lib/crypto";
 import { processSallaEvent, type SallaEventPayload } from "@/lib/integrations/salla/events";
 
@@ -17,7 +17,7 @@ import { processSallaEvent, type SallaEventPayload } from "@/lib/integrations/sa
  *  4) المعالجة الفعلية؛ فشلها يعيد 500 فتعيد سلة الإرسال لاحقاً (المعالجة نفسها upsert آمنة للتكرار).
  */
 export async function POST(req: NextRequest) {
-  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || req.headers.get("x-real-ip") || "unknown";
+  const ip = clientIp(req.headers);
   const ipLimit = await checkIpRateLimit(ip, "webhook-salla", 600, 60);
   if (!ipLimit.allowed) return new NextResponse("Rate limit exceeded", { status: 429 });
 

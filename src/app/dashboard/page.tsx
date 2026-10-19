@@ -47,7 +47,7 @@ export default async function DashboardOverviewPage() {
       tx.contact.count({ where: { tenantId } }),
       tx.message.count({ where: { tenantId, direction: "OUTBOUND" } }),
       tx.subscription.findUnique({ where: { tenantId }, include: { plan: true } }),
-      tx.integration.findMany({ where: { tenantId } }),
+      tx.integration.findMany({ where: { tenantId, provider: { not: "WHATSAPP_QR" } } }),
       tx.conversation.findMany({
         where: { tenantId },
         orderBy: { lastMessageAt: "desc" },

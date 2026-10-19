@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { IntegrationProvider } from "@prisma/client";
 import { superAdminDb } from "@/lib/db";
-import { checkIpRateLimit } from "@/lib/rateLimit";
+import { checkIpRateLimit, clientIp } from "@/lib/rateLimit";
 import { buildEmbeddedSummary, introspectEmbeddedToken, issueEmbeddedSession } from "@/lib/integrations/salla/embedded";
 
 function maskEmail(email: string): string {
@@ -14,7 +14,7 @@ function maskEmail(email: string): string {
  * الحالات: linked (جلسة + ملخص) | awaiting_confirmation (طلب ربط ببريد آخر لم يُؤكَّد) | not_linked.
  */
 export async function POST(req: NextRequest) {
-  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  const ip = clientIp(req.headers);
   if (!(await checkIpRateLimit(ip, "salla-embedded-session", 60, 60)).allowed) {
     return NextResponse.json({ error: "طلبات كثيرة" }, { status: 429 });
   }

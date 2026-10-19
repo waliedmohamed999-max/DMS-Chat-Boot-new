@@ -39,7 +39,7 @@ export default async function BillingPage() {
       withTenant(tenantId, (tx) => tx.approvalRequest.findFirst({ where: { tenantId, type: "CUSTOM_PLAN", status: "PENDING" } })),
       withTenant(tenantId, (tx) => tx.paymentMethod.findUnique({ where: { tenantId } })),
       withTenant(tenantId, (tx) => tx.user.count({ where: { tenantId, isActive: true } })),
-      withTenant(tenantId, (tx) => tx.integration.count({ where: { tenantId, provider: { in: ["META_WHATSAPP", "WHATSAPP_QR"] }, status: "CONNECTED" } })),
+      withTenant(tenantId, (tx) => tx.integration.count({ where: { tenantId, provider: { in: ["D360DIALOG", "META_WHATSAPP"] }, status: "CONNECTED" } })),
       withTenant(tenantId, (tx) => tx.chatbotFlow.count({ where: { tenantId, status: "PUBLISHED" } })),
     ]);
 

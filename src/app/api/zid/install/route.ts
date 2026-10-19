@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { checkIpRateLimit } from "@/lib/rateLimit";
+import { checkIpRateLimit, clientIp } from "@/lib/rateLimit";
 import { getZidConfig } from "@/lib/integrations/zid/config";
 import { zidAuthorizeUrl } from "@/lib/integrations/zid/api";
 import { createZidOAuthState } from "@/lib/integrations/zid/install";
@@ -9,7 +9,7 @@ import { createZidOAuthState } from "@/lib/integrations/zid/install";
  * لصفحة تفويض زد (OAuth) — بعد الموافقة يعود التاجر إلى /api/zid/oauth/callback ومعه الرمز.
  */
 export async function GET(req: NextRequest) {
-  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  const ip = clientIp(req.headers);
   if (!(await checkIpRateLimit(ip, "zid-install", 60, 60)).allowed) return new NextResponse("Rate limit exceeded", { status: 429 });
   const config = await getZidConfig();
   if (!config.clientId || !config.clientSecret) {

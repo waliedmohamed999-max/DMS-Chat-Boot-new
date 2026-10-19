@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { superAdminDb } from "@/lib/db";
-import { checkIpRateLimit } from "@/lib/rateLimit";
+import { checkIpRateLimit, clientIp } from "@/lib/rateLimit";
 import { consumeOAuthState } from "@/lib/integrations/oauthState";
 import { appBaseUrl } from "@/lib/integrations/zid/api";
 import { consumeZidOAuthState, handleZidOAuthCallback, type ZidOAuthState } from "@/lib/integrations/zid/install";
@@ -14,7 +14,7 @@ import { issueZidAppSession } from "@/lib/integrations/zid/appSession";
  */
 export async function GET(req: NextRequest) {
   const base = appBaseUrl();
-  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  const ip = clientIp(req.headers);
   if (!(await checkIpRateLimit(ip, "zid-oauth-callback", 60, 60)).allowed) return new NextResponse("Rate limit exceeded", { status: 429 });
 
   const code = req.nextUrl.searchParams.get("code");

@@ -290,7 +290,7 @@ export async function forceResetInternalStaffPassword(userId: string): Promise<T
     const setupExpiresAt = new Date(Date.now() + 7 * 24 * 3600 * 1000);
 
     await superAdminDb.$transaction(async (tx) => {
-      await tx.user.update({ where: { id: userId }, data: { passwordHash: placeholderHash } });
+      await tx.user.update({ where: { id: userId }, data: { passwordHash: placeholderHash, sessionsValidFrom: new Date() } });
       await tx.accountSetupToken.deleteMany({ where: { userId, usedAt: null } });
       await tx.accountSetupToken.create({ data: { userId, tokenHash: setupTokenHash, expiresAt: setupExpiresAt } });
       await tx.auditLog.create({

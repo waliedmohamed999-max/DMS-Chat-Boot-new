@@ -84,7 +84,7 @@ export async function buildEmbeddedSummary(tenantId: string): Promise<EmbeddedSu
       tx.contact.count({ where: { tenantId, source: "SALLA_SYNC" } }),
       tx.product.count({ where: { tenantId, externalSource: "SALLA" } }),
       tx.conversation.count({ where: { tenantId, status: { in: ["NEW", "NEEDS_REPLY"] } } }),
-      tx.integration.count({ where: { tenantId, provider: { in: ["META_WHATSAPP", "WHATSAPP_QR"] }, status: "CONNECTED" } }),
+      tx.integration.count({ where: { tenantId, provider: { in: ["D360DIALOG", "META_WHATSAPP"] }, status: "CONNECTED" } }),
     ])
   );
   // حساب أُنشئ من تثبيت سلة ولم يُستخدم رابط تحديد كلمة المرور بعد ⇐ لم يسجّل دخولاً أبداً.

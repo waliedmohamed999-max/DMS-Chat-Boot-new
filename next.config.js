@@ -1,5 +1,8 @@
 /** @type {import('next').NextConfig} */
 
+// 'unsafe-eval' لازم لوضع التطوير فقط (إعادة التحميل السريع) — بناء الإنتاج لا يحتاجه، وإزالته تضيّق أثر أي XSS.
+const SCRIPT_SRC = process.env.NODE_ENV === "production" ? "script-src 'self' 'unsafe-inline'" : "script-src 'self' 'unsafe-inline' 'unsafe-eval'";
+
 // CSP بلا nonce (Next.js App Router بلا middleware مخصّص لهذا) يتطلب 'unsafe-inline'/'unsafe-eval'
 // لسكربتات Next.js نفسها (hydration + HMR في التطوير) — نفس التوصية الرسمية لـNext.js لإعداد CSP
 // بدون بنية nonce كاملة. img-src يسمح https: عمداً (لا يقتصر على 'self'): عقدة "رسالة" في الشات بوت
@@ -11,7 +14,7 @@
 // للاختبار الفعلي، اكتُشف عند بناء نسخة التاجر التي تستخدم نفس النمط بالضبط).
 const CSP = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+  SCRIPT_SRC,
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: https:",
   "font-src 'self' data:",
@@ -31,7 +34,7 @@ const CSP = [
 // المتصفح تلقائياً عند وجودها).
 const EMBED_CSP = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+  SCRIPT_SRC,
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: https:",
   "font-src 'self' data:",

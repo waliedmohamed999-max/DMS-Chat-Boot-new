@@ -13,12 +13,7 @@ import { writeAuditLog } from "@/lib/audit";
 import { connectMetaManually, subscribeMetaWebhook } from "@/lib/integrations/meta/connection";
 import { sallaInstallUrl } from "@/lib/integrations/salla/api";
 
-/**
- * زد/سلة فقط تمرّان هنا (Meta لها معالج Embedded Signup خاص، وWhatsApp QR له لوحة مسح رمز خاصة —
- * راجع الشرط `!isMeta && !isWhatsappQr` في page.tsx الذي يُظهر هذا الزر أصلاً). في وضع Sandbox: ربط
- * فوري محاكى كما كان دائماً. في وضع Live: تحويل حقيقي فعلي لصفحة تفويض OAuth الحقيقية للمزوّد —
- * الاستكمال الفعلي يحدث لاحقاً في `/api/integrations/{provider}/callback` بعد رجوع المستخدم منها.
- */
+/** Connect supported official integrations through their authorization flow. */
 export async function connectIntegration(provider: IntegrationProvider) {
   const session = await requireTenantSession();
   requireEffectivePermission(session.user.permissions, "integrations.manage");

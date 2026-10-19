@@ -6,7 +6,7 @@ import { headers } from "next/headers";
 import { superAdminDb } from "@/lib/db";
 import { getPlatformSettings } from "@/lib/platformSettings";
 import { slugify } from "@/lib/slug";
-import { checkTenantRateLimit } from "@/lib/rateLimit";
+import { checkTenantRateLimit, clientIp } from "@/lib/rateLimit";
 import { resolveReferralAffiliateId } from "@/lib/affiliates/referralCapture";
 import { getCountryConfig } from "@/lib/billing/countryConfig";
 import { z } from "zod";
@@ -43,7 +43,7 @@ export async function registerTenant(
 
   // تسجيل تاجر عام بلا مصادقة مسبقة — بلا هذا الحد كان بالإمكان إغراق مركز الموافقات وقاعدة
   // البيانات بحسابات وهمية بلا أي عائق، خلافاً لبقية النماذج العامة المشابهة (تواصل معنا، طلب شراكة).
-  const ip = (await headers()).get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  const ip = clientIp(await headers());
   const rateLimit = await checkTenantRateLimit(ip, "register-tenant", 5, 3600);
   if (!rateLimit.allowed) {
     return { error: "عدد محاولات تسجيل كبير جداً من عنوانك الحالي — حاول مرة أخرى بعد ساعة." };

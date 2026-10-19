@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { clsx } from "clsx";
+import { ChevronDown } from "lucide-react";
+import { NavigationIcon, isNavigationActive } from "./NavigationIcon";
 
 export type NavItem = {
   href: string;
@@ -31,14 +33,28 @@ export function Sidebar({
   const pathname = usePathname();
   const [mounted, setMounted] = useState(false);
   const [imgFailed, setImgFailed] = useState(false);
+  const [openSection, setOpenSection] = useState<string | null>(null);
+  const isAdmin = items.some((item) => item.href === "/admin");
+  const sections = isAdmin
+    ? [
+        { title: "المتابعة والعمليات", keys: ["admin", "approvals", "tenants", "leads", "chats", "health", "monitoring"] },
+        { title: "الفوترة والتكاملات", keys: ["billing", "plans", "numbers", "wallets", "messaging", "migration", "setup", "salla", "zid"] },
+        { title: "إدارة المنصة", keys: [] },
+      ]
+    : [
+        { title: "مساحة العمل", keys: ["dashboard", "inbox", "contacts", "orders"] },
+        { title: "التواصل والأتمتة", keys: ["chatbot", "ai-agent", "website-chat", "campaigns", "templates"] },
+        { title: "إدارة المتجر", keys: [] },
+      ];
+  const assigned = sections.flatMap((section) => section.keys);
 
   // لا يُعرَض <img> إلا بعد اكتمال التركيب على العميل (mount) — تفادياً لسباق حقيقي بين فشل تحميل
   // الصورة (404) واكتمال hydration React الذي قد يُفوِّت حدث onError تماماً إن حدث الفشل قبله.
   useEffect(() => setMounted(true), []);
 
   return (
-    <aside className="hidden h-screen w-64 flex-col border-l border-white/5 bg-navy-950 px-3 py-4 lg:flex">
-      <div className="mb-6 flex items-center gap-2.5 px-2">
+    <aside className="workspace-sidebar hidden h-full min-h-0 w-72 shrink-0 flex-col border-l border-white/5 bg-navy-950 lg:flex" aria-label={isAdmin ? "تنقل إدارة المنصة" : "تنقل المتجر"}>
+      <div className="sidebar-brand flex shrink-0 items-center gap-3 border-b border-white/5 px-5 py-5">
         {mounted && logoUrl && !imgFailed ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -55,22 +71,64 @@ export function Sidebar({
             {brandInitial}
           </div>
         )}
-        <span className="truncate text-sm font-bold text-white">{brandName}</span>
+        <div className="min-w-0">
+          <span className="block text-sm font-bold leading-6 text-white" title={brandName}>{brandName}</span>
+          <span className="mt-0.5 block text-[11px] text-slate-500">{isAdmin ? "لوحة إدارة المنصة" : "لوحة تحكم المتجر"}</span>
+        </div>
       </div>
 
-      <nav className="flex-1 space-y-1 overflow-y-auto">
-        {items.map((item) => {
-          const active = pathname === item.href || pathname?.startsWith(item.href + "/");
+      <nav className="min-h-0 flex-1 space-y-2 overflow-y-auto px-3 py-5" aria-label="القائمة الرئيسية">
+        {sections.map((section, index) => {
+          const sectionItems = items.filter((item) => {
+            const key = item.href.split("/").at(-1)!;
+            return section.keys.length ? section.keys.includes(key) : !assigned.includes(key);
+          });
+          if (!sectionItems.length) return null;
+          const open = openSection === section.title;
+          const currentItem = sectionItems.find((item) => isNavigationActive(pathname, item.href));
+          const panelId = `sidebar-section-${index}`;
+          return <div key={section.title}
+            onMouseEnter={() => setOpenSection(section.title)}
+            onFocus={(event) => {
+              if (event.target.matches(":focus-visible")) setOpenSection(section.title);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                event.currentTarget.querySelector("button")?.focus();
+                setOpenSection(null);
+              }
+            }}
+          >
+            <button type="button"
+              className={clsx("sidebar-section-trigger flex min-h-12 w-full items-center gap-3 rounded-xl px-3 py-3 text-right text-sm font-semibold", currentItem && "sidebar-section-current")}
+              aria-expanded={open}
+              aria-controls={panelId}
+              onClick={() => setOpenSection(section.title)}
+            >
+              <NavigationIcon href={sectionItems[0]!.href} className="h-[18px] w-[18px] shrink-0" />
+              <span className="min-w-0 flex-1">
+                <span className="block">{section.title}</span>
+                {currentItem && !open && <span className="mt-1 block text-[11px] font-normal text-accent-400">{currentItem.label}</span>}
+              </span>
+              <ChevronDown aria-hidden="true" className={clsx("h-4 w-4 shrink-0 transition-transform motion-reduce:transition-none", open && "rotate-180")} />
+            </button>
+            <div id={panelId} hidden={!open} className="mr-3 mt-1 space-y-1 border-r border-white/10 pr-2 pb-2">
+        {sectionItems.map((item) => {
+          const active = isNavigationActive(pathname, item.href);
           return (
-            <Link key={item.href} href={item.href} className={clsx("nav-link", active && "nav-link-active")}>
-              <span className="text-base">{item.icon}</span>
-              <span>{item.label}</span>
+            <Link key={item.href} href={item.href} aria-current={active ? "page" : undefined} className={clsx("nav-link sidebar-link", active && "nav-link-active")}>
+              <NavigationIcon href={item.href} className="h-[18px] w-[18px] shrink-0" />
+              <span className="flex-1">{item.label}</span>
+              {active && <span className="sidebar-active-dot h-1.5 w-1.5 shrink-0 rounded-full bg-accent-500" aria-hidden="true" />}
             </Link>
           );
         })}
+            </div>
+          </div>;
+        })}
       </nav>
 
-      {footer}
+      {footer && <div className="sidebar-footer shrink-0 border-t border-white/5 px-3 pb-4">{footer}</div>}
     </aside>
   );
 }

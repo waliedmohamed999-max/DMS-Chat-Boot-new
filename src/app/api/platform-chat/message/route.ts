@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { checkIpRateLimit } from "@/lib/rateLimit";
+import { checkIpRateLimit, clientIp } from "@/lib/rateLimit";
 import { processPlatformChatMessage } from "@/lib/platformChat";
 
 export async function POST(req: NextRequest) {
   // حد بعنوان IP قبل أي تحقّق أو كتابة قاعدة بيانات (نفس نمط webhooks الموثَّق في lib/rateLimit.ts) —
   // طبقة منفصلة عن حدّي الجلسة/العام داخل generatePlatformChatReply نفسها (تحمي استدعاء LLM تحديداً)،
   // هذه هنا تحمي حتى مجرد كتابة PlatformChatMessage في القاعدة من إغراق مباشر.
-  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || req.headers.get("x-real-ip") || "unknown";
+  const ip = clientIp(req.headers);
   const ipLimit = await checkIpRateLimit(ip, "platform-chat-message", 30, 60);
   if (!ipLimit.allowed) {
     return NextResponse.json({ error: "عدد رسائل كبير جداً من عنوانك الحالي — حاول مرة أخرى بعد قليل" }, { status: 429 });

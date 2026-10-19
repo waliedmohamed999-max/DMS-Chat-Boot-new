@@ -15,8 +15,8 @@ export function BarChart({ data }: { data: { label: string; amountSar: number }[
           const y = height - barHeight;
           return (
             <g key={`${d.label}-${i}`}>
-              <rect x={x} y={y} width={barWidth} height={barHeight} rx={3} fill="#6D5EF8" />
-              <text x={x + barWidth / 2} y={height + 16} textAnchor="middle" fontSize="9" fill="#94A3B8">
+              <rect x={x} y={y} width={barWidth} height={barHeight} rx={3} fill="var(--chart-primary, #6D5EF8)" />
+              <text x={x + barWidth / 2} y={height + 16} textAnchor="middle" fontSize="9" fill="var(--chart-label, #94A3B8)">
                 {d.label.slice(0, 3)}
               </text>
             </g>
