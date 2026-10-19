@@ -387,7 +387,7 @@ export function CampaignWizard({
 
         {stepKey === "trigger" && (
           <div className="space-y-4">
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <button
                 onClick={() => setTriggerEvent("ABANDONED_CART")}
                 className={`rounded-xl border p-4 text-right ${triggerEvent === "ABANDONED_CART" ? "border-accent-500 bg-accent-500/10" : "border-white/10 hover:bg-white/5"}`}
@@ -401,6 +401,13 @@ export function CampaignWizard({
               >
                 <p className="font-semibold text-white">😴 عميل غير نشط</p>
                 <p className="mt-1 text-xs text-slate-400">ترسل تلقائياً لأي عميل بلا أي محادثة منذ عدد الأيام المحدد.</p>
+              </button>
+              <button
+                onClick={() => setTriggerEvent("NEW_CUSTOMER")}
+                className={`rounded-xl border p-4 text-right ${triggerEvent === "NEW_CUSTOMER" ? "border-accent-500 bg-accent-500/10" : "border-white/10 hover:bg-white/5"}`}
+              >
+                <p className="font-semibold text-white">👋 ترحيب بعميل جديد</p>
+                <p className="mt-1 text-xs text-slate-400">ترسل مرة واحدة لكل عميل جديد يصل من متجرك على سلة/زد بعد تفعيل الحملة.</p>
               </button>
             </div>
 
@@ -496,7 +503,7 @@ export function CampaignWizard({
               ) : (
                 <div className="rounded-lg border border-white/5 bg-navy-900 p-3 text-sm">
                   <p className="text-slate-400">الحدث المُشغِّل</p>
-                  <p className="font-medium text-white">{triggerEvent === "ABANDONED_CART" ? "سلة متروكة" : `عميل غير نشط منذ ${inactiveDays} يوم`}</p>
+                  <p className="font-medium text-white">{triggerEvent === "ABANDONED_CART" ? "سلة متروكة" : triggerEvent === "NEW_CUSTOMER" ? "ترحيب بعميل جديد من المتجر" : `عميل غير نشط منذ ${inactiveDays} يوم`}</p>
                 </div>
               )}
               <div className="rounded-lg border border-white/5 bg-navy-900 p-3 text-sm">

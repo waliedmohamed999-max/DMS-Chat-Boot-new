@@ -85,6 +85,8 @@ export async function previewTriggerMatchCount(triggerEvent: TriggerEvent, confi
       const cutoff = new Date(Date.now() - TRIGGER_ABANDONED_CART_LOOKBACK_DAYS * 86400000);
       return tx.order.count({ where: { tenantId, status: "ABANDONED_CART", recoveryMessageSentAt: null, createdAt: { gte: cutoff } } });
     }
+    // ترحيب العملاء الجدد يستهدف فقط من يصل بعد إنشاء الحملة — لا مرشحين حاليين بالتعريف.
+    if (triggerEvent === "NEW_CUSTOMER") return 0;
     const inactiveDays = config.inactiveDays ?? 14;
     const cutoff = new Date(Date.now() - inactiveDays * 86400000);
     return tx.contact.count({ where: { tenantId, marketingOptIn: true, conversations: { none: { lastMessageAt: { gte: cutoff } } } } });

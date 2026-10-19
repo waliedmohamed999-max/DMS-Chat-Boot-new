@@ -12,7 +12,7 @@ import { ORDER_STATUSES_ORDERED } from "@/lib/orders/labels";
 
 export default async function NewCampaignPage(
   props: {
-    searchParams: Promise<{ duplicateFrom?: string; audienceTagId?: string; orderStatus?: string; orderWithinDays?: string }>;
+    searchParams: Promise<{ duplicateFrom?: string; audienceTagId?: string; orderStatus?: string; orderWithinDays?: string; trigger?: string }>;
   }
 ) {
   const searchParams = await props.searchParams;
@@ -49,6 +49,9 @@ export default async function NewCampaignPage(
       triggerEvent: duplicateSource.triggerEvent ?? undefined,
       inactiveDays: (duplicateSource.triggerConfigJson as { inactiveDays?: number } | null)?.inactiveDays,
     };
+  } else if (searchParams.trigger === "ABANDONED_CART" || searchParams.trigger === "NEW_CUSTOMER") {
+    // قادم من صفحة ربط سلة ("تفعيل" رسالة الاسترداد/الترحيب) — حملة آلية بالحدث المختار مسبقاً.
+    initialValues = { type: "TRIGGERED", triggerEvent: searchParams.trigger };
   } else if (searchParams.audienceTagId) {
     // قادم من "إضافة كجمهور مباشر لحملة جديدة" في إجراءات جهات الاتصال الجماعية — نفس آلية
     // "شريحة مخصصة" الموجودة أصلاً، بلا أي تعديل على منطق المعالج نفسه.

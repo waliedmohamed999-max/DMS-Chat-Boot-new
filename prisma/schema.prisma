@@ -50,6 +50,7 @@ enum TenantJoinSource {
   DIRECT_REGISTER // تسجيل مباشر عبر نموذج /register العام
   PARTNER_APPLICATION // عبر نظام طلبات الشركاء العام (/partners/apply) بعد اعتماد فريق المبيعات
   MANUAL_ADMIN
+  SALLA_APP // أُنشئ تلقائياً عند تثبيت تطبيق DMS من متجر تطبيقات سلة (app.store.authorize)
 }
 
 model Tenant {
@@ -867,6 +868,7 @@ enum AudienceType {
 enum TriggerEvent {
   ABANDONED_CART // طلب Order بحالة ABANDONED_CART لم تُرسل له رسالة استرداد بعد
   CUSTOMER_INACTIVE // جهة اتصال بلا أي تفاعل محادثة منذ عدد أيام محدد في triggerConfigJson.inactiveDays
+  NEW_CUSTOMER // عميل جديد وصل من متجر مربوط (سلة/زد) بعد تفعيل الحملة — رسالة ترحيب مرة واحدة لكل عميل
 }
 
 model Campaign {
@@ -1142,6 +1144,7 @@ model WebhookLog {
   signatureValid Boolean
   processedAt    DateTime?
   errorMessage   String?
+  dedupeKey      String?             @unique // SHA-256 للجسم الخام — سلة تعيد إرسال نفس الحدث حتى 3 مرات؛ يمنع معالجته مرتين
   createdAt      DateTime            @default(now())
 
   @@index([tenantId, provider])

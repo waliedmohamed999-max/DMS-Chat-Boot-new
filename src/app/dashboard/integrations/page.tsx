@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { requireTenantSession } from "@/lib/session";
 import { withTenant } from "@/lib/db";
 import { hasEffectivePermission } from "@/lib/rbac";
@@ -95,6 +96,12 @@ export default async function IntegrationsPage(props: { searchParams: Promise<Se
               )}
               {integration?.lastError && (
                 <p className="mb-2 rounded bg-danger-500/10 px-2 py-1 text-xs text-danger-500">{integration.lastError}</p>
+              )}
+
+              {provider === "SALLA" && (
+                <Link href="/dashboard/integrations/salla" className="mb-2 text-xs font-semibold text-accent-400 hover:underline">
+                  إدارة ربط سلة والرسائل التلقائية ←
+                </Link>
               )}
 
               {isWhatsappQr && integration?.status === "CONNECTED" && (

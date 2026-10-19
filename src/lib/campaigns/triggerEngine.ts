@@ -65,6 +65,24 @@ export async function scanTriggeredCampaigns(tenantId: string, onlyCampaignId?: 
           await tx.campaignRecipient.create({ data: { campaignId: campaign.id, contactId: contact.id, status: "PENDING" } });
           newContactIds.push(contact.id);
         }
+      } else if (campaign.triggerEvent === "NEW_CUSTOMER") {
+        // عملاء وصلوا من متجر مربوط (سلة/زد) بعد إنشاء الحملة فقط — لا ترحيب بأثر رجعي لعملاء قدامى
+        // مزامَنين قبل تفعيلها. القيد الفريد (campaignId+contactId) يضمن رسالة واحدة لكل عميل.
+        const candidates = await tx.contact.findMany({
+          where: {
+            tenantId,
+            source: { in: ["SALLA_SYNC", "ZID_SYNC"] },
+            createdAt: { gte: campaign.createdAt },
+            marketingOptIn: true,
+            campaignRecipients: { none: { campaignId: campaign.id } },
+          },
+          select: { id: true },
+        });
+
+        for (const contact of candidates) {
+          await tx.campaignRecipient.create({ data: { campaignId: campaign.id, contactId: contact.id, status: "PENDING" } });
+          newContactIds.push(contact.id);
+        }
       }
 
       if (newContactIds.length > 0) {

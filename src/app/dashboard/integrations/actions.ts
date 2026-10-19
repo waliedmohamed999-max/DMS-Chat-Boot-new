@@ -11,6 +11,7 @@ import { withTenant } from "@/lib/db";
 import { requireEffectivePermission } from "@/lib/rbac";
 import { writeAuditLog } from "@/lib/audit";
 import { connectMetaManually, subscribeMetaWebhook } from "@/lib/integrations/meta/connection";
+import { sallaInstallUrl } from "@/lib/integrations/salla/api";
 
 /**
  * زد/سلة فقط تمرّان هنا (Meta لها معالج Embedded Signup خاص، وWhatsApp QR له لوحة مسح رمز خاصة —
@@ -23,6 +24,11 @@ export async function connectIntegration(provider: IntegrationProvider) {
   requireEffectivePermission(session.user.permissions, "integrations.manage");
 
   const adapter = getIntegrationAdapter(provider);
+
+  // سلة بالنمط السهل: الربط = تثبيت التطبيق من متجر سلة، والرموز تصل لاحقاً عبر الـwebhook — لا علاقة
+  // له بوضع Sandbox العام للمنصة (التطبيق حقيقي متى ضُبط رقمه).
+  const sallaUrl = provider === "SALLA" ? sallaInstallUrl() : null;
+  if (sallaUrl) redirect(sallaUrl);
 
   if (await isSandboxMode()) {
     await adapter.handleAuthorizationCallback(session.user.tenantId, "sandbox-code");
@@ -54,6 +60,7 @@ export async function disconnectIntegration(provider: IntegrationProvider) {
   });
 
   revalidatePath("/dashboard/integrations");
+  if (provider === IntegrationProvider.SALLA) revalidatePath("/dashboard/integrations/salla");
 }
 
 export async function connectMetaManualAction(input: { wabaId: string; phoneNumberId: string; accessToken: string }): Promise<{ success: boolean; error?: string }> {
@@ -108,4 +115,5 @@ export async function resyncIntegration(provider: IntegrationProvider) {
   }
 
   revalidatePath("/dashboard/integrations");
+  if (provider === IntegrationProvider.SALLA) revalidatePath("/dashboard/integrations/salla");
 }

@@ -28,6 +28,7 @@ const RECIPIENT_STATUS_LABELS: Record<string, { label: string; className: string
 const TRIGGER_EVENT_LABELS: Record<string, string> = {
   ABANDONED_CART: "🛒 سلة متروكة",
   CUSTOMER_INACTIVE: "😴 عميل غير نشط",
+  NEW_CUSTOMER: "👋 ترحيب بعميل جديد",
 };
 
 function pct(part: number, total: number): string {
