@@ -41,6 +41,13 @@ async function moyasarFetch<T = any>(path: string, init: RequestInit = {}): Prom
   return body as T;
 }
 
+/** فحص صحة المفتاح السري (لصفحة جاهزية الربط) — طلب قراءة فقط لا ينشئ شيئاً. */
+export async function pingMoyasar(): Promise<{ mode: "test" | "live" | "unknown" }> {
+  await moyasarFetch(`/invoices?per=1`);
+  const key = config().secretKey ?? "";
+  return { mode: key.startsWith("sk_test_") ? "test" : key.startsWith("sk_live_") ? "live" : "unknown" };
+}
+
 export type MoyasarInvoice = { id: string; status: string; amount: number; currency: string; url?: string; metadata?: Record<string, string> | null };
 
 export async function createRechargeInvoice(input: {

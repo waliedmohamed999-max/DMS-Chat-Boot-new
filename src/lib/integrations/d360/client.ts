@@ -47,6 +47,13 @@ async function partnerFetch<T = any>(path: string, init: RequestInit = {}): Prom
   return body as T;
 }
 
+/** فحص اتصال حساب الشريك (لصفحة جاهزية الربط): يجلب أول قناة فقط ويعيد إجمالي القنوات إن توفر. */
+export async function pingD360Partner(): Promise<{ channels: number | null }> {
+  const body = await partnerFetch(`/channels?limit=1`);
+  const total = typeof body?.total === "number" ? body.total : Array.isArray(body?.partner_channels) ? body.partner_channels.length : null;
+  return { channels: total };
+}
+
 export type D360ChannelInfo = {
   channelId: string;
   phoneNumber: string | null;

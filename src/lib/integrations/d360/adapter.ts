@@ -2,6 +2,7 @@ import crypto from "crypto";
 import { IntegrationProvider } from "@prisma/client";
 import type { IntegrationAdapter, MessageAttachment, SendMessageResult, SendOptions, SyncResult } from "@/lib/integrations/types";
 import { withTenant } from "@/lib/db";
+import { buildWhatsAppPayload } from "@/lib/integrations/whatsappPayload";
 import { decryptSecret, encryptSecret } from "@/lib/crypto";
 import { attachMessageId, chargeMessage, InsufficientWalletBalanceError, maybeNotifyLowBalance, MessageRateMissingError, refundMessage } from "@/lib/billing/wallet";
 import {
@@ -10,34 +11,6 @@ import {
 
 function appBaseUrl(): string {
   return process.env.NEXTAUTH_URL || "http://localhost:3000";
-}
-
-/** نفس شكل حمولة Meta Cloud API (360dialog يمرّرها كما هي): نص، زر رابط، وسائط، أو قالب معتمد. */
-function buildPayload(to: string, body: string, attachment?: MessageAttachment, options?: SendOptions): Record<string, unknown> {
-  if (options?.template) {
-    const params = options.template.bodyParams ?? [];
-    return {
-      messaging_product: "whatsapp", recipient_type: "individual", to, type: "template",
-      template: {
-        name: options.template.name,
-        language: { code: options.template.language },
-        ...(params.length ? { components: [{ type: "body", parameters: params.map((text) => ({ type: "text", text })) }] } : {}),
-      },
-    };
-  }
-  if (attachment?.kind === "link") {
-    return {
-      messaging_product: "whatsapp", recipient_type: "individual", to, type: "interactive",
-      interactive: { type: "cta_url", body: { text: body }, action: { name: "cta_url", parameters: { display_text: attachment.text.slice(0, 20), url: attachment.url } } },
-    };
-  }
-  if (attachment?.kind === "media") {
-    return {
-      messaging_product: "whatsapp", recipient_type: "individual", to, type: attachment.mediaType,
-      [attachment.mediaType]: { link: attachment.url, caption: body || undefined, filename: attachment.mediaType === "document" ? attachment.filename : undefined },
-    };
-  }
-  return { messaging_product: "whatsapp", recipient_type: "individual", to, type: "text", text: { body } };
 }
 
 async function findIntegration(tenantId: string) {
@@ -73,6 +46,9 @@ export async function connectD360Channel(tenantId: string, channelId: string) {
       create: { tenantId, provider: IntegrationProvider.D360DIALOG, ...data },
     })
   );
+  // تاجر قديم على Meta المباشر ربط رقمه عبر 360dialog — تُسجَّل خطوة النقل (استيراد متأخر لتفادي حلقة استيراد مع registry).
+  const { markMigrationD360Connected } = await import("@/lib/integrations/migration");
+  await markMigrationD360Connected(tenantId).catch((err) => console.error("⚠️ تعذّر تحديث حالة النقل:", err instanceof Error ? err.message : err));
   return channel;
 }
 
@@ -133,7 +109,7 @@ export const d360Adapter: IntegrationAdapter = {
       throw err;
     }
 
-    const result = await sendD360Message(decryptSecret(integration.encryptedAccessToken), buildPayload(phoneE164.replace(/^\+/, ""), body, attachment, options));
+    const result = await sendD360Message(decryptSecret(integration.encryptedAccessToken), buildWhatsAppPayload(phoneE164.replace(/^\+/, ""), body, attachment, options));
     if (!result.ok) {
       await refundMessage(usageId, result.error ?? "فشل الإرسال");
       return { success: false, error: result.error, errorCode: "PROVIDER_ERROR" };

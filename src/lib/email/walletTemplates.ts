@@ -28,3 +28,14 @@ export function walletRechargeReceiptEmail(input: { to: string; name: string; am
     html: `<p>مرحباً ${escapeHtml(input.name)}،</p><p>تم شحن محفظة رسائل واتساب في DMS Tech بمبلغ <strong>${input.amount.toFixed(2)} ر.س</strong>. الرصيد الحالي: <strong>${input.balance.toFixed(2)} ر.س</strong>.</p><p style="font-size:12px;color:#64748b">مرجع الدفع: <span dir="ltr">${escapeHtml(input.reference)}</span></p><p><a href="${url}">سجل الحركات</a></p>`,
   };
 }
+
+/** دعوة تاجر على ربط Meta المباشر (القديم) لنقل رقمه إلى واتساب الرسمي عبر DMS (360dialog). */
+export function migrationInviteEmail(input: { to: string; name: string }): EmailInput {
+  const url = `${baseUrl()}/dashboard/integrations`;
+  return {
+    to: input.to,
+    subject: "انقل رقم واتساب متجرك إلى واتساب الرسمي عبر DMS Tech",
+    text: `مرحباً ${input.name}،\n\nنقلنا ربط واتساب في DMS Tech إلى شريك واتساب الرسمي 360dialog: لا حاجة لبطاقة دفع في Meta، والرسائل تُدفع من محفظة مسبقة الدفع داخل لوحتك بسعر واضح لكل رسالة.\n\nنفس رقمك ونفس محادثاتك وقوالبك — النقل يتم بخطوات قليلة من صفحة التكاملات، ويبقى ربطك الحالي يعمل حتى تكتمل.\n\nابدأ من: ${url}`,
+    html: `<p>مرحباً ${escapeHtml(input.name)}،</p><p>نقلنا ربط واتساب في DMS Tech إلى شريك واتساب الرسمي <strong>360dialog</strong>: لا حاجة لبطاقة دفع في Meta، والرسائل تُدفع من <strong>محفظة مسبقة الدفع</strong> داخل لوحتك بسعر واضح لكل رسالة.</p><p>نفس رقمك ونفس محادثاتك وقوالبك — النقل يتم بخطوات قليلة من صفحة التكاملات، ويبقى ربطك الحالي يعمل حتى تكتمل.</p><p><a href="${url}" style="display:inline-block;background:#6d5ef8;color:#ffffff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:bold">ابدأ النقل</a></p>`,
+  };
+}

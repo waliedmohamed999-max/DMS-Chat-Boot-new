@@ -8,6 +8,8 @@ import { connectIntegration, disconnectIntegration, resyncIntegration } from "./
 import { MetaConnectionWizard, ConnectionHealthPanel } from "@/components/dashboard/MetaConnectionPanel";
 import { ConfirmSubmitButton } from "@/components/dashboard/ConfirmSubmitButton";
 import { WhatsappQrConnectPanel } from "@/components/dashboard/WhatsappQrConnectPanel";
+import { getTenantMigration } from "@/lib/integrations/migration";
+import { MigrationCard } from "./MigrationCard";
 
 const STATUS_LABELS: Record<string, { label: string; className: string }> = {
   CONNECTED: { label: "متصل", className: "bg-success-500/10 text-success-500" },
@@ -35,6 +37,7 @@ export default async function IntegrationsPage(props: { searchParams: Promise<Se
   });
 
   const byProvider = new Map(integrations.map((i) => [i.provider, i]));
+  const migration = await getTenantMigration(tenantId);
 
   return (
     <div className="space-y-6">
@@ -52,6 +55,16 @@ export default async function IntegrationsPage(props: { searchParams: Promise<Se
         <div className="rounded-lg border border-danger-500/30 bg-danger-500/10 px-4 py-3 text-sm text-danger-500">
           ❌ فشل الاتصال الحقيقي: {searchParams.zid_error || searchParams.salla_error || searchParams.d360_error}
         </div>
+      )}
+
+      {migration && (
+        <MigrationCard
+          status={migration.state?.status ?? null}
+          metaConnected={migration.metaConnected}
+          d360Connected={migration.d360Connected}
+          d360Ready={migration.d360Ready}
+          hasFeedback={Boolean(migration.state?.feedback)}
+        />
       )}
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">

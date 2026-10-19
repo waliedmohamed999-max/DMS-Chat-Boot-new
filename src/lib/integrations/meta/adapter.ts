@@ -1,5 +1,6 @@
 import { IntegrationProvider } from "@prisma/client";
-import type { IntegrationAdapter, SendMessageResult, SyncResult, MessageAttachment } from "@/lib/integrations/types";
+import type { IntegrationAdapter, SendMessageResult, SyncResult, MessageAttachment, SendOptions } from "@/lib/integrations/types";
+import { buildWhatsAppPayload } from "@/lib/integrations/whatsappPayload";
 import { isSandboxMode, isSandboxModeSync } from "@/lib/integrations/types";
 import { SANDBOX_META_ACCOUNT, sandboxAccountIdFor } from "@/lib/integrations/fixtures";
 import { encryptSecret, decryptSecret, verifyHmacSignature } from "@/lib/crypto";
@@ -88,7 +89,7 @@ export const metaAdapter: IntegrationAdapter = {
     return { ordersSynced: 0, productsSynced: 0 }; // Meta لا يزامن طلبات — هذا من اختصاص Zid/Salla
   },
 
-  async sendMessage(tenantId: string, phoneE164: string, body: string, attachment?: MessageAttachment): Promise<SendMessageResult> {
+  async sendMessage(tenantId: string, phoneE164: string, body: string, attachment?: MessageAttachment, options?: SendOptions): Promise<SendMessageResult> {
     // القرار sandbox أو live هنا خاص **بهذا التاجر تحديداً** (Integration.isSandbox الفعلي لاتصاله
     // هو نفسه)، وليس إعداد المنصة العام — تاجر ربط رقماً حقيقياً فعلياً يجب أن ترسل رسائله حقيقياً
     // حتى لو كانت المنصة عموماً بوضع sandbox لبقية التجار الذين لم يربطوا بعد.
@@ -111,31 +112,9 @@ export const metaAdapter: IntegrationAdapter = {
 
     const accessToken = decryptSecret(integration.encryptedAccessToken);
     const to = phoneE164.replace(/^\+/, "");
-    // رابط (زر CTA URL) ووسائط (صورة/فيديو/ملف) نوعا رسالة مختلفان تماماً حسب توثيق Meta Cloud API
-    // الرسمي — لا يجتمعان في رسالة واحدة (رسالة "تفاعلية" بزر لا تحمل وسائط). خوادم Meta نفسها هي من
-    // تُحمِّل رابط الوسائط (وليس خادمنا)، فلا حاجة لفحص SSRF هنا خلافاً لقناة QR (انظر whatsappQr/adapter.ts).
-    let payload: Record<string, unknown>;
-    if (attachment?.kind === "link") {
-      payload = {
-        messaging_product: "whatsapp", to, type: "interactive",
-        interactive: {
-          type: "cta_url",
-          body: { text: body },
-          action: { name: "cta_url", parameters: { display_text: attachment.text.slice(0, 20), url: attachment.url } },
-        },
-      };
-    } else if (attachment?.kind === "media") {
-      payload = {
-        messaging_product: "whatsapp", to, type: attachment.mediaType,
-        [attachment.mediaType]: {
-          link: attachment.url,
-          caption: body || undefined,
-          filename: attachment.mediaType === "document" ? attachment.filename : undefined,
-        },
-      };
-    } else {
-      payload = { messaging_product: "whatsapp", to, type: "text", text: { body } };
-    }
+    // قالب معتمد (خارج نافذة الـ24 ساعة)، أو زر رابط، أو وسائط، أو نص — خوادم Meta نفسها تُحمِّل رابط
+    // الوسائط (وليس خادمنا)، فلا حاجة لفحص SSRF هنا خلافاً لقناة QR (انظر whatsappQr/adapter.ts).
+    const payload = buildWhatsAppPayload(to, body, attachment, options);
 
     const res = await fetch(`https://graph.facebook.com/v20.0/${integration.externalAccountId}/messages`, {
       method: "POST",
