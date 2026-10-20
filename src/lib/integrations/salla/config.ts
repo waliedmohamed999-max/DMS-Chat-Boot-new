@@ -18,7 +18,8 @@ export type SallaConfig = {
 };
 
 const TTL_MS = 30_000;
-let cache: { value: SallaConfig; at: number } | null = null;
+// على مستوى العملية (globalThis): الحفظ من إجراء الأدمن يمسحها لكل طبقات Next.js لا لنسخة وحدة واحدة فقط.
+const store = globalThis as typeof globalThis & { __dmsSallaConfig?: { value: SallaConfig; at: number } | null };
 
 function envValue(name: string): string | null {
   return process.env[name]?.trim() || null;
@@ -76,15 +77,15 @@ async function load(): Promise<SallaConfig> {
 }
 
 export async function getSallaConfig(): Promise<SallaConfig> {
-  if (cache && Date.now() - cache.at < TTL_MS) return cache.value;
+  if (store.__dmsSallaConfig && Date.now() - store.__dmsSallaConfig.at < TTL_MS) return store.__dmsSallaConfig.value;
   const value = await load();
-  cache = { value, at: Date.now() };
+  store.__dmsSallaConfig = { value, at: Date.now() };
   return value;
 }
 
 /** يُستدعى بعد حفظ الإعدادات من لوحة الأدمن — القيم الجديدة تسري فوراً في هذه العملية. */
 export function invalidateSallaConfig() {
-  cache = null;
+  store.__dmsSallaConfig = null;
 }
 
 /**
@@ -92,7 +93,7 @@ export function invalidateSallaConfig() {
  * (getAuthorizationUrl في واجهة الـadapter). المتصل يستدعي getSallaConfig() قبلها لتسخين الذاكرة.
  */
 export function sallaConfigCached(): Pick<SallaConfig, "appId" | "clientId" | "clientSecret"> {
-  if (cache) return cache.value;
+  if (store.__dmsSallaConfig) return store.__dmsSallaConfig.value;
   return { appId: envValue("SALLA_APP_ID"), clientId: envValue("SALLA_CLIENT_ID"), clientSecret: envValue("SALLA_CLIENT_SECRET") };
 }
 

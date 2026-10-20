@@ -201,6 +201,8 @@ export async function applyParsedMetaWebhook(tenantId: string, parsed: ParsedMet
         data: {
           tenantId, conversationId: conversation.id, direction: "INBOUND", senderType: "CONTACT",
           type: msg.type, body: msg.body, mediaUrl: msg.mediaUrl, mediaMimeType: msg.mediaMimeType,
+          // وسائط حقيقية: يُحفظ معرّفها لدى المزوّد فقط وتُعرض عبر /api/inbox/media/{id} (بلا تخزين ملفات).
+          providerMediaId: msg.mediaUrl ? null : msg.metaMediaId ?? null,
           latitude: msg.latitude, longitude: msg.longitude, quotedMessageId: quotedMessage?.id,
           waMessageId: msg.waMessageId, createdAt: msg.timestamp,
         },

@@ -12,6 +12,7 @@ import { requireEffectivePermission } from "@/lib/rbac";
 import { writeAuditLog } from "@/lib/audit";
 import { connectMetaManually, subscribeMetaWebhook } from "@/lib/integrations/meta/connection";
 import { sallaInstallUrl } from "@/lib/integrations/salla/api";
+import { getPlatformSecrets } from "@/lib/platformSecrets";
 
 /** Connect supported official integrations through their authorization flow. */
 export async function connectIntegration(provider: IntegrationProvider) {
@@ -19,6 +20,7 @@ export async function connectIntegration(provider: IntegrationProvider) {
   requireEffectivePermission(session.user.permissions, "integrations.manage");
 
   const adapter = getIntegrationAdapter(provider);
+  await getPlatformSecrets(); // تسخين مفاتيح الحسابات (لوحة الأدمن) قبل بناء رابط الربط المتزامن
 
   // سلة بالنمط السهل: الربط = تثبيت التطبيق من متجر سلة، والرموز تصل لاحقاً عبر الـwebhook — لا علاقة
   // له بوضع Sandbox العام للمنصة (التطبيق حقيقي متى ضُبط رقمه).

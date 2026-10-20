@@ -16,7 +16,8 @@ export type ZidConfig = {
 };
 
 const TTL_MS = 30_000;
-let cache: { value: ZidConfig; at: number } | null = null;
+// على مستوى العملية (globalThis): الحفظ من إجراء الأدمن يمسحها لكل طبقات Next.js لا لنسخة وحدة واحدة فقط.
+const store = globalThis as typeof globalThis & { __dmsZidConfig?: { value: ZidConfig; at: number } | null };
 
 const envValue = (name: string) => process.env[name]?.trim() || null;
 
@@ -64,18 +65,18 @@ async function load(): Promise<ZidConfig> {
 }
 
 export async function getZidConfig(): Promise<ZidConfig> {
-  if (cache && Date.now() - cache.at < TTL_MS) return cache.value;
+  if (store.__dmsZidConfig && Date.now() - store.__dmsZidConfig.at < TTL_MS) return store.__dmsZidConfig.value;
   const value = await load();
-  cache = { value, at: Date.now() };
+  store.__dmsZidConfig = { value, at: Date.now() };
   return value;
 }
 
 export function invalidateZidConfig() {
-  cache = null;
+  store.__dmsZidConfig = null;
 }
 
 /** قراءة متزامنة لآخر قيم مُحمَّلة — لمسار getAuthorizationUrl المتزامن (المتصل يسخّن الذاكرة قبلها). */
 export function zidConfigCached(): Pick<ZidConfig, "appId" | "clientId" | "clientSecret"> {
-  if (cache) return cache.value;
+  if (store.__dmsZidConfig) return store.__dmsZidConfig.value;
   return { appId: envValue("ZID_APP_ID"), clientId: envValue("ZID_CLIENT_ID"), clientSecret: envValue("ZID_CLIENT_SECRET") };
 }

@@ -52,7 +52,7 @@ export default async function ConversationThreadPage(props: { params: Promise<{ 
   const status = STATUS_LABELS[conversation.status]!;
   const messages: MessageBubbleData[] = conversation.messages.map((m) => ({
     id: m.id, direction: m.direction, senderType: m.senderType, type: m.type, body: m.body,
-    mediaUrl: m.mediaUrl, latitude: m.latitude, longitude: m.longitude, status: m.status,
+    mediaUrl: m.mediaUrl ?? (m.providerMediaId ? `/api/inbox/media/${m.id}` : null), latitude: m.latitude, longitude: m.longitude, status: m.status,
     failureReason: m.failureReason, createdAt: m.createdAt.toISOString(), quotedMessage: m.quotedMessage,
   }));
 

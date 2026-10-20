@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { testSetupConnection, type TestResult } from "./actions";
 
-export function TestConnectionButton({ kind }: { kind: "core" | "d360" | "moyasar" }) {
+export function TestConnectionButton({ kind }: { kind: "core" | "d360" | "moyasar" | "email" }) {
   const [result, setResult] = useState<TestResult | null>(null);
   const [pending, start] = useTransition();
   return (
@@ -14,7 +14,7 @@ export function TestConnectionButton({ kind }: { kind: "core" | "d360" | "moyasa
         onClick={() => start(async () => setResult(await testSetupConnection(kind)))}
         className="btn-secondary text-xs disabled:opacity-50"
       >
-        {pending ? "جارٍ الاختبار…" : "اختبار الاتصال"}
+        {pending ? "جارٍ الاختبار…" : kind === "email" ? "إرسال بريد تجريبي لي" : "اختبار الاتصال"}
       </button>
       {result && <span className={`text-xs ${result.ok ? "text-success-500" : "text-danger-500"}`}>{result.detail}</span>}
     </div>

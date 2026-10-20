@@ -2,6 +2,7 @@ import { superAdminDb } from "@/lib/db";
 import { getPlatformSettings } from "@/lib/platformSettings";
 import { getSallaConfig } from "@/lib/integrations/salla/config";
 import { getZidConfig } from "@/lib/integrations/zid/config";
+import { getPlatformSecrets, type SecretSource } from "@/lib/platformSecrets";
 
 /**
  * جاهزية الحسابات الخارجية للإطلاق الحقيقي (صفحة /admin/setup): ما المضبوط في البيئة، وما الروابط التي
@@ -11,7 +12,7 @@ import { getZidConfig } from "@/lib/integrations/zid/config";
 export type CheckLevel = "ok" | "warn" | "missing";
 export type Check = { label: string; level: CheckLevel; detail?: string };
 export type SetupSection = {
-  key: "core" | "email" | "d360" | "moyasar" | "salla" | "zid" | "pricing";
+  key: "core" | "email" | "d360" | "moyasar" | "ai" | "salla" | "zid" | "pricing";
   title: string;
   description: string;
   checks: Check[];
@@ -23,6 +24,10 @@ export type SetupSection = {
 function sallaCheck(label: string, source: "admin" | "env" | "none", optional = false): Check {
   if (source === "none") return { label, level: optional ? "warn" : "missing", detail: optional ? "اختياري — غير مضبوط" : "غير مضبوط" };
   return { label, level: "ok", detail: source === "admin" ? "من لوحة الأدمن" : "من متغيرات البيئة" };
+}
+
+function sourceCheck(label: string, source: SecretSource, optional = false): Check {
+  return sallaCheck(label, source, optional);
 }
 
 function env(name: string): string {
@@ -44,11 +49,13 @@ export async function getSetupSections(): Promise<SetupSection[]> {
   const settings = await getPlatformSettings();
   const salla = await getSallaConfig();
   const zid = await getZidConfig();
+  const secrets = await getPlatformSecrets();
   const rates = await superAdminDb.messageRate.findMany({ where: { country: { in: ["SA", "*"] } } });
   const hasRate = (category: string) => rates.some((r) => r.category === category);
 
   const httpsOk = base.startsWith("https://") && !base.includes("localhost");
-  const worker = env("RUN_WORKER_IN_PROCESS") === "1";
+  const worker = env("RUN_WORKER_IN_PROCESS") !== "0";
+  const moyasarKey = secrets.MOYASAR_SECRET_KEY ?? "";
 
   return [
     {
@@ -61,33 +68,32 @@ export async function getSetupSections(): Promise<SetupSection[]> {
         present("NEXTAUTH_SECRET"),
         present("ENCRYPTION_KEY", "ENCRYPTION_KEY (تشفير مفاتيح القنوات)"),
         present("REDIS_URL", "REDIS_URL (الطوابير)"),
-        { label: "RUN_WORKER_IN_PROCESS", level: worker ? "ok" : "warn", detail: worker ? "العامل يعمل داخل التطبيق" : "اضبطه 1 على Hostinger (لا عامل منفصل) وإلا لن تُرسل الحملات" },
+        { label: "عامل الخلفية (الحملات والرسائل التلقائية)", level: worker ? "ok" : "warn", detail: worker ? "يعمل داخل التطبيق تلقائياً" : "معطّل (RUN_WORKER_IN_PROCESS=0) — يلزم تشغيل npm run worker منفصلاً" },
         { label: "وضع التكاملات", level: settings.integrationsMode === "live" ? "ok" : "warn", detail: settings.integrationsMode === "live" ? "Live" : "Sandbox — حوّله إلى Live من إعدادات المنصة عند الإطلاق" },
       ],
     },
     {
       key: "email",
       title: "البريد الإلكتروني (SMTP)",
-      description: "دعوات الفريق، استعادة كلمة المرور، إيصالات الشحن، تنبيهات الرصيد ودعوات النقل.",
-      testable: false,
+      description: "دعوات الفريق، استعادة كلمة المرور، الإيصالات والتنبيهات — يُضبط من النموذج أدناه.",
+      testable: true,
       checks: [
-        { label: "EMAIL_PROVIDER", level: env("EMAIL_PROVIDER") === "smtp" ? "ok" : "missing", detail: env("EMAIL_PROVIDER") === "smtp" ? "smtp" : "اضبطه smtp" },
-        present("SMTP_HOST"),
-        present("SMTP_USER"),
-        present("SMTP_PASS"),
-        present("EMAIL_FROM", undefined, true),
+        { label: "مزوّد البريد", level: secrets.EMAIL_PROVIDER === "smtp" ? "ok" : "missing", detail: secrets.EMAIL_PROVIDER === "smtp" ? "SMTP" : "الرسائل تُطبع في السجل فقط — اختر SMTP" },
+        sourceCheck("خادم SMTP", secrets.sources.SMTP_HOST),
+        sourceCheck("اسم المستخدم", secrets.sources.SMTP_USER),
+        sourceCheck("كلمة المرور", secrets.sources.SMTP_PASS),
+        sourceCheck("المُرسِل (From)", secrets.sources.EMAIL_FROM, true),
       ],
-      docs: "/admin/settings",
     },
     {
       key: "d360",
       title: "360dialog — واتساب الرسمي",
-      description: "حساب Partner على hub.360dialog.com. بدونه زر ربط الرقم يعمل تجريبياً فقط.",
+      description: "حساب Partner على hub.360dialog.com — يُضبط من النموذج أدناه. بدونه زر ربط الرقم يعمل تجريبياً فقط.",
       testable: true,
       checks: [
-        present("D360_PARTNER_ID"),
-        present("D360_API_KEY", "D360_API_KEY (مفتاح Partner API)"),
-        present("D360_WEBHOOK_SECRET", "D360_WEBHOOK_SECRET (توقيع webhooks الشريك)"),
+        sourceCheck("Partner ID", secrets.sources.D360_PARTNER_ID),
+        sourceCheck("مفتاح Partner API", secrets.sources.D360_API_KEY),
+        sourceCheck("سر توقيع webhooks الشريك", secrets.sources.D360_WEBHOOK_SECRET),
       ],
       urls: [
         { label: "Redirect URL (Integrated Onboarding)", value: `${base}/api/integrations/d360/callback` },
@@ -97,15 +103,25 @@ export async function getSetupSections(): Promise<SetupSection[]> {
     {
       key: "moyasar",
       title: "Moyasar — شحن المحافظ",
-      description: "حساب تاجر على dashboard.moyasar.com. ابدأ بمفتاح sk_test_ ثم استبدله بـ sk_live_ بعد التفعيل.",
+      description: "حساب تاجر على dashboard.moyasar.com — لشحن المحافظ ودفع اشتراكات الباقات. ابدأ بمفتاح sk_test_ ثم sk_live_.",
       testable: true,
       checks: [
-        env("MOYASAR_SECRET_KEY")
-          ? { label: "MOYASAR_SECRET_KEY", level: env("MOYASAR_SECRET_KEY").startsWith("sk_live_") ? "ok" : "warn", detail: env("MOYASAR_SECRET_KEY").startsWith("sk_live_") ? "مفتاح حقيقي" : "مفتاح اختبار — لا دفع حقيقي" }
-          : { label: "MOYASAR_SECRET_KEY", level: "missing", detail: "غير مضبوط — زر الشحن معطّل" },
-        present("MOYASAR_WEBHOOK_SECRET", "MOYASAR_WEBHOOK_SECRET (طبقة تحقق إضافية)", true),
+        moyasarKey
+          ? { label: "المفتاح السري", level: moyasarKey.startsWith("sk_live_") ? "ok" : "warn", detail: moyasarKey.startsWith("sk_live_") ? "مفتاح حقيقي" : "مفتاح اختبار — لا دفع حقيقي" }
+          : { label: "المفتاح السري", level: "missing", detail: "غير مضبوط — الشحن والاشتراكات المدفوعة معطّلة" },
+        sourceCheck("سر الإشعارات (طبقة تحقق إضافية)", secrets.sources.MOYASAR_WEBHOOK_SECRET, true),
       ],
       urls: [{ label: "Webhook URL (اختياري — يُرسل تلقائياً مع كل فاتورة)", value: `${base}/api/billing/wallet/moyasar/callback` }],
+    },
+    {
+      key: "ai",
+      title: "الذكاء الاصطناعي (OpenAI)",
+      description: "الموظف الذكي، تفريغ الرسائل الصوتية، وشات الموقع — المفتاح يُضبط من إعدادات المنصة العامة.",
+      testable: false,
+      checks: [
+        settings.openAiApiKey ? { label: "مفتاح OpenAI", level: "ok", detail: `النموذج: ${settings.aiModel}` } : { label: "مفتاح OpenAI", level: "missing", detail: "غير مضبوط — الردود الذكية والتفريغ الصوتي معطّلة" },
+      ],
+      docs: "/admin/settings",
     },
     {
       key: "salla",

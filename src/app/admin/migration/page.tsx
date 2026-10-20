@@ -48,7 +48,7 @@ export default async function AdminMigrationPage() {
         </p>
       </div>
 
-      {!isD360Configured() && (
+      {!(await isD360Configured()) && (
         <div className="card border border-warning-500/30 p-4 text-sm text-warning-500">
           حساب شريك 360dialog غير مضبوط بعد — التاجر المدعو لن يستطيع إكمال الربط. اضبطه أولاً من{" "}
           <Link href="/admin/setup" className="underline">جاهزية الربط</Link>.

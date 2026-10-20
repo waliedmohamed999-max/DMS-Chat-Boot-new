@@ -4,6 +4,7 @@ import { superAdminDb } from "@/lib/db";
 import { checkIpRateLimit, clientIp } from "@/lib/rateLimit";
 import { timingSafeStringEqual } from "@/lib/crypto";
 import { applyPaidSubscriptionInvoice } from "@/lib/billing/subscriptionCheckout";
+import { moyasarWebhookSecret } from "@/lib/billing/moyasar";
 
 /**
  * إشعار Moyasar عند دفع فاتورة اشتراك (callback_url). الجسم يُستخدم لمعرفة معرّف الفاتورة فقط — الحالة
@@ -14,7 +15,7 @@ export async function POST(req: NextRequest) {
     return new NextResponse("Rate limit exceeded", { status: 429 });
   }
   const body = await req.json().catch(() => null);
-  const secret = process.env.MOYASAR_WEBHOOK_SECRET?.trim();
+  const secret = await moyasarWebhookSecret();
   if (secret && !(typeof body?.secret_token === "string" && timingSafeStringEqual(body.secret_token, secret))) {
     return new NextResponse("Invalid token", { status: 401 });
   }

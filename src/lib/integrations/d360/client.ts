@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import { getPlatformSecrets, platformSecretsSync } from "@/lib/platformSecrets";
 
 /**
  * عميل 360dialog (مزوّد حلول أعمال واتساب — BSP):
@@ -8,18 +9,32 @@ import crypto from "crypto";
  * docs.360dialog.com/partner/partner-api/overview
  */
 
+/** الإعدادات من آخر قيم محمَّلة (لوحة الأدمن ثم البيئة) — استخدم getD360Config() في المسارات غير المتزامنة. */
 export function d360Config() {
+  const s = platformSecretsSync();
   return {
-    partnerId: process.env.D360_PARTNER_ID?.trim() || null,
-    partnerApiKey: process.env.D360_API_KEY?.trim() || null,
-    webhookSecret: process.env.D360_WEBHOOK_SECRET?.trim() || null,
+    partnerId: s.D360_PARTNER_ID,
+    partnerApiKey: s.D360_API_KEY,
+    webhookSecret: s.D360_WEBHOOK_SECRET,
     hubUrl: (process.env.D360_HUB_URL || "https://hub.360dialog.io/api/v2").replace(/\/$/, ""),
     messagingUrl: (process.env.D360_MESSAGING_URL || "https://waba-v2.360dialog.io").replace(/\/$/, ""),
     onboardingUrl: (process.env.D360_ONBOARDING_URL || "https://app.360dialog.com/onboarding").replace(/\/$/, ""),
   };
 }
 
-export function isD360Configured(): boolean {
+/** يحمّل المفاتيح من لوحة الأدمن (ذاكرة 30 ثانية) ثم يعيد الإعدادات. */
+export async function getD360Config() {
+  await getPlatformSecrets();
+  return d360Config();
+}
+
+export async function isD360Configured(): Promise<boolean> {
+  const c = await getD360Config();
+  return Boolean(c.partnerId && c.partnerApiKey);
+}
+
+/** نسخة متزامنة لمسار getAuthorizationUrl (الذاكرة مُسخَّنة مسبقاً في connectIntegration). */
+export function isD360ConfiguredSync(): boolean {
   const c = d360Config();
   return Boolean(c.partnerId && c.partnerApiKey);
 }
@@ -32,7 +47,7 @@ export function d360OnboardingUrl(redirectUrl: string, state?: string): string {
 }
 
 async function partnerFetch<T = any>(path: string, init: RequestInit = {}): Promise<T> {
-  const c = d360Config();
+  const c = await getD360Config();
   if (!c.partnerId || !c.partnerApiKey) throw new Error("حساب شريك 360dialog غير مضبوط (D360_PARTNER_ID / D360_API_KEY)");
   const res = await fetch(`${c.hubUrl}/partners/${encodeURIComponent(c.partnerId)}${path}`, {
     ...init,
@@ -115,8 +130,8 @@ export async function sendD360Message(apiKey: string, payload: Record<string, un
 }
 
 /** توقيع webhooks الشريك: x-360dialog-signature = HMAC-SHA256(الجسم الخام، سر المنصة) — مقارنة بزمن ثابت. */
-export function verifyD360PartnerSignature(rawBody: string, signature: string | null): boolean {
-  const secret = d360Config().webhookSecret;
+export async function verifyD360PartnerSignature(rawBody: string, signature: string | null): Promise<boolean> {
+  const secret = (await getD360Config()).webhookSecret;
   if (!secret || !signature) return false;
   const expected = crypto.createHmac("sha256", secret).update(rawBody).digest("hex");
   const a = Buffer.from(expected);

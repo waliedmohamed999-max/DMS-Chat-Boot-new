@@ -3,7 +3,7 @@ import { Prisma } from "@prisma/client";
 import { superAdminDb } from "@/lib/db";
 import { checkIpRateLimit, clientIp } from "@/lib/rateLimit";
 import { timingSafeStringEqual } from "@/lib/crypto";
-import { applyPaidRechargeInvoice } from "@/lib/billing/moyasar";
+import { applyPaidRechargeInvoice, moyasarWebhookSecret } from "@/lib/billing/moyasar";
 
 /**
  * إشعار Moyasar عند دفع فاتورة شحن (callback_url). جسم الطلب يُستخدم فقط لمعرفة معرّف الفاتورة — الحالة
@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
   if (!(await checkIpRateLimit(ip, "moyasar-callback", 120, 60)).allowed) return new NextResponse("Rate limit exceeded", { status: 429 });
 
   const body = await req.json().catch(() => null);
-  const secret = process.env.MOYASAR_WEBHOOK_SECRET?.trim();
+  const secret = await moyasarWebhookSecret();
   if (secret && !(typeof body?.secret_token === "string" && timingSafeStringEqual(body.secret_token, secret))) {
     return new NextResponse("Invalid token", { status: 401 });
   }

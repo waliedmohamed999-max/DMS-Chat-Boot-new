@@ -103,7 +103,7 @@ export async function startSubscriptionCheckout(input: { tenantId: string; userI
   const cancelPending = (reason: string) =>
     withTenant(tenantId, (tx) => tx.invoice.update({ where: { id: prepared.invoiceId }, data: { status: "CANCELLED", failureReason: reason } })).catch(() => {});
 
-  if (!isMoyasarConfigured()) {
+  if (!(await isMoyasarConfigured())) {
     await cancelPending("بوابة الدفع غير مضبوطة");
     return { ok: false, error: "الدفع الإلكتروني للاشتراكات غير مفعّل بعد — تواصل مع فريق DMS Tech لإتمام الاشتراك." };
   }

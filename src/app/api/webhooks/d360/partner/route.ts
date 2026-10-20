@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
   const payload = (() => { try { return JSON.parse(rawBody); } catch { return { raw: rawBody.slice(0, 2000) }; } })();
   const eventType = String(payload?.type ?? payload?.event ?? "unknown");
 
-  if (!verifyD360PartnerSignature(rawBody, req.headers.get("x-360dialog-signature"))) {
+  if (!(await verifyD360PartnerSignature(rawBody, req.headers.get("x-360dialog-signature")))) {
     await superAdminDb.webhookLog.create({
       data: { provider: "D360DIALOG", eventType, payloadJson: payload, signatureValid: false, errorMessage: "Invalid signature" },
     });

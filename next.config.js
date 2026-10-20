@@ -91,6 +91,14 @@ const ZID_APP_HEADERS = SALLA_EMBEDDED_HEADERS.map((h) =>
   h.key === "Content-Security-Policy" ? { ...h, value: CSP.replace("frame-ancestors 'none'", "frame-ancestors https://web.zid.sa https://*.zid.sa https://zid.sa") } : h
 );
 
+const MEDIA_HEADERS = [
+  { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains; preload" },
+  { key: "X-Content-Type-Options", value: "nosniff" },
+  { key: "X-Frame-Options", value: "DENY" },
+  { key: "Referrer-Policy", value: "no-referrer" },
+  { key: "Content-Security-Policy", value: "default-src 'none'; sandbox; frame-ancestors 'none'" },
+];
+
 const nextConfig = {
   distDir: process.env.NEXT_DIST_DIR || ".next",
   reactStrictMode: true,
@@ -114,10 +122,12 @@ const nextConfig = {
       // استبعاد صريح لمسار /embed عبر regex سلبي (وليس الاعتماد على ترتيب استبدال رؤوس متشابهة
       // المفتاح بين قاعدتين متطابقتين لنفس المسار) — واضح ومضمون بصرف النظر عن تفاصيل دمج Next.js
       // الداخلية لرؤوس متعددة القواعد المتطابقة.
-      { source: "/:path((?!embed/|salla/app|zid/app).*)", headers: SECURITY_HEADERS },
+      { source: "/:path((?!embed/|salla/app|zid/app|api/inbox/media/).*)", headers: SECURITY_HEADERS },
       { source: "/embed/:path*", headers: EMBED_HEADERS },
       { source: "/salla/app", headers: SALLA_EMBEDDED_HEADERS },
       { source: "/zid/app", headers: ZID_APP_HEADERS },
+      // وسائط العملاء (محتوى خارجي غير موثوق): sandbox يمنع تنفيذ أي محتوى حتى لو فُتح مباشرة في المتصفح.
+      { source: "/api/inbox/media/:id", headers: MEDIA_HEADERS },
     ];
   },
 };

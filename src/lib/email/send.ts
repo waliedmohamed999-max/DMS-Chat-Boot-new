@@ -1,4 +1,6 @@
+import crypto from "crypto";
 import nodemailer from "nodemailer";
+import { getPlatformSecrets } from "@/lib/platformSecrets";
 import type { Transporter } from "nodemailer";
 
 /**
@@ -13,50 +15,61 @@ export type EmailInput = { to: string; subject: string; text: string; html: stri
 
 declare global {
   // eslint-disable-next-line no-var
-  var __smtpTransporter: Transporter | undefined;
+  var __smtpTransporter: { key: string; transporter: Transporter } | undefined;
 }
 
-function smtpTransporter(): Transporter {
-  if (global.__smtpTransporter) return global.__smtpTransporter;
+type MailConfig = { provider: string; host: string | null; port: number; user: string | null; pass: string | null; from: string | null };
 
-  const host = process.env.SMTP_HOST;
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
-  if (!host || !user || !pass) {
-    throw new Error('EMAIL_PROVIDER="smtp" يتطلب ضبط SMTP_HOST وSMTP_USER وSMTP_PASS.');
+/** إعدادات البريد من لوحة الأدمن (جاهزية الربط) ثم متغيرات البيئة — lib/platformSecrets.ts. */
+async function mailConfig(): Promise<MailConfig> {
+  const s = await getPlatformSecrets();
+  return {
+    provider: s.EMAIL_PROVIDER || "console",
+    host: s.SMTP_HOST, port: Number(s.SMTP_PORT || 465), user: s.SMTP_USER, pass: s.SMTP_PASS, from: s.EMAIL_FROM,
+  };
+}
+
+/** ناقل SMTP مُعاد الاستخدام — يُعاد إنشاؤه تلقائياً إن تغيّرت الإعدادات من اللوحة. */
+function smtpTransporter(c: MailConfig): Transporter {
+  if (!c.host || !c.user || !c.pass) {
+    throw new Error("البريد عبر SMTP يتطلب الخادم واسم المستخدم وكلمة المرور (لوحة الأدمن ← جاهزية الربط).");
   }
-  const port = Number(process.env.SMTP_PORT || 465);
-
-  global.__smtpTransporter = nodemailer.createTransport({
-    host,
-    port,
-    secure: port === 465,
-    auth: { user, pass },
+  const key = crypto.createHash("sha256").update([c.host, c.port, c.user, c.pass].join("|")).digest("hex");
+  if (global.__smtpTransporter?.key === key) return global.__smtpTransporter.transporter;
+  const transporter = nodemailer.createTransport({
+    host: c.host,
+    port: c.port,
+    secure: c.port === 465,
+    auth: { user: c.user, pass: c.pass },
     // مهلات قصيرة صريحة: خادم SMTP بطيء/غير متاح لا يجب أن يعلّق طلب المستخدم (دعوة، موافقة، استعادة كلمة مرور) دقائق.
     connectionTimeout: 10_000,
     greetingTimeout: 10_000,
     socketTimeout: 20_000,
   });
-  return global.__smtpTransporter;
+  global.__smtpTransporter = { key, transporter };
+  return transporter;
 }
 
 export async function sendEmail(input: EmailInput): Promise<void> {
-  const provider = process.env.EMAIL_PROVIDER || "console";
+  const c = await mailConfig();
 
-  if (provider === "console") {
+  if (c.provider === "console") {
     console.log(
-      `📧 [EMAIL:console] إلى: ${input.to} | الموضوع: ${input.subject}\n${"-".repeat(40)}\n${input.text}\n${"-".repeat(40)}`
+      `📧 [EMAIL:console] إلى: ${input.to} | الموضوع: ${input.subject}
+${"-".repeat(40)}
+${input.text}
+${"-".repeat(40)}`
     );
     return;
   }
 
-  if (provider === "smtp") {
-    const from = process.env.EMAIL_FROM || process.env.SMTP_USER;
-    await smtpTransporter().sendMail({ from, to: input.to, subject: input.subject, text: input.text, html: wrapHtml(input.html) });
+  if (c.provider === "smtp") {
+    const from = c.from || c.user || undefined;
+    await smtpTransporter(c).sendMail({ from, to: input.to, subject: input.subject, text: input.text, html: wrapHtml(input.html) });
     return;
   }
 
-  throw new Error(`EMAIL_PROVIDER="${provider}" غير مدعوم — القيم المتاحة: "console" أو "smtp".`);
+  throw new Error(`مزوّد البريد "${c.provider}" غير مدعوم — القيم المتاحة: "console" أو "smtp".`);
 }
 
 /**
@@ -65,13 +78,13 @@ export async function sendEmail(input: EmailInput): Promise<void> {
  * عامة — بلا كشف كلمة المرور. بدونه لا طريقة لمعرفة سبب فشل الإرسال إلا من سجلات الخادم.
  */
 export async function diagnoseEmail(to: string): Promise<{ ok: boolean; detail: string }> {
-  const provider = process.env.EMAIL_PROVIDER || "console";
-  const target = `${process.env.SMTP_USER ?? "(بلا SMTP_USER)"} @ ${process.env.SMTP_HOST ?? "(بلا SMTP_HOST)"}:${process.env.SMTP_PORT || 465}`;
-  if (provider !== "smtp") {
-    return { ok: false, detail: `EMAIL_PROVIDER="${provider}" — الرسائل تُطبع في سجل الخادم فقط ولا تُرسل. اضبطه على smtp.` };
+  const c = await mailConfig();
+  const target = `${c.user ?? "(بلا مستخدم)"} @ ${c.host ?? "(بلا خادم)"}:${c.port}`;
+  if (c.provider !== "smtp") {
+    return { ok: false, detail: `مزوّد البريد "${c.provider}" — الرسائل تُطبع في سجل الخادم فقط ولا تُرسل. اختر SMTP من جاهزية الربط.` };
   }
   try {
-    await smtpTransporter().verify();
+    await smtpTransporter(c).verify();
   } catch (err) {
     global.__smtpTransporter = undefined;
     return { ok: false, detail: `فشل الاتصال/تسجيل الدخول (${target}): ${describeSmtpError(err)}` };

@@ -757,6 +757,9 @@ model Message {
   templateId      String?
   campaignId      String?
   campaign        Campaign?         @relation(fields: [campaignId], references: [id])
+  // معرّف الوسائط لدى مزوّد واتساب (360dialog/Meta) — تُعرض الوسائط عبر /api/inbox/media/{id} بجلبها لحظياً
+  // من المزوّد بصلاحية التاجر، بلا تخزين ملفات على خوادمنا (صالح ~7 أيام في 360dialog و30 في Meta).
+  providerMediaId String?
   waMessageId     String? // معرف رسالة واتساب الفعلي (sandbox أو حقيقي) — يُطابَق به تحديث الحالة الوارد من webhook
   status          MessageStatus? // ذات معنى للرسائل الصادرة فقط (OUTBOUND) — فارغة للرسائل الواردة
   statusUpdatedAt DateTime?
@@ -1351,6 +1354,9 @@ model PlatformSettings {
   encryptedZidClientSecret      String?
   encryptedZidMarketSecret      String? // قيمة الترويسة المخصّصة X-DMS-Zid-Token لأحداث متجر التطبيقات
   zidPlanMapJson                Json?
+  // مفاتيح الحسابات الخارجية المضبوطة من لوحة الأدمن (360dialog، Moyasar، البريد SMTP) — JSON واحد مشفَّر
+  // بـENCRYPTION_KEY (lib/platformSecrets.ts). لا يُعرض أي سر بعد حفظه؛ متغيرات البيئة احتياط لكل حقل.
+  encryptedIntegrationSecrets   String?
   // اسم مزوّد البريد/SMS الفعلي المُهيَّأ — "console" يعني عدم وجود مزوّد حقيقي بعد (طباعة في سجل
   // الخادم فقط، نفس القيد الموثَّق سابقاً في lib/email/send.ts). حقل معلوماتي/تحضيري بحت حتى يُربَط
   // مزوّد حقيقي فعلياً — لا يُغيّر السلوك الفعلي وحده.

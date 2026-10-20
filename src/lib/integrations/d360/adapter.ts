@@ -6,7 +6,7 @@ import { buildWhatsAppPayload } from "@/lib/integrations/whatsappPayload";
 import { decryptSecret, encryptSecret } from "@/lib/crypto";
 import { attachMessageId, chargeMessage, InsufficientWalletBalanceError, maybeNotifyLowBalance, MessageRateMissingError, refundMessage } from "@/lib/billing/wallet";
 import {
-  d360OnboardingUrl, generateD360ChannelApiKey, getD360Channel, isD360Configured, sendD360Message, setD360ChannelWebhook, verifyD360PartnerSignature,
+  d360OnboardingUrl, generateD360ChannelApiKey, getD360Channel, isD360Configured, isD360ConfiguredSync, sendD360Message, setD360ChannelWebhook, verifyD360PartnerSignature,
 } from "./client";
 
 function appBaseUrl(): string {
@@ -60,13 +60,13 @@ export const d360Adapter: IntegrationAdapter = {
   provider: IntegrationProvider.D360DIALOG,
 
   getAuthorizationUrl(tenantId: string, state?: string): string {
-    if (!isD360Configured()) return `/dashboard/integrations?sandbox_connect=D360DIALOG&tenant=${tenantId}`;
+    if (!isD360ConfiguredSync()) return `/dashboard/integrations?sandbox_connect=D360DIALOG&tenant=${tenantId}`;
     return d360OnboardingUrl(`${appBaseUrl()}/api/integrations/d360/callback`, state);
   },
 
   /** الكود هنا = معرّف القناة العائد من صفحة 360dialog (أو "sandbox-code" للربط التجريبي). */
   async handleAuthorizationCallback(tenantId: string, code: string) {
-    if (code === "sandbox-code" || !isD360Configured()) {
+    if (code === "sandbox-code" || !(await isD360Configured())) {
       const externalAccountId = `sandbox-d360-${tenantId.slice(-6)}`;
       const data = {
         status: "CONNECTED" as const, isSandbox: true, externalAccountId, channelId: null, lastError: null,

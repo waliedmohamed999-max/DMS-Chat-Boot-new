@@ -1,4 +1,5 @@
 import { superAdminDb } from "@/lib/db";
+import { getPlatformSecrets } from "@/lib/platformSecrets";
 import { creditWallet } from "@/lib/billing/wallet";
 import { sendEmail } from "@/lib/email/send";
 import { walletRechargeReceiptEmail } from "@/lib/email/walletTemplates";
@@ -11,19 +12,26 @@ import { walletRechargeReceiptEmail } from "@/lib/email/walletTemplates";
  * docs.moyasar.com/creating-invoices
  */
 
-function config() {
+/** المفتاح السري من لوحة الأدمن (جاهزية الربط) ثم متغير البيئة — lib/platformSecrets.ts. */
+async function config() {
+  const s = await getPlatformSecrets();
   return {
-    secretKey: process.env.MOYASAR_SECRET_KEY?.trim() || null,
+    secretKey: s.MOYASAR_SECRET_KEY,
     baseUrl: (process.env.MOYASAR_BASE_URL || "https://api.moyasar.com/v1").replace(/\/$/, ""),
   };
 }
 
-export function isMoyasarConfigured(): boolean {
-  return Boolean(config().secretKey);
+export async function isMoyasarConfigured(): Promise<boolean> {
+  return Boolean((await config()).secretKey);
+}
+
+/** سر إشعارات Moyasar الاختياري (secret_token) — من اللوحة ثم البيئة. */
+export async function moyasarWebhookSecret(): Promise<string | null> {
+  return (await getPlatformSecrets()).MOYASAR_WEBHOOK_SECRET;
 }
 
 async function moyasarFetch<T = any>(path: string, init: RequestInit = {}): Promise<T> {
-  const { secretKey, baseUrl } = config();
+  const { secretKey, baseUrl } = await config();
   if (!secretKey) throw new Error("بوابة الدفع Moyasar غير مضبوطة (MOYASAR_SECRET_KEY)");
   const res = await fetch(`${baseUrl}${path}`, {
     ...init,
@@ -44,7 +52,7 @@ async function moyasarFetch<T = any>(path: string, init: RequestInit = {}): Prom
 /** فحص صحة المفتاح السري (لصفحة جاهزية الربط) — طلب قراءة فقط لا ينشئ شيئاً. */
 export async function pingMoyasar(): Promise<{ mode: "test" | "live" | "unknown" }> {
   await moyasarFetch(`/invoices?per=1`);
-  const key = config().secretKey ?? "";
+  const key = (await config()).secretKey ?? "";
   return { mode: key.startsWith("sk_test_") ? "test" : key.startsWith("sk_live_") ? "live" : "unknown" };
 }
 

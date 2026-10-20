@@ -28,6 +28,8 @@ export type MessageBubbleData = {
 const TRUSTED_MEDIA_HOST_SUFFIXES = ["fbcdn.net", "fbsbx.com", "facebook.com"];
 function isSafeMediaUrl(url: string): boolean {
   if (url.startsWith("data:image/")) return true;
+  // وسائط حقيقية من مزوّد واتساب عبر مسارنا الداخلي المحمي بجلسة التاجر (lib: api/inbox/media).
+  if (/^\/api\/inbox\/media\/[A-Za-z0-9_-]+$/.test(url)) return true;
   try {
     const parsed = new URL(url);
     return (
@@ -54,11 +56,18 @@ function MediaContent({ m }: { m: MessageBubbleData }) {
     );
   }
   if (m.type === "DOCUMENT") {
-    return (
-      <div className="mb-1.5 flex items-center gap-2 rounded-lg bg-black/15 p-2">
+    const safeUrl = m.mediaUrl && isSafeMediaUrl(m.mediaUrl) ? m.mediaUrl : null;
+    const inner = (
+      <>
         <span className="text-xl">📄</span>
         <span className="truncate text-xs">{m.body || "مستند"}</span>
-      </div>
+        {safeUrl && <span className="mr-auto text-[11px] underline opacity-80">تنزيل</span>}
+      </>
+    );
+    return safeUrl ? (
+      <a href={safeUrl} target="_blank" rel="noopener noreferrer" className="mb-1.5 flex items-center gap-2 rounded-lg bg-black/15 p-2 hover:bg-black/25">{inner}</a>
+    ) : (
+      <div className="mb-1.5 flex items-center gap-2 rounded-lg bg-black/15 p-2">{inner}</div>
     );
   }
   if (m.type === "AUDIO") {
@@ -68,6 +77,9 @@ function MediaContent({ m }: { m: MessageBubbleData }) {
           <span className="text-xl">🎙️</span>
           <span>رسالة صوتية</span>
         </div>
+        {m.mediaUrl && isSafeMediaUrl(m.mediaUrl) && m.mediaUrl.startsWith("/api/") && (
+          <audio controls preload="none" src={m.mediaUrl} className="mt-1.5 h-8 w-full max-w-[240px]" />
+        )}
         {m.body && m.body !== "[رسالة صوتية]" && <p className="mt-1 text-xs italic opacity-90">&quot;{m.body}&quot;</p>}
       </div>
     );

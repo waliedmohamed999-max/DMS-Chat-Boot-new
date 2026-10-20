@@ -51,7 +51,7 @@ export async function previewPlanChange(planId: string): Promise<PlanChangePrevi
 
   // اشتراك تجريبي/منتهٍ/متأخر: لا رصيد متبقٍ يُحتسب — المستحق سعر دورة جديدة كاملة (نفس ما يُحصَّل فعلياً
   // في subscriptionCheckout)، وليس صفراً من حساب نسبي على دورة منتهية.
-  if (useHostedCheckout() && needsNewPeriod(subscription)) {
+  if ((await useHostedCheckout()) && needsNewPeriod(subscription)) {
     const nextBillingDate = new Date(Date.now() + PERIOD_DAYS * 24 * 3600 * 1000);
     return {
       success: true, blocked: false, isUpgrade: targetPrice > currentPrice, isDowngrade: targetPrice < currentPrice,
@@ -65,8 +65,8 @@ export async function previewPlanChange(planId: string): Promise<PlanChangePrevi
 export type ChangePlanResult = { success: true; redirectUrl?: string } | { success: false; error: string };
 
 /** الدفع الحقيقي عبر صفحة Moyasar هو المسار الافتراضي؛ المزوّد الوهمي للتطوير فقط بلا Moyasar مضبوط. */
-function useHostedCheckout(): boolean {
-  return isMoyasarConfigured() || !isMockPaymentsAllowed();
+async function useHostedCheckout(): Promise<boolean> {
+  return (await isMoyasarConfigured()) || !isMockPaymentsAllowed();
 }
 
 async function checkoutResult(tenantId: string, userId: string, planId: string, forceRenew = false): Promise<ChangePlanResult> {
@@ -99,7 +99,7 @@ export async function changePlan(planId: string): Promise<ChangePlanResult> {
   const tenantId = session.user.tenantId;
   const marketplaceBilling = await getMarketplaceBilling(tenantId);
   if (marketplaceBilling) return { success: false, error: marketplaceBilledMessage(marketplaceBilling) };
-  if (useHostedCheckout()) return checkoutResult(tenantId, session.user.id, planId);
+  if (await useHostedCheckout()) return checkoutResult(tenantId, session.user.id, planId);
 
   const tenant = await rawDb.tenant.findUniqueOrThrow({ where: { id: tenantId }, select: { country: true } });
   const currency = COUNTRY_TO_CURRENCY[tenant.country];
@@ -290,7 +290,7 @@ export async function retryFailedPayment(invoiceId: string): Promise<ChangePlanR
 
   const invoice = await withTenant(tenantId, (tx) => tx.invoice.findUnique({ where: { id: invoiceId, tenantId } }));
   if (!invoice || invoice.status !== "FAILED") return { success: false, error: "لا توجد فاتورة فاشلة بهذا المعرّف" };
-  if (useHostedCheckout()) {
+  if (await useHostedCheckout()) {
     // لا بطاقات محفوظة للتحصيل التلقائي — "إعادة المحاولة" = تجديد الاشتراك عبر صفحة الدفع الآمنة.
     const marketplaceBilling = await getMarketplaceBilling(tenantId);
     if (marketplaceBilling) return { success: false, error: marketplaceBilledMessage(marketplaceBilling) };

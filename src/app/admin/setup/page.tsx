@@ -3,6 +3,8 @@ import { requireSuperAdminSession } from "@/lib/session";
 import { hasEffectivePermission } from "@/lib/rbac";
 import { getSetupSections, type CheckLevel } from "@/lib/setupReadiness";
 import { CopyField, TestConnectionButton } from "./SetupClient";
+import { AccountForm } from "./AccountForms";
+import { getPlatformSecrets, SECRET_FIELDS, type SecretField } from "@/lib/platformSecrets";
 
 export const metadata = { title: "جاهزية الربط — DMS Tech" };
 export const dynamic = "force-dynamic";
@@ -16,6 +18,13 @@ export default async function SetupReadinessPage() {
     return <div className="card p-8 text-center text-slate-400">ليس لديك صلاحية عرض هذه الصفحة.</div>;
   }
   const sections = await getSetupSections();
+  const secrets = await getPlatformSecrets();
+  // القيم غير السرية المحفوظة من اللوحة فقط تُعرض للتعديل — الأسرار وقيم البيئة لا تُرسل للمتصفح.
+  const formValues: Record<string, string> = {};
+  for (const key of Object.keys(SECRET_FIELDS) as SecretField[]) {
+    if (!SECRET_FIELDS[key].secret && secrets.sources[key] === "admin") formValues[key] = secrets[key] ?? "";
+  }
+  if (!formValues.EMAIL_PROVIDER) formValues.EMAIL_PROVIDER = secrets.EMAIL_PROVIDER === "smtp" ? "smtp" : "console";
   const all = sections.flatMap((s) => s.checks);
   const missing = all.filter((c) => c.level === "missing").length;
   const ready = sections.map((s) => ({ title: s.title, ok: s.checks.every((c) => c.level !== "missing") }));
@@ -25,8 +34,8 @@ export default async function SetupReadinessPage() {
       <div>
         <h1 className="text-xl font-bold text-white">جاهزية الربط</h1>
         <p className="text-sm text-slate-400">
-          كل ما تحتاجه المنصة من حسابات خارجية للإطلاق الحقيقي. المتغيرات تُضاف في Hostinger ← Environment Variables ثم إعادة النشر؛
-          الروابط أدناه تُلصق في لوحة كل مزوّد. الخطوات الكاملة في docs/GO_LIVE.md.
+          اربط كل الحسابات من هنا مباشرة — تُشفَّر المفاتيح وتسري فوراً بلا إعادة نشر، ولا تظهر مجدداً بعد الحفظ. الروابط
+          أدناه تُلصق في لوحة كل مزوّد. متغيرات Hostinger ما زالت مدعومة كاحتياط. الخطوات الكاملة في docs/GO_LIVE.md.
         </p>
       </div>
 
@@ -65,8 +74,9 @@ export default async function SetupReadinessPage() {
               </div>
             )}
             <div className="flex flex-wrap items-center gap-3 border-t border-white/5 pt-3">
-              {s.testable && (s.key === "core" || s.key === "d360" || s.key === "moyasar") && <TestConnectionButton kind={s.key} />}
-              {s.key === "email" && <Link href="/admin/settings" className="text-xs text-accent-400 hover:underline">إرسال بريد تجريبي من إعدادات المنصة ←</Link>}
+              {(s.key === "d360" || s.key === "moyasar" || s.key === "email") && <AccountForm section={s.key} values={formValues} sources={secrets.sources} />}
+              {s.testable && (s.key === "core" || s.key === "d360" || s.key === "moyasar" || s.key === "email") && <TestConnectionButton kind={s.key} />}
+              {s.key === "ai" && <Link href="/admin/settings" className="text-xs text-accent-400 hover:underline">ضبط مفتاح OpenAI من إعدادات المنصة ←</Link>}
               {s.key === "salla" && <Link href="/admin/salla" className="text-xs text-accent-400 hover:underline">ضبط تطبيق سلة ←</Link>}
               {s.key === "zid" && <Link href="/admin/zid" className="text-xs text-accent-400 hover:underline">ضبط تطبيق زد ←</Link>}
               {s.key === "pricing" && <Link href="/admin/messaging" className="text-xs text-accent-400 hover:underline">ضبط الأسعار والهامش ←</Link>}

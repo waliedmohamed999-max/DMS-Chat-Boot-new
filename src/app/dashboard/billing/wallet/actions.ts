@@ -25,7 +25,7 @@ export async function startWalletRecharge(_prev: RechargeResult | null, formData
   const amount = Math.round(Number(raw) * 100) / 100;
   const { walletMinRechargeSar } = await getPlatformSettings();
 
-  if (!isMoyasarConfigured()) return { ok: false, message: "الدفع الإلكتروني غير مفعّل بعد — تواصل مع الدعم للشحن بتحويل بنكي.", amount: raw };
+  if (!(await isMoyasarConfigured())) return { ok: false, message: "الدفع الإلكتروني غير مفعّل بعد — تواصل مع الدعم للشحن بتحويل بنكي.", amount: raw };
   if (!(amount >= walletMinRechargeSar)) return { ok: false, message: `الحد الأدنى للشحن ${walletMinRechargeSar} ر.س`, amount: raw };
   if (amount > MAX_RECHARGE_SAR) return { ok: false, message: `الحد الأقصى للشحنة الواحدة ${MAX_RECHARGE_SAR.toLocaleString("en-US")} ر.س`, amount: raw };
   if (!(await checkTenantRateLimit(tenantId, "wallet-recharge-start", 10, 3600)).allowed) {

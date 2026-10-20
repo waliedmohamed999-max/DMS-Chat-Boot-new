@@ -68,7 +68,7 @@ export default async function WalletPage(props: { searchParams: Promise<{ rechar
         </div>
         <div className="card space-y-4 p-6 lg:col-span-2">
           <h2 className="font-semibold text-white">شحن المحفظة</h2>
-          {canManage ? <RechargeForm minRecharge={settings.walletMinRechargeSar} enabled={isMoyasarConfigured()} /> : <p className="text-sm text-slate-400">الشحن متاح لصاحب الحساب فقط.</p>}
+          {canManage ? <RechargeForm minRecharge={settings.walletMinRechargeSar} enabled={await isMoyasarConfigured()} /> : <p className="text-sm text-slate-400">الشحن متاح لصاحب الحساب فقط.</p>}
         </div>
       </div>
 
