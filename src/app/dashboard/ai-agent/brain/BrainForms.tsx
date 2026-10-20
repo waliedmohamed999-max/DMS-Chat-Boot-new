@@ -3,7 +3,7 @@
 import { useActionState, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
-  addTextKnowledge, addUrlKnowledge, approveSuggestion, deleteKnowledge, deleteQaAction, reindexQas, reprocessKnowledge,
+  addTextKnowledge, addUrlKnowledge, answerGap, approveSuggestion, deleteKnowledge, deleteQaAction, extractQaFromSource, reindexQas, reprocessKnowledge,
   saveBrainSettings, saveQa, testBrain, type BrainActionResult, type BrainTestResult,
 } from "./actions";
 
@@ -212,13 +212,14 @@ export function QaItem({ qa }: { qa: { id: string; question: string; answer: str
   );
 }
 
-export function SuggestionItem({ qa }: { qa: { id: string; question: string; answer: string } }) {
+export function SuggestionItem({ qa }: { qa: { id: string; question: string; answer: string; origin: string } }) {
   const [state, action, pending] = useActionState(approveSuggestion, null);
   const [v, setV] = useState({ question: qa.question, answer: qa.answer });
   const [rejecting, start] = useTransition();
   return (
     <form action={action} className="space-y-2 rounded-lg border border-warning-500/20 bg-warning-500/5 p-3">
       <input type="hidden" name="id" value={qa.id} />
+      <span className="text-[11px] text-slate-500">{qa.origin === "GENERATED" ? "✨ مستخرج بالذكاء الاصطناعي من مصادرك" : "👤 من رد فريقك بعد تحويل"}</span>
       <input name="question" value={v.question} onChange={(e) => setV({ ...v, question: e.target.value })} className="input-field text-sm" />
       <textarea name="answer" value={v.answer} onChange={(e) => setV({ ...v, answer: e.target.value })} rows={2} className="input-field text-sm" />
       <label className="flex items-center gap-2 text-xs text-slate-400">
@@ -233,13 +234,53 @@ export function SuggestionItem({ qa }: { qa: { id: string; question: string; ans
   );
 }
 
+// ========================= فجوات المعرفة =========================
+
+export function GapItem({ gap }: { gap: { question: string; count: number; examples: string[] } }) {
+  const [open, setOpen] = useState(false);
+  const [state, action, pending] = useActionState(answerGap, null);
+  const [answer, setAnswer] = useState("");
+  if (state?.ok) return <div className="rounded-lg bg-success-500/5 p-3 text-xs text-success-500">✅ {gap.question} — {state.message}</div>;
+  return (
+    <div className="rounded-lg bg-white/5 p-3">
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <p className="text-sm text-slate-100">{gap.question}</p>
+          {gap.examples.length > 0 && <p className="mt-1 text-xs text-slate-500">صيغ أخرى: {gap.examples.join(" · ")}</p>}
+        </div>
+        <span className="badge shrink-0 bg-warning-500/10 text-warning-500">{gap.count}×</span>
+      </div>
+      {!open ? (
+        <button type="button" onClick={() => setOpen(true)} className="mt-2 text-xs text-accent-400 hover:underline">✍️ أضف الإجابة</button>
+      ) : (
+        <form action={action} className="mt-2 space-y-2">
+          <input type="hidden" name="question" value={gap.question} />
+          <textarea name="answer" value={answer} onChange={(e) => setAnswer(e.target.value)} required maxLength={2000} rows={2} className="input-field text-sm" placeholder="الجواب الصحيح…" />
+          <label className="flex items-center gap-2 text-xs text-slate-400">
+            <input type="checkbox" name="directReply" defaultChecked className="h-4 w-4" /> رد مباشر عند التطابق
+          </label>
+          <div className="flex items-center gap-3">
+            <button disabled={pending} className="btn-primary text-xs disabled:opacity-50">حفظ في العقل</button>
+            <Result state={state} />
+          </div>
+        </form>
+      )}
+    </div>
+  );
+}
+
 // ========================= المصادر =========================
 
-export function SourceActions({ id, canRefresh }: { id: string; canRefresh: boolean }) {
+export function SourceActions({ id, canRefresh, ready }: { id: string; canRefresh: boolean; ready: boolean }) {
   const [pending, start] = useTransition();
   const [state, setState] = useState<BrainActionResult>(null);
   return (
     <div className="flex flex-wrap items-center justify-end gap-2 text-xs">
+      {ready && (
+        <button type="button" disabled={pending} onClick={() => start(async () => setState(await extractQaFromSource(id)))} className="text-success-500 hover:underline disabled:opacity-50">
+          {pending ? "…" : "✨ استخرج أسئلة"}
+        </button>
+      )}
       <button type="button" disabled={pending} onClick={() => start(async () => setState(await reprocessKnowledge(id)))} className="text-accent-400 hover:underline disabled:opacity-50">
         {canRefresh ? "تحديث من الرابط" : "إعادة الفهرسة"}
       </button>

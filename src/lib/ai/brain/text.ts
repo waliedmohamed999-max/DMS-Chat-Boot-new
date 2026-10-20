@@ -32,7 +32,8 @@ export function tokenize(text: string): string[] {
   return normalizeArabic(text)
     .split(/[^\p{L}\p{N}]+/u)
     .map((w) => (w.length > 4 && w.startsWith("ال") ? w.slice(2) : w))
-    .map((w) => (w.length > 3 && /^(و|ف|ب)ال/.test(w) ? w.slice(3) : w))
+    .map((w) => (w.length > 4 && /^(و|ف|ب|ك)ال/.test(w) ? w.slice(3) : w))
+    .map((w) => (w.length > 4 && w.startsWith("لل") ? w.slice(2) : w)) // للمكيفات ⇐ مكيفات
     .filter((w) => w.length > 1 && !STOPWORDS.has(w));
 }
 

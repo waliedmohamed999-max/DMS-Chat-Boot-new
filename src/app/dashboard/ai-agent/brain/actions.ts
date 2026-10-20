@@ -9,7 +9,7 @@ import { writeAuditLog } from "@/lib/audit";
 import { checkTenantRateLimit } from "@/lib/rateLimit";
 import { getTenantChatbotLimits, isNodeTypeAllowed } from "@/lib/planLimits";
 import {
-  addQa, addTextSource, addUrlSource, backfillQaEmbeddings, BrainError, deleteQa, deleteSource, reprocessSource, updateQa,
+  addQa, addTextSource, addUrlSource, backfillQaEmbeddings, BrainError, deleteQa, deleteSource, generateQaFromSource, reprocessSource, updateQa,
 } from "@/lib/ai/brain/ingest";
 import { invalidateBrainIndex, pickDirectAnswer, searchBrain } from "@/lib/ai/brain/search";
 
@@ -100,6 +100,33 @@ export async function saveQa(_prev: BrainActionResult, formData: FormData): Prom
     await ingestLimit(tenantId);
     await addQa(tenantId, { question, answer, directReply });
     return "تمت إضافة السؤال للعقل";
+  });
+}
+
+/** سد فجوة معرفة: سؤال حقيقي لم يعرفه البوت + جواب صاحب الحساب ⇒ إجابة معتمدة. */
+export async function answerGap(_prev: BrainActionResult, formData: FormData): Promise<BrainActionResult> {
+  return run(async () => {
+    const { tenantId, userId } = await guard();
+    await ingestLimit(tenantId);
+    await addQa(tenantId, {
+      question: String(formData.get("question") ?? ""),
+      answer: String(formData.get("answer") ?? ""),
+      origin: "FROM_REVIEW",
+      directReply: formData.get("directReply") === "on",
+    });
+    await writeAuditLog({ tenantId, userId, action: "ai_brain.gap_answered", targetType: "KnowledgeQa" });
+    return "سُدّت الفجوة — سيجيب البوت عنها من الآن";
+  });
+}
+
+/** ✨ استخراج أسئلة وأجوبة من مصدر بالذكاء الاصطناعي ⇒ مقترحات للمراجعة. */
+export async function extractQaFromSource(sourceId: string): Promise<BrainActionResult> {
+  return run(async () => {
+    const { tenantId, userId } = await guard();
+    if (!(await checkTenantRateLimit(tenantId, "brain-extract", 10, 3600)).allowed) throw new BrainError("استخراجات كثيرة خلال ساعة — حاول لاحقاً");
+    const { created, tokens } = await generateQaFromSource(tenantId, sourceId);
+    await writeAuditLog({ tenantId, userId, action: "ai_brain.qa_extracted", targetType: "KnowledgeSource", targetId: sourceId, metaJson: { created, tokens } });
+    return created ? `✨ اقتُرح ${created} سؤالاً — راجعها في "إجابات مقترحة" أعلى الصفحة` : "لم نجد أسئلة جديدة في هذا المصدر";
   });
 }
 

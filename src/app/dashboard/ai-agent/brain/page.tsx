@@ -5,7 +5,8 @@ import { withTenant } from "@/lib/db";
 import { hasEffectivePermission } from "@/lib/rbac";
 import { getTenantChatbotLimits, isNodeTypeAllowed } from "@/lib/planLimits";
 import { BRAIN_LIMITS, importLegacyFaq } from "@/lib/ai/brain/ingest";
-import { AddKnowledge, BrainSettingsForm, QaItem, ReindexButton, SourceActions, SuggestionItem, TestBrainBox } from "./BrainForms";
+import { AddKnowledge, BrainSettingsForm, GapItem, QaItem, ReindexButton, SourceActions, SuggestionItem, TestBrainBox } from "./BrainForms";
+import { findKnowledgeGaps } from "@/lib/ai/brain/gaps";
 
 export const metadata = { title: "عقل البوت — DMS Tech" };
 export const dynamic = "force-dynamic";
@@ -42,13 +43,14 @@ export default async function BrainPage() {
         where: { tenantId, status: "ACTIVE" }, orderBy: [{ hits: "desc" }, { createdAt: "desc" }], take: 300,
         select: { id: true, question: true, answer: true, directReply: true, hits: true, origin: true, embedding: true },
       }),
-      tx.knowledgeQa.findMany({ where: { tenantId, status: "PENDING" }, orderBy: { createdAt: "desc" }, take: 50, select: { id: true, question: true, answer: true } }),
+      tx.knowledgeQa.findMany({ where: { tenantId, status: "PENDING" }, orderBy: { createdAt: "desc" }, take: 50, select: { id: true, question: true, answer: true, origin: true } }),
       tx.knowledgeSource.aggregate({ where: { tenantId }, _sum: { charCount: true } }),
       tx.aiReplyLog.count({ where: { tenantId, answerSource: "brain", createdAt: { gte: monthStart } } }),
       tx.aiReplyLog.aggregate({ where: { tenantId, answerSource: "llm", handoffTriggered: false, createdAt: { gte: monthStart } }, _count: { _all: true }, _avg: { totalTokens: true } }),
       tx.contactMemory.count({ where: { tenantId } }),
     ]);
-    return { config, sources, qas, pending, chars: chars._sum.charCount ?? 0, brainReplies, llmStats, memories };
+    const gaps = await findKnowledgeGaps(tx, tenantId);
+    return { config, sources, qas, pending, chars: chars._sum.charCount ?? 0, brainReplies, llmStats, memories, gaps };
   });
 
   const avgTokens = Math.round(data.llmStats._avg.totalTokens ?? 0);
@@ -88,9 +90,17 @@ export default async function BrainPage() {
 
       {data.pending.length > 0 && (
         <section className="card space-y-3 p-5">
-          <h2 className="font-bold text-white">💡 إجابات مقترحة من ردود فريقك ({data.pending.length})</h2>
-          <p className="text-xs text-slate-400">أسئلة لم يعرفها البوت فحوّلها، ثم ردّ عليها موظفك. راجع الجواب (احذف أي تفاصيل خاصة بعميل بعينه) ثم اعتمده.</p>
+          <h2 className="font-bold text-white">💡 إجابات مقترحة بانتظار اعتمادك ({data.pending.length})</h2>
+          <p className="text-xs text-slate-400">من ردود فريقك على أسئلة لم يعرفها البوت، أو مستخرجة بالذكاء الاصطناعي من مصادرك. راجع الجواب (واحذف أي تفاصيل خاصة بعميل بعينه) ثم اعتمده.</p>
           <div className="space-y-2">{data.pending.map((q) => <SuggestionItem key={q.id} qa={q} />)}</div>
+        </section>
+      )}
+
+      {data.gaps.length > 0 && (
+        <section className="card space-y-3 p-5">
+          <h2 className="font-bold text-white">🕳️ أسئلة لم يعرفها البوت — آخر 30 يوماً ({data.gaps.length})</h2>
+          <p className="text-xs text-slate-400">أسئلة حقيقية من عملائك حوّلها البوت أو أجاب عنها بثقة منخفضة، مرتّبة بالتكرار. كل إجابة تضيفها تمنع تحويلات قادمة.</p>
+          <div className="grid gap-2 md:grid-cols-2">{data.gaps.map((g) => <GapItem key={g.question} gap={g} />)}</div>
         </section>
       )}
 
@@ -147,12 +157,13 @@ export default async function BrainPage() {
                   <td className="p-2">
                     <p className="text-slate-100">{s.title}</p>
                     {s.sourceUrl && <p className="truncate text-xs text-slate-500" dir="ltr">{s.sourceUrl}</p>}
+                    {s.kind === "URL" && s.refreshedAt && <p className="text-[11px] text-slate-500">🔄 يُحدَّث تلقائياً أسبوعياً · آخر فحص {s.refreshedAt.toLocaleDateString("ar-SA")}</p>}
                     {s.error && <p className={`text-xs ${s.status === "FAILED" ? "text-danger-500" : "text-warning-500"}`}>{s.error}</p>}
                   </td>
                   <td className="p-2 text-xs text-slate-400">{KIND_LABEL[s.kind]}</td>
                   <td className="p-2 text-xs text-slate-400" dir="ltr">{s.charCount.toLocaleString("en")} chars · {s.chunkCount} parts</td>
                   <td className="p-2"><span className={`badge ${STATUS_BADGE[s.status]}`}>{STATUS_LABEL[s.status]}</span></td>
-                  <td className="p-2"><SourceActions id={s.id} canRefresh={s.kind === "URL"} /></td>
+                  <td className="p-2"><SourceActions id={s.id} canRefresh={s.kind === "URL"} ready={s.status === "READY"} /></td>
                 </tr>
               ))}
             </tbody>

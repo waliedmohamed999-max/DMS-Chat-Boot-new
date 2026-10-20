@@ -130,3 +130,20 @@ zatcaWorker.on("failed", (_job, err) => console.error("❌ طابور ZATCA:", e
 new Queue("zatca-queue", { connection: redisConnection })
   .add("scan", {}, { repeat: { every: 5 * 60 * 1000 }, jobId: "recurring-zatca-queue" })
   .catch((err) => console.error("❌ تعذّرت جدولة طابور ZATCA:", err));
+
+/**
+ * عقل البوت: تحديث صفحات الروابط في قواعد معرفة التجار أسبوعياً (يُفحص المستحق كل 6 ساعات، 30 مصدراً لكل
+ * دورة). المحتوى غير المتغيّر لا يُعاد فهرسته.
+ */
+const brainRefreshWorker = new Worker(
+  "brain-url-refresh",
+  async () => (await import("@/lib/ai/brain/ingest")).refreshStaleUrlSources(),
+  { connection: redisConnection, concurrency: 1 }
+);
+brainRefreshWorker.on("completed", (_job, r) => {
+  if (r && (r.updated || r.failed)) console.log(`🧠 تحديث روابط المعرفة: ${r.updated} تغيّر، ${r.unchanged} كما هو، ${r.failed} فشل`);
+});
+brainRefreshWorker.on("failed", (_job, err) => console.error("❌ تحديث روابط المعرفة:", err.message));
+new Queue("brain-url-refresh", { connection: redisConnection })
+  .add("scan", {}, { repeat: { every: 6 * 3600 * 1000 }, jobId: "recurring-brain-url-refresh" })
+  .catch((err) => console.error("❌ تعذّرت جدولة تحديث روابط المعرفة:", err));

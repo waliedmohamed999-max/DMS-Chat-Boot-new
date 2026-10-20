@@ -1,5 +1,7 @@
+import crypto from "crypto";
 import type { KnowledgeQaOrigin, KnowledgeQaStatus, Prisma } from "@prisma/client";
-import { withTenant } from "@/lib/db";
+import { superAdminDb, withTenant } from "@/lib/db";
+import { getOpenAiClient } from "@/lib/ai/openaiClient";
 import { fetchPageWithSsrfProtection } from "@/lib/chatbot/safeFetch";
 import { embedTexts, packVector } from "./embeddings";
 import { invalidateBrainIndex } from "./search";
@@ -65,11 +67,13 @@ async function indexSource(tenantId: string, sourceId: string, text: string) {
     });
     await tx.knowledgeSource.update({
       where: { id: sourceId },
-      data: { status: "READY", error: warning, charCount: text.length, chunkCount: chunks.length },
+      data: { status: "READY", error: warning, charCount: text.length, chunkCount: chunks.length, contentHash: hashText(text), refreshedAt: new Date() },
     });
   });
   invalidateBrainIndex(tenantId);
 }
+
+const hashText = (text: string) => crypto.createHash("sha256").update(text.trim()).digest("hex");
 
 async function createAndIndex(
   tenantId: string,
@@ -324,4 +328,114 @@ export async function backfillQaEmbeddings(tenantId: string): Promise<number> {
   });
   invalidateBrainIndex(tenantId);
   return missing.length;
+}
+
+// ========================= التحديث الدوري للروابط =========================
+
+const REFRESH_AFTER_MS = 7 * 24 * 3600 * 1000;
+
+/**
+ * يعيد جلب صفحات الروابط أسبوعياً حتى تبقى معرفة البوت مطابقة لموقع التاجر (أسعار/سياسات تتغيّر). المحتوى
+ * غير المتغيّر (نفس البصمة) لا يُعاد فهرسته — لا تكلفة متجهات. فشل الجلب يُسجَّل على المصدر ولا يحذف معرفته.
+ */
+export async function refreshStaleUrlSources(limit = 30): Promise<{ checked: number; updated: number; unchanged: number; failed: number }> {
+  const due = await superAdminDb.knowledgeSource.findMany({
+    where: { kind: "URL", status: { in: ["READY", "FAILED"] }, OR: [{ refreshedAt: null }, { refreshedAt: { lt: new Date(Date.now() - REFRESH_AFTER_MS) } }] },
+    orderBy: { refreshedAt: { sort: "asc", nulls: "first" } },
+    take: limit,
+    select: { id: true, tenantId: true, sourceUrl: true, contentHash: true },
+  });
+  const r = { checked: due.length, updated: 0, unchanged: 0, failed: 0 };
+  for (const src of due) {
+    try {
+      const { text } = await fetchUrlText(src.sourceUrl!);
+      const clean = text.trim();
+      if (src.contentHash && hashText(clean) === src.contentHash) {
+        await superAdminDb.knowledgeSource.update({ where: { id: src.id }, data: { refreshedAt: new Date(), status: "READY", error: null } });
+        r.unchanged++;
+        continue;
+      }
+      if (clean.length > BRAIN_LIMITS.maxSourceChars) throw new BrainError("الصفحة صارت أكبر من الحد المسموح");
+      await assertCapacity(src.tenantId, clean.length, src.id);
+      await indexSource(src.tenantId, src.id, clean);
+      r.updated++;
+    } catch (err) {
+      r.failed++;
+      // تبقى المعرفة السابقة صالحة؛ يُسجَّل الخطأ وموعد المحاولة حتى لا يُعاد كل دورة.
+      await superAdminDb.knowledgeSource.update({
+        where: { id: src.id },
+        data: { refreshedAt: new Date(), error: `تعذّر التحديث التلقائي: ${err instanceof Error ? err.message.slice(0, 200) : "خطأ"}` },
+      }).catch(() => {});
+    }
+  }
+  return r;
+}
+
+// ========================= استخراج أسئلة وأجوبة بالذكاء الاصطناعي =========================
+
+const EXTRACT_MAX_CHARS = 12_000;
+const EXTRACT_MAX_ITEMS = 15;
+
+/**
+ * يقرأ الذكاء الاصطناعي مصدر معرفة ويقترح أهم الأسئلة التي سيسألها العملاء مع أجوبتها من النص نفسه فقط.
+ * تُحفظ مقترحات (PENDING) يراجعها صاحب الحساب — ثم تصبح ردوداً مباشرة بلا توكنز. يُحتسب من حصة التوكنز.
+ */
+export async function generateQaFromSource(tenantId: string, sourceId: string): Promise<{ created: number; tokens: number }> {
+  const openai = await getOpenAiClient();
+  if (!openai) throw new BrainError("اضبط مفتاح الذكاء الاصطناعي أولاً (من مدير المنصة)");
+  const source = await withTenant(tenantId, (tx) =>
+    tx.knowledgeSource.findUnique({ where: { id: sourceId }, include: { chunks: { orderBy: { position: "asc" }, select: { content: true } } } })
+  );
+  if (!source || source.status !== "READY") throw new BrainError("المصدر غير جاهز");
+  const quota = await withTenant(tenantId, async (tx) => {
+    const sub = await tx.subscription.findUnique({ where: { tenantId }, include: { plan: true } });
+    const max = (sub?.plan.chatbotLimitsJson as { maxAiTokensPerMonth?: number } | null)?.maxAiTokensPerMonth ?? 0;
+    return !sub || max < 0 || sub.aiTokensUsedThisPeriod < max;
+  });
+  if (!quota) throw new BrainError("استُهلكت حصة توكنز الذكاء الاصطناعي لهذا الشهر");
+
+  const text = source.chunks.map((c) => c.content).join("\n\n").slice(0, EXTRACT_MAX_CHARS);
+  const completion = await openai.client.chat.completions.create({
+    model: openai.model,
+    response_format: { type: "json_object" },
+    max_completion_tokens: 2500,
+    messages: [
+      {
+        role: "system",
+        content: `أنت تُعدّ قاعدة أسئلة شائعة لخدمة عملاء متجر. من النص المعطى فقط، استخرج حتى ${EXTRACT_MAX_ITEMS} سؤالاً يُرجَّح أن يسأله العملاء فعلاً، بصياغة العميل الطبيعية على واتساب، مع جواب قصير ودقيق من النص حرفياً في معناه (لا تضف معلومة غير موجودة). أعد JSON بالشكل: {"items":[{"question":"...","answer":"..."}]}`,
+      },
+      { role: "user", content: `عنوان المصدر: ${source.title}
+
+${text}` },
+    ],
+  });
+  const tokens = completion.usage?.total_tokens ?? 0;
+  if (tokens) await withTenant(tenantId, (tx) => tx.subscription.updateMany({ where: { tenantId }, data: { aiTokensUsedThisPeriod: { increment: tokens } } }));
+
+  let items: Array<{ question?: unknown; answer?: unknown }> = [];
+  try {
+    const parsed = JSON.parse(completion.choices[0]?.message.content ?? "{}");
+    items = Array.isArray(parsed?.items) ? parsed.items : [];
+  } catch {
+    throw new BrainError("لم يُرجع الذكاء الاصطناعي نتيجة صالحة — حاول مرة أخرى");
+  }
+
+  let created = 0;
+  await withTenant(tenantId, async (tx) => {
+    const total = await tx.knowledgeQa.count({ where: { tenantId } });
+    for (const item of items.slice(0, EXTRACT_MAX_ITEMS)) {
+      if (total + created >= BRAIN_LIMITS.maxQas) break;
+      let qa: { q: string; a: string };
+      try {
+        qa = validateQa(String(item.question ?? ""), String(item.answer ?? ""));
+      } catch {
+        continue;
+      }
+      if (await tx.knowledgeQa.findFirst({ where: { tenantId, question: qa.q }, select: { id: true } })) continue;
+      await tx.knowledgeQa.create({ data: { tenantId, question: qa.q, answer: qa.a, origin: "GENERATED", status: "PENDING" } });
+      created++;
+    }
+  });
+  invalidateBrainIndex(tenantId);
+  return { created, tokens };
 }

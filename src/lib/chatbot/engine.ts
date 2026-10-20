@@ -8,7 +8,7 @@ import { START_NODE_ID, type FlowGraph } from "@/lib/chatbot/types";
 import { fetchWithSsrfProtection } from "@/lib/chatbot/safeFetch";
 import type { MessageAttachment } from "@/lib/integrations/types";
 import { generateAiEmployeeReply } from "@/lib/ai/generateReply";
-import { compactConversation } from "@/lib/ai/brain/memory";
+import { compactConversation, loadContactMemory } from "@/lib/ai/brain/memory";
 
 /** ثقة أقل من هذا الحد (من 100) تُعامَل كتحويل فوري لموظف بشري بصرف النظر عمّا قرّره النموذج نفسه
  * بشأن needsHuman — تحقُّق مستقل في الكود، وليس ثقة عمياء بتقييم النموذج لنفسه (بند 4 في القواعد
@@ -179,13 +179,17 @@ export async function runChatbotEngine(tenantId: string, conversationId: string)
             },
           });
 
-          // ملخص تلقائي كملاحظة داخلية — يوفّر وقت أول موظف بشري يفتح المحادثة (بند ج في البرومنت).
-          await tx.internalNote.create({
-            data: {
-              tenantId, conversationId, authorId: null,
-              body: `🤖 ملخص تلقائي من الموظف الذكي: تم التحويل لموظف بشري.\nالسبب: ${effectiveResult.reason}\nآخر رسالة من العميل: "${lastUserText}"`,
-            },
-          });
+          // ملخص تلقائي كملاحظة داخلية — يوفّر وقت أول موظف بشري يفتح المحادثة (بند ج في البرومنت): السبب،
+          // وملخص المحادثة السابق، وما يعرفه البوت عن العميل — بلا أي استدعاء نموذج إضافي.
+          const memory = await loadContactMemory(tx, convo.contactId);
+          const noteParts = [
+            "🤖 ملخص تلقائي من الموظف الذكي: تم التحويل لموظف بشري.",
+            `السبب: ${effectiveResult.reason}`,
+            `آخر رسالة من العميل: "${lastUserText}"`,
+            ...(compacted.summary ? [`ما سبق في المحادثة: ${compacted.summary}`] : []),
+            ...(memory.length ? [`معلومات محفوظة عن العميل: ${memory.slice(0, 8).map((m) => `${m.key}: ${m.value}`).join("، ")}`] : []),
+          ];
+          await tx.internalNote.create({ data: { tenantId, conversationId, authorId: null, body: noteParts.join("\n") } });
 
           await endSession(tx, conversationId);
           return;

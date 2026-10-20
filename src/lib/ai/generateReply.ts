@@ -1,7 +1,7 @@
 import type { AiAgentConfig, Prisma } from "@prisma/client";
 import type OpenAI from "openai";
 import { getOpenAiClient } from "@/lib/ai/openaiClient";
-import { AI_TOOLS, executeAiTool } from "@/lib/ai/tools";
+import { AI_TOOLS, executeAiTool, nowInSaudi, PROFILE_TOOL } from "@/lib/ai/tools";
 import { checkDeterministicHandoff, isRepeatedUnresolvedQuestion } from "@/lib/ai/handoffRules";
 import { buildSystemPrompt, getOrCreateAiAgentConfig } from "@/lib/ai/aiAgentConfig";
 import { consultBrain } from "@/lib/ai/brain/context";
@@ -71,7 +71,13 @@ export async function runAgentLoop(params: {
     { role: "system", content: params.systemPrompt },
     ...(params.summary ? [{ role: "system" as const, content: `ملخص ما سبق في هذه المحادثة:\n${params.summary}` }] : []),
     ...params.history.map((m): OpenAI.Chat.Completions.ChatCompletionMessageParam => ({ role: m.role, content: m.content })),
-    ...(params.contextMessage ? [{ role: "system" as const, content: params.contextMessage }] : []),
+    // السياق المتغيّر آخراً (المعرفة ذات الصلة + الوقت الحالي) — لا يكسر التخزين المؤقت لبادئة التعليمات الثابتة.
+    {
+      role: "system" as const,
+      content: `${params.contextMessage ? `${params.contextMessage}
+
+` : ""}الوقت الآن في السعودية: ${nowInSaudi()} (استخدمه عند السؤال عن الدوام أو المواعيد).`,
+    },
   ];
 
   const tools = [...params.tools, RESPOND_TOOL];
@@ -239,7 +245,7 @@ export async function generateAiEmployeeReply(params: {
     summary: params.conversationSummary,
     history,
     contextMessage: brain.contextMessage,
-    tools: useMemory ? [...AI_TOOLS, REMEMBER_TOOL] : AI_TOOLS,
+    tools: useMemory ? [...AI_TOOLS, REMEMBER_TOOL, PROFILE_TOOL] : AI_TOOLS,
     knowledgeUsed: brain.knowledgeUsed,
     respondedNote: "تم إرسال الرد للعميل.",
   });

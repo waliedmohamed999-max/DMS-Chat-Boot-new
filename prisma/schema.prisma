@@ -1090,6 +1090,9 @@ model KnowledgeSource {
   error       String?
   charCount   Int                 @default(0)
   chunkCount  Int                 @default(0)
+  // بصمة النص المفهرَس — التحديث الدوري للروابط يتخطى إعادة الفهرسة إن لم يتغيّر المحتوى.
+  contentHash String?
+  refreshedAt DateTime?
   createdById String?
   createdAt   DateTime            @default(now())
   updatedAt   DateTime            @updatedAt
@@ -1121,6 +1124,7 @@ enum KnowledgeQaOrigin {
   IMPORTED_FAQ // منقول من الأسئلة الشائعة القديمة
   FROM_REVIEW // تصحيح من صفحة مراجعة الجودة
   FROM_AGENT // مقترح من رد موظف بشري بعد تحويل (يحتاج موافقة)
+  GENERATED // مستخرَج آلياً من مصدر معرفة بالذكاء الاصطناعي (يحتاج موافقة)
 }
 
 enum KnowledgeQaStatus {
