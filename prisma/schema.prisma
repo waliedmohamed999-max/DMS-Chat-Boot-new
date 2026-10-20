@@ -1086,6 +1086,8 @@ model KnowledgeSource {
   kind        KnowledgeSourceKind
   title       String
   sourceUrl   String?
+  // جذر الموقع حين تأتي الصفحة من "سحب الموقع كاملاً" — يجمع صفحات الموقع الواحد (عرض/حذف/إعادة سحب معاً).
+  siteRoot    String?
   status      KnowledgeStatus     @default(PROCESSING)
   error       String?
   charCount   Int                 @default(0)
@@ -1100,6 +1102,7 @@ model KnowledgeSource {
   chunks KnowledgeChunk[]
 
   @@index([tenantId, createdAt])
+  @@index([tenantId, siteRoot])
 }
 
 model KnowledgeChunk {
@@ -1125,6 +1128,7 @@ enum KnowledgeQaOrigin {
   FROM_REVIEW // تصحيح من صفحة مراجعة الجودة
   FROM_AGENT // مقترح من رد موظف بشري بعد تحويل (يحتاج موافقة)
   GENERATED // مستخرَج آلياً من مصدر معرفة بالذكاء الاصطناعي (يحتاج موافقة)
+  FROM_WEBSITE // أسئلة شائعة منشورة في موقع التاجر نفسه (FAQPage) — تُقترح للموافقة
 }
 
 enum KnowledgeQaStatus {

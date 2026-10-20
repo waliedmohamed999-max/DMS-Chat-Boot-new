@@ -9,7 +9,7 @@ import { writeAuditLog } from "@/lib/audit";
 import { checkTenantRateLimit } from "@/lib/rateLimit";
 import { getTenantChatbotLimits, isNodeTypeAllowed } from "@/lib/planLimits";
 import {
-  addQa, addTextSource, addUrlSource, backfillQaEmbeddings, BrainError, deleteQa, deleteSource, generateQaFromSource, reprocessSource, updateQa,
+  addQa, addTextSource, addUrlSource, backfillQaEmbeddings, BrainError, deleteQa, deleteSite, deleteSource, generateQaFromSource, reprocessSource, startSiteCrawl, updateQa,
 } from "@/lib/ai/brain/ingest";
 import { invalidateBrainIndex, pickDirectAnswer, searchBrain } from "@/lib/ai/brain/search";
 
@@ -62,9 +62,34 @@ export async function addUrlKnowledge(_prev: BrainActionResult, formData: FormDa
     await ingestLimit(tenantId);
     const url = String(formData.get("url") ?? "").trim();
     if (!/^https:\/\/\S+$/i.test(url)) throw new BrainError("أدخل رابطاً يبدأ بـ https://");
+    if (formData.get("mode") === "site") {
+      if (!(await startSiteCrawl(tenantId, userId, url))) throw new BrainError("يوجد سحب موقع جارٍ بالفعل — انتظر انتهاءه");
+      await writeAuditLog({ tenantId, userId, action: "ai_brain.site_crawl_started", targetType: "KnowledgeSource", metaJson: { url } });
+      return "🌐 بدأ سحب الموقع بالخلفية — تابع التقدّم أعلى الصفحة";
+    }
     await addUrlSource(tenantId, userId, url);
     await writeAuditLog({ tenantId, userId, action: "ai_brain.source_added", targetType: "KnowledgeSource", metaJson: { kind: "URL", url } });
     return "تم جلب الصفحة وإضافتها للعقل";
+  });
+}
+
+/** إعادة سحب موقع كامل: صفحات جديدة تُضاف، والمتغيّرة تُحدَّث، والكما هي تُتخطّى. */
+export async function recrawlSite(rootUrl: string): Promise<BrainActionResult> {
+  return run(async () => {
+    const { tenantId, userId } = await guard();
+    await ingestLimit(tenantId);
+    if (!/^https:\/\//i.test(rootUrl)) throw new BrainError("رابط غير صالح");
+    if (!(await startSiteCrawl(tenantId, userId, rootUrl))) throw new BrainError("يوجد سحب موقع جارٍ بالفعل");
+    return "🌐 بدأت إعادة سحب الموقع";
+  });
+}
+
+export async function deleteSiteAction(siteRoot: string): Promise<BrainActionResult> {
+  return run(async () => {
+    const { tenantId, userId } = await guard();
+    const n = await deleteSite(tenantId, siteRoot);
+    await writeAuditLog({ tenantId, userId, action: "ai_brain.site_deleted", targetType: "KnowledgeSource", metaJson: { siteRoot, pages: n } });
+    return `حُذفت ${n} صفحة`;
   });
 }
 

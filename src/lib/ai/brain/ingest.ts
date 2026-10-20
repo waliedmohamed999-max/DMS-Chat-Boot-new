@@ -2,10 +2,13 @@ import crypto from "crypto";
 import type { KnowledgeQaOrigin, KnowledgeQaStatus, Prisma } from "@prisma/client";
 import { superAdminDb, withTenant } from "@/lib/db";
 import { getOpenAiClient } from "@/lib/ai/openaiClient";
-import { fetchPageWithSsrfProtection } from "@/lib/chatbot/safeFetch";
 import { embedTexts, packVector } from "./embeddings";
 import { invalidateBrainIndex } from "./search";
-import { chunkText, htmlToText } from "./text";
+import { chunkText } from "./text";
+import {
+  acquireCrawlLock, crawlSite, getSiteCrawlState, pageToKnowledge, releaseCrawlLock, rewriteSpecialUrl, safePageFetcher, writeSiteCrawlState,
+  type PageFetcher, type SiteCrawlState,
+} from "./crawl";
 
 /** حدود المعرفة لكل حساب — تحمي الذاكرة وزمن البحث وتكلفة المتجهات. */
 export const BRAIN_LIMITS = {
@@ -107,19 +110,147 @@ export async function addTextSource(tenantId: string, userId: string, title: str
   return createAndIndex(tenantId, { kind: "TEXT", title: title || text.slice(0, 60), createdById: userId }, text);
 }
 
-/** جلب صفحة ويب (محمي من SSRF مع تثبيت العنوان، حجم أقصى، HTML/نص فقط). */
-export async function fetchUrlText(rawUrl: string): Promise<{ title: string | null; text: string }> {
-  const res = await fetchPageWithSsrfProtection(rawUrl.trim(), BRAIN_LIMITS.maxUrlBytes);
-  if (!res.success) throw new BrainError(`تعذّر فتح الرابط: ${res.error}`);
+/**
+ * جلب رابط واحد كنص معرفة (محمي من SSRF): صفحة HTML (مع بيانات المتجر المنظّمة والوصف)، نص/CSV، أو مستند
+ * Google Docs/Sheets عام (يُحوَّل لتصدير نصي تلقائياً).
+ */
+export async function fetchUrlText(rawUrl: string): Promise<{ title: string | null; text: string; faqs: Array<{ question: string; answer: string }> }> {
+  const url = rewriteSpecialUrl(rawUrl);
+  const res = await safePageFetcher(url);
+  if (!res.ok) throw new BrainError(`تعذّر فتح الرابط: ${res.error}`);
+  if (res.status === 401 || res.status === 403) throw new BrainError("الرابط غير متاح للعموم (يتطلب تسجيل دخول) — اجعل المستند عاماً للمشاهدة");
   if (res.status !== 200) throw new BrainError(`الموقع ردّ بالحالة ${res.status}`);
-  if (!/text\/html|text\/plain|application\/xhtml/.test(res.contentType)) throw new BrainError("الرابط ليس صفحة نصية (HTML أو نص)");
-  const body = res.buffer.toString("utf8");
-  return res.contentType.includes("text/plain") ? { title: null, text: body } : htmlToText(body);
+  if (!/text\/html|text\/plain|text\/csv|application\/xhtml/.test(res.contentType)) throw new BrainError("الرابط ليس صفحة أو مستنداً نصياً");
+  return pageToKnowledge(res.body, res.contentType);
 }
 
 export async function addUrlSource(tenantId: string, userId: string, url: string) {
-  const { title, text } = await fetchUrlText(url);
-  return createAndIndex(tenantId, { kind: "URL", title: title || new URL(url).hostname, sourceUrl: url, createdById: userId }, text);
+  const { title, text, faqs } = await fetchUrlText(url);
+  const id = await createAndIndex(tenantId, { kind: "URL", title: title || new URL(url).hostname, sourceUrl: url.trim(), createdById: userId }, text);
+  if (faqs.length) await suggestWebsiteFaqs(tenantId, faqs);
+  return id;
+}
+
+/** الأسئلة الشائعة المنشورة في موقع التاجر (FAQPage) ⇐ مقترحات بانتظار الموافقة (بلا تكرار). */
+export async function suggestWebsiteFaqs(tenantId: string, faqs: Array<{ question: string; answer: string }>): Promise<number> {
+  let created = 0;
+  await withTenant(tenantId, async (tx) => {
+    const total = await tx.knowledgeQa.count({ where: { tenantId } });
+    for (const f of faqs.slice(0, 50)) {
+      if (total + created >= BRAIN_LIMITS.maxQas) break;
+      let qa: { q: string; a: string };
+      try {
+        qa = validateQa(f.question, f.answer);
+      } catch {
+        continue;
+      }
+      if (await tx.knowledgeQa.findFirst({ where: { tenantId, question: qa.q }, select: { id: true } })) continue;
+      await tx.knowledgeQa.create({ data: { tenantId, question: qa.q, answer: qa.a, origin: "FROM_WEBSITE", status: "PENDING" } });
+      created++;
+    }
+  });
+  if (created) invalidateBrainIndex(tenantId);
+  return created;
+}
+
+/**
+ * صفحة من سحب موقع: تُنشأ أو تُحدَّث بنفس الرابط (إعادة السحب لا تكرّر الصفحات)، ولا يُعاد فهرسة محتوى لم يتغيّر.
+ */
+export async function upsertWebPage(
+  tenantId: string,
+  userId: string,
+  page: { url: string; title: string | null; text: string; siteRoot: string }
+): Promise<"added" | "updated" | "unchanged"> {
+  const clean = page.text.trim().slice(0, BRAIN_LIMITS.maxSourceChars);
+  const title = (page.title || new URL(page.url).pathname || page.url).slice(0, 200);
+  const existing = await withTenant(tenantId, (tx) =>
+    tx.knowledgeSource.findFirst({ where: { tenantId, kind: "URL", sourceUrl: page.url }, select: { id: true, contentHash: true } })
+  );
+  if (existing?.contentHash === hashText(clean)) {
+    await withTenant(tenantId, (tx) => tx.knowledgeSource.update({ where: { id: existing.id }, data: { refreshedAt: new Date(), siteRoot: page.siteRoot } }));
+    return "unchanged";
+  }
+  await assertCapacity(tenantId, clean.length, existing?.id);
+  const id = existing?.id ?? (await withTenant(tenantId, (tx) =>
+    tx.knowledgeSource.create({ data: { tenantId, kind: "URL", title, sourceUrl: page.url, siteRoot: page.siteRoot, createdById: userId || null, charCount: clean.length } })
+  )).id;
+  try {
+    await indexSource(tenantId, id, clean);
+    if (existing) await withTenant(tenantId, (tx) => tx.knowledgeSource.update({ where: { id }, data: { title, siteRoot: page.siteRoot } }));
+  } catch (err) {
+    await markFailed(tenantId, id, err);
+    throw err;
+  }
+  return existing ? "updated" : "added";
+}
+
+export const MAX_CRAWL_PAGES = 40;
+
+/**
+ * سحب موقع كامل (حتى 40 صفحة): يكتشف الصفحات ويحفظها مجمّعة تحت جذر الموقع، مع الأسئلة الشائعة المنشورة فيه.
+ * يتوقف بهدوء عند امتلاء سعة المعرفة. يُستدعى بالخلفية عبر startSiteCrawl، أو مباشرة (اختبارات).
+ */
+export async function runSiteCrawl(tenantId: string, userId: string, rootUrl: string, opts: { maxPages?: number; fetcher?: PageFetcher } = {}) {
+  const root = new URL(rootUrl.trim());
+  const siteRoot = root.origin.replace("://www.", "://");
+  const state: SiteCrawlState = {
+    status: "running", rootUrl: root.toString(), startedAt: new Date().toISOString(),
+    discovered: 0, processed: 0, added: 0, updated: 0, unchanged: 0, faqs: 0,
+  };
+  await writeSiteCrawlState(tenantId, state);
+  const faqs: Array<{ question: string; answer: string }> = [];
+  const result = await crawlSite(root.toString(), {
+    maxPages: Math.min(opts.maxPages ?? MAX_CRAWL_PAGES, MAX_CRAWL_PAGES),
+    fetcher: opts.fetcher,
+    onDiscovered: async (n) => {
+      state.discovered = n;
+      await writeSiteCrawlState(tenantId, state);
+    },
+    onPage: async (page) => {
+      faqs.push(...page.faqs);
+      state.processed++;
+      if (page.text.trim().length >= 80) {
+        try {
+          state[await upsertWebPage(tenantId, userId, { ...page, siteRoot })]++;
+        } catch (err) {
+          if (err instanceof BrainError && /الحد|حجم المعرفة|الحد الأقصى/.test(err.message)) {
+            state.stoppedReason = err.message;
+            await writeSiteCrawlState(tenantId, state);
+            return false;
+          }
+        }
+      }
+      state.discovered = Math.max(state.discovered, state.processed);
+      await writeSiteCrawlState(tenantId, state);
+      return true;
+    },
+  });
+  state.faqs = faqs.length ? await suggestWebsiteFaqs(tenantId, faqs) : 0;
+  if (!result.visited) state.error = "لم نتمكن من قراءة أي صفحة من هذا الموقع";
+  state.status = result.visited ? "done" : "failed";
+  state.finishedAt = new Date().toISOString();
+  await writeSiteCrawlState(tenantId, state);
+  return state;
+}
+
+/** يبدأ السحب بالخلفية (لا يُجمّد الصفحة) — false إن كان هناك سحب جارٍ لنفس التاجر. */
+export async function startSiteCrawl(tenantId: string, userId: string, rootUrl: string): Promise<boolean> {
+  if (!(await acquireCrawlLock(tenantId))) return false;
+  void runSiteCrawl(tenantId, userId, rootUrl)
+    .catch(async (err) => {
+      console.error("❌ فشل سحب الموقع:", err instanceof Error ? err.message : err);
+      const current = await getSiteCrawlState(tenantId);
+      if (current) await writeSiteCrawlState(tenantId, { ...current, status: "failed", error: err instanceof Error ? err.message.slice(0, 200) : "فشل", finishedAt: new Date().toISOString() });
+    })
+    .finally(() => releaseCrawlLock(tenantId));
+  return true;
+}
+
+/** حذف كل صفحات موقع مسحوب دفعة واحدة. */
+export async function deleteSite(tenantId: string, siteRoot: string) {
+  const r = await withTenant(tenantId, (tx) => tx.knowledgeSource.deleteMany({ where: { tenantId, siteRoot } }));
+  invalidateBrainIndex(tenantId);
+  return r.count;
 }
 
 /** نص ملف مرفوع: PDF، أو نص/Markdown/CSV. */

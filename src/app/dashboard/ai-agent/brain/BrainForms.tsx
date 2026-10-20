@@ -1,9 +1,9 @@
 "use client";
 
-import { useActionState, useRef, useState, useTransition } from "react";
+import { useActionState, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
-  addTextKnowledge, addUrlKnowledge, answerGap, approveSuggestion, deleteKnowledge, deleteQaAction, extractQaFromSource, reindexQas, reprocessKnowledge,
+  addTextKnowledge, addUrlKnowledge, answerGap, approveSuggestion, deleteKnowledge, deleteQaAction, deleteSiteAction, extractQaFromSource, recrawlSite, reindexQas, reprocessKnowledge,
   saveBrainSettings, saveQa, testBrain, type BrainActionResult, type BrainTestResult,
 } from "./actions";
 
@@ -44,7 +44,7 @@ export function BrainSettingsForm({ values }: { values: { directAnswers: boolean
 const TABS = [
   { key: "qa", label: "سؤال وجواب" },
   { key: "text", label: "نص" },
-  { key: "url", label: "رابط صفحة" },
+  { key: "url", label: "رابط / موقع" },
   { key: "file", label: "ملف" },
   { key: "import", label: "استيراد أسئلة (Excel)" },
 ] as const;
@@ -96,18 +96,37 @@ function TextForm() {
 }
 
 function UrlForm() {
+  const router = useRouter();
   const [url, setUrl] = useState("");
+  const [mode, setMode] = useState<"page" | "site">("site");
   const [state, action, pending] = useActionState(async (prev: BrainActionResult, fd: FormData) => {
     const r = await addUrlKnowledge(prev, fd);
-    if (r?.ok) setUrl("");
+    if (r?.ok) {
+      setUrl("");
+      router.refresh();
+    }
     return r;
   }, null);
   return (
     <form action={action} className="space-y-3">
-      <input name="url" type="url" value={url} onChange={(e) => setUrl(e.target.value)} required className="input-field" dir="ltr" placeholder="https://mystore.com/shipping-policy" />
-      <p className="text-xs text-slate-500">صفحة واحدة في كل مرة (سياسة الشحن، من نحن، الأسئلة الشائعة...). تُجلب الآن، ويمكنك تحديثها لاحقاً من القائمة.</p>
+      <input name="url" type="url" value={url} onChange={(e) => setUrl(e.target.value)} required className="input-field" dir="ltr" placeholder="https://mystore.com" />
+      <div className="flex flex-wrap gap-4 text-sm text-slate-300">
+        <label className="flex items-center gap-2">
+          <input type="radio" name="mode" value="site" checked={mode === "site"} onChange={() => setMode("site")} /> 🌐 الموقع / المتجر كاملاً
+        </label>
+        <label className="flex items-center gap-2">
+          <input type="radio" name="mode" value="page" checked={mode === "page"} onChange={() => setMode("page")} /> 📄 هذه الصفحة فقط
+        </label>
+      </div>
+      <p className="text-xs text-slate-500">
+        {mode === "site"
+          ? "نقرأ خريطة موقعك وصفحاته (حتى 40 صفحة، الأهم أولاً: الأسئلة الشائعة، الشحن، الاسترجاع، التواصل)، مع المنتجات والأسعار وبيانات التواصل المنشورة في الصفحات. يعمل بالخلفية ويتحدّث أسبوعياً."
+          : "صفحة واحدة: سياسة، صفحة منتج، أو مستند Google Docs / جدول Google Sheets عام (مشاركة: أي شخص لديه الرابط)."}
+      </p>
       <div className="flex items-center gap-3">
-        <button disabled={pending} className="btn-primary text-sm disabled:opacity-50">{pending ? "جارٍ الجلب والفهرسة…" : "جلب الصفحة"}</button>
+        <button disabled={pending} className="btn-primary text-sm disabled:opacity-50">
+          {pending ? "جارٍ البدء…" : mode === "site" ? "اسحب بيانات الموقع" : "جلب الصفحة"}
+        </button>
         <Result state={state} />
       </div>
     </form>
@@ -219,7 +238,9 @@ export function SuggestionItem({ qa }: { qa: { id: string; question: string; ans
   return (
     <form action={action} className="space-y-2 rounded-lg border border-warning-500/20 bg-warning-500/5 p-3">
       <input type="hidden" name="id" value={qa.id} />
-      <span className="text-[11px] text-slate-500">{qa.origin === "GENERATED" ? "✨ مستخرج بالذكاء الاصطناعي من مصادرك" : "👤 من رد فريقك بعد تحويل"}</span>
+      <span className="text-[11px] text-slate-500">
+        {qa.origin === "GENERATED" ? "✨ مستخرج بالذكاء الاصطناعي من مصادرك" : qa.origin === "FROM_WEBSITE" ? "🌐 من الأسئلة الشائعة في موقعك" : "👤 من رد فريقك بعد تحويل"}
+      </span>
       <input name="question" value={v.question} onChange={(e) => setV({ ...v, question: e.target.value })} className="input-field text-sm" />
       <textarea name="answer" value={v.answer} onChange={(e) => setV({ ...v, answer: e.target.value })} rows={2} className="input-field text-sm" />
       <label className="flex items-center gap-2 text-xs text-slate-400">
@@ -231,6 +252,66 @@ export function SuggestionItem({ qa }: { qa: { id: string; question: string; ans
         <Result state={state} />
       </div>
     </form>
+  );
+}
+
+// ========================= سحب المواقع =========================
+
+type CrawlState = {
+  status: "running" | "done" | "failed"; rootUrl: string; discovered: number; processed: number;
+  added: number; updated: number; unchanged: number; faqs: number; stoppedReason?: string; error?: string;
+};
+
+/** حالة سحب الموقع الجاري/الأخير — تتحدّث تلقائياً كل 3 ثوانٍ أثناء السحب. */
+export function CrawlStatus({ state }: { state: CrawlState | null }) {
+  const router = useRouter();
+  const running = state?.status === "running";
+  useEffect(() => {
+    if (!running) return;
+    const t = setInterval(() => router.refresh(), 3000);
+    return () => clearInterval(t);
+  }, [running, router]);
+  if (!state) return null;
+  const host = (() => {
+    try {
+      return new URL(state.rootUrl).hostname;
+    } catch {
+      return state.rootUrl;
+    }
+  })();
+  return (
+    <div className={`card p-4 text-sm ${running ? "border border-accent-500/30" : state.status === "failed" ? "border border-danger-500/30" : "border border-success-500/30"}`}>
+      <p className="font-semibold text-white">
+        {running ? `🌐 جارٍ سحب ${host}…` : state.status === "failed" ? `❌ تعذّر سحب ${host}` : `✅ اكتمل سحب ${host}`}
+      </p>
+      <p className="mt-1 text-xs text-slate-400">
+        قُرئت {state.processed} صفحة{running && state.discovered ? ` من ~${state.discovered}` : ""} · جديدة {state.added} · محدَّثة {state.updated} · بلا تغيير {state.unchanged}
+        {state.faqs ? ` · ${state.faqs} سؤال شائع من موقعك بانتظار اعتمادك` : ""}
+      </p>
+      {state.stoppedReason && <p className="mt-1 text-xs text-warning-500">توقف: {state.stoppedReason}</p>}
+      {state.error && <p className="mt-1 text-xs text-danger-500">{state.error}</p>}
+      {running && <div className="mt-2 h-1.5 overflow-hidden rounded bg-white/5"><div className="h-full animate-pulse bg-accent-500/60" style={{ width: `${Math.min(100, Math.round((state.processed / Math.max(1, state.discovered)) * 100))}%` }} /></div>}
+    </div>
+  );
+}
+
+export function SiteActions({ siteRoot }: { siteRoot: string }) {
+  const [pending, start] = useTransition();
+  const [state, setState] = useState<BrainActionResult>(null);
+  const router = useRouter();
+  return (
+    <div className="flex flex-wrap items-center gap-3 text-xs">
+      <button type="button" disabled={pending} onClick={() => start(async () => { setState(await recrawlSite(siteRoot)); router.refresh(); })} className="text-accent-400 hover:underline disabled:opacity-50">
+        🔄 إعادة سحب الموقع
+      </button>
+      <button
+        type="button" disabled={pending} className="text-danger-500 hover:underline disabled:opacity-50"
+        onClick={() => confirm("حذف كل صفحات هذا الموقع من العقل؟") && start(async () => setState(await deleteSiteAction(siteRoot)))}
+      >
+        حذف الموقع
+      </button>
+      <Result state={state} />
+    </div>
   );
 }
 

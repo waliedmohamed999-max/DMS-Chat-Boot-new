@@ -5,7 +5,8 @@ import { withTenant } from "@/lib/db";
 import { hasEffectivePermission } from "@/lib/rbac";
 import { getTenantChatbotLimits, isNodeTypeAllowed } from "@/lib/planLimits";
 import { BRAIN_LIMITS, importLegacyFaq } from "@/lib/ai/brain/ingest";
-import { AddKnowledge, BrainSettingsForm, GapItem, QaItem, ReindexButton, SourceActions, SuggestionItem, TestBrainBox } from "./BrainForms";
+import { AddKnowledge, BrainSettingsForm, CrawlStatus, GapItem, QaItem, ReindexButton, SiteActions, SourceActions, SuggestionItem, TestBrainBox } from "./BrainForms";
+import { getSiteCrawlState } from "@/lib/ai/brain/crawl";
 import { findKnowledgeGaps } from "@/lib/ai/brain/gaps";
 
 export const metadata = { title: "عقل البوت — DMS Tech" };
@@ -53,6 +54,12 @@ export default async function BrainPage() {
     return { config, sources, qas, pending, chars: chars._sum.charCount ?? 0, brainReplies, llmStats, memories, gaps };
   });
 
+  const crawl = await getSiteCrawlState(tenantId);
+  // صفحات المواقع المسحوبة تُعرض مجمّعة لكل موقع؛ وبقية المصادر في الجدول.
+  const sites = new Map<string, typeof data.sources>();
+  for (const s of data.sources) if (s.siteRoot) sites.set(s.siteRoot, [...(sites.get(s.siteRoot) ?? []), s]);
+  const looseSources = data.sources.filter((s) => !s.siteRoot);
+
   const avgTokens = Math.round(data.llmStats._avg.totalTokens ?? 0);
   const savedTokens = data.brainReplies * avgTokens;
   const totalReplies = data.brainReplies + data.llmStats._count._all;
@@ -87,6 +94,8 @@ export default async function BrainPage() {
           </div>
         ))}
       </div>
+
+      <CrawlStatus state={crawl} />
 
       {data.pending.length > 0 && (
         <section className="card space-y-3 p-5">
@@ -136,9 +145,35 @@ export default async function BrainPage() {
         )}
       </section>
 
+      {sites.size > 0 && (
+        <section className="card space-y-3 p-5">
+          <h2 className="font-bold text-white">🌐 المواقع المسحوبة ({sites.size})</h2>
+          {[...sites.entries()].map(([root, pages]) => (
+            <details key={root} className="rounded-lg bg-white/5 p-3">
+              <summary className="flex cursor-pointer flex-wrap items-center justify-between gap-2">
+                <span className="text-sm text-slate-100" dir="ltr">{root.replace("https://", "")}</span>
+                <span className="text-xs text-slate-400">
+                  {pages.length} صفحة · {pages.reduce((n, p) => n + p.charCount, 0).toLocaleString("en")} حرف
+                  {pages.some((p) => p.status === "FAILED") ? " · ⚠️ بعض الصفحات فشلت" : ""}
+                </span>
+              </summary>
+              <div className="mt-2"><SiteActions siteRoot={root} /></div>
+              <ul className="mt-2 space-y-1">
+                {pages.map((p) => (
+                  <li key={p.id} className="flex flex-wrap items-center justify-between gap-2 border-t border-white/5 pt-1 text-xs">
+                    <span className="text-slate-300">{p.title} <span className="text-slate-500" dir="ltr">{p.sourceUrl?.replace(root, "") || "/"}</span></span>
+                    <SourceActions id={p.id} canRefresh ready={p.status === "READY"} />
+                  </li>
+                ))}
+              </ul>
+            </details>
+          ))}
+        </section>
+      )}
+
       <section className="card overflow-x-auto p-5">
-        <h2 className="mb-3 font-bold text-white">📚 مصادر المعرفة ({data.sources.length})</h2>
-        {data.sources.length === 0 ? (
+        <h2 className="mb-3 font-bold text-white">📚 مصادر المعرفة ({looseSources.length})</h2>
+        {looseSources.length === 0 ? (
           <p className="text-sm text-slate-500">لا مصادر بعد — أضف نصاً أو رابط صفحة أو ملف PDF من الأعلى.</p>
         ) : (
           <table className="w-full text-sm">
@@ -152,7 +187,7 @@ export default async function BrainPage() {
               </tr>
             </thead>
             <tbody>
-              {data.sources.map((s) => (
+              {looseSources.map((s) => (
                 <tr key={s.id} className="border-b border-white/5 align-top">
                   <td className="p-2">
                     <p className="text-slate-100">{s.title}</p>
