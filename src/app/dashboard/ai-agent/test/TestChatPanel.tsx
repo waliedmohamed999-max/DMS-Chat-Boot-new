@@ -23,7 +23,10 @@ export function TestChatPanel({ agentName }: { agentName: string }) {
       setHistory((h) => [...h, { role: "user", content: message }]);
 
       if (result.kind === "reply") {
-        setBubbles((b) => [...b, { from: "bot", text: result.text }, { from: "bot", text: `ثقة الرد: ${result.confidence}%`, diagnostic: true }]);
+        const source = result.answerSource === "brain"
+          ? "⚡ من عقل البوت مباشرة — 0 توكنز"
+          : `🤖 ذكاء اصطناعي — ${result.tokens.toLocaleString("en")} توكن${result.knowledgeUsed ? ` · ${result.knowledgeUsed} معلومة من العقل` : ""}`;
+        setBubbles((b) => [...b, { from: "bot", text: result.text }, { from: "bot", text: `${source} · ثقة ${result.confidence}%`, diagnostic: true }]);
         setHistory((h) => [...h, { role: "assistant", content: result.text }]);
       } else if (result.kind === "handoff") {
         setBubbles((b) => [...b, { from: "bot", text: `↳ تحويل لموظف بشري: ${result.reason}`, diagnostic: true }]);

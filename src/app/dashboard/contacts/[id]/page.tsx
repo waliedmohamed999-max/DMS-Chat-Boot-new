@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireTenantSession } from "@/lib/session";
 import { withTenant } from "@/lib/db";
-import { updateContactStage, updateContactOptIn, updateContact } from "../actions";
+import { updateContactStage, updateContactOptIn, updateContact, deleteContactMemory } from "../actions";
 import { TagEditor } from "./TagEditor";
 import { STAGE_LABELS_AR, CONTACT_STAGES_ORDERED, CONTACT_SOURCE_LABELS_AR } from "@/lib/contacts/stages";
 
@@ -41,6 +41,7 @@ export default async function ContactDetailPage(props: { params: Promise<{ id: s
         },
         sourceCampaign: { select: { id: true, name: true } },
         importBatch: { select: { fileName: true, createdAt: true } },
+        memories: { orderBy: { updatedAt: "desc" } },
       },
     });
   });
@@ -152,6 +153,24 @@ export default async function ContactDetailPage(props: { params: Promise<{ id: s
             {contact.externalZidId && <p>مرتبط بعميل زد: {contact.externalZidId}</p>}
             {contact.externalSallaId && <p>مرتبط بعميل سلة: {contact.externalSallaId}</p>}
             <p className="mt-1">أُضيفت في: {new Date(contact.createdAt).toLocaleDateString("ar-SA")}</p>
+          </div>
+
+          <div className="mt-4">
+            <label className="label-field">🧠 ما يتذكّره الموظف الذكي عن العميل</label>
+            {contact.memories.length === 0 ? (
+              <p className="text-xs text-slate-500">لا شيء بعد — يحفظ البوت تفضيلات العميل تلقائياً أثناء المحادثات.</p>
+            ) : (
+              <ul className="space-y-1">
+                {contact.memories.map((m) => (
+                  <li key={m.id} className="flex items-center justify-between gap-2 rounded-lg bg-white/5 px-2 py-1 text-xs">
+                    <span className="text-slate-300"><span className="text-slate-500" dir="ltr">{m.key}</span>: {m.value}</span>
+                    <form action={deleteContactMemory.bind(null, contact.id, m.id)}>
+                      <button className="text-slate-500 hover:text-danger-500" aria-label="حذف">✕</button>
+                    </form>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         </div>
 

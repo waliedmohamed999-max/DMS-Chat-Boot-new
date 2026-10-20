@@ -4,13 +4,9 @@ import { withTenant } from "@/lib/db";
 import { hasEffectivePermission } from "@/lib/rbac";
 import { getTenantChatbotLimits, isNodeTypeAllowed, isUnlimited } from "@/lib/planLimits";
 import { AiAgentSettingsForm } from "./AiAgentSettingsForm";
-import type { FaqItem } from "@/lib/ai/aiAgentConfig";
+import { importLegacyFaq } from "@/lib/ai/brain/ingest";
 
 const TONE_LABELS_AR: Record<string, string> = { FORMAL: "رسمية", FRIENDLY: "ودودة", FUN: "مرحة" };
-
-function faqToLines(items: FaqItem[]): string {
-  return items.map((f) => `${f.question} | ${f.answer}`).join("\n");
-}
 
 export default async function AiAgentSettingsPage() {
   const session = await requireTenantSession();
@@ -43,12 +39,14 @@ export default async function AiAgentSettingsPage() {
     );
   }
 
+  // الأسئلة الشائعة القديمة تنتقل لعقل البوت تلقائياً.
+  await importLegacyFaq(tenantId).catch((err) => console.error("legacy faq import failed:", err));
+
   const [config, subscription] = await Promise.all([
     withTenant(tenantId, (tx) => tx.aiAgentConfig.upsert({ where: { tenantId }, update: {}, create: { tenantId } })),
     withTenant(tenantId, (tx) => tx.subscription.findUnique({ where: { tenantId } })),
   ]);
 
-  const faqItems = Array.isArray(config.faqItems) ? (config.faqItems as unknown as FaqItem[]) : [];
   const tokensUsed = subscription?.aiTokensUsedThisPeriod ?? 0;
 
   return (
@@ -59,6 +57,7 @@ export default async function AiAgentSettingsPage() {
           <p className="text-sm text-slate-400">موظف رد آلي بذكاء اصطناعي حقيقي يتحدث مع عملائك على واتساب بشكل طبيعي.</p>
         </div>
         <div className="flex gap-2">
+          <Link href="/dashboard/ai-agent/brain" className="btn-primary text-sm">🧠 عقل البوت</Link>
           <Link href="/dashboard/ai-agent/test" className="btn-secondary text-sm">💬 جرّب موظفك الذكي</Link>
           <Link href="/dashboard/ai-agent/reviews" className="btn-secondary text-sm">📋 مراجعة الجودة</Link>
         </div>
@@ -120,9 +119,10 @@ export default async function AiAgentSettingsPage() {
           </div>
         </div>
 
-        <div>
-          <label className="label-field">أسئلة شائعة (سطر لكل سؤال، بصيغة: السؤال | الجواب)</label>
-          <textarea name="faqItems" defaultValue={faqToLines(faqItems)} rows={6} className="input-field text-sm" dir="rtl" />
+        <div className="rounded-lg border border-accent-500/20 bg-accent-500/5 p-3 text-sm text-slate-300">
+          🧠 الأسئلة الشائعة والمعلومات التفصيلية (ملفات، صفحات موقعك، سياسات) تُدار الآن من{" "}
+          <Link href="/dashboard/ai-agent/brain" className="text-accent-400 hover:underline">عقل البوت</Link> — يرسل للذكاء الاصطناعي المعلومة
+          ذات الصلة فقط، ويجيب الأسئلة المتكررة بلا توكنز.
         </div>
       </AiAgentSettingsForm>
     </div>

@@ -12,6 +12,7 @@ import { computeWindowState } from "@/lib/inbox/windowState";
 import { statusAfterOutboundReply } from "@/lib/inbox/conversationStatus";
 import { scheduleOutboundStatusProgression } from "@/lib/queue/messageStatusQueue";
 import { simulateInboundMessage, type SimulatedMessageKind } from "@/lib/inbox/sandboxSimulator";
+import { suggestFromAgentReply } from "@/lib/ai/brain/learn";
 
 async function sendOutboundMessage(
   tenantId: string,
@@ -23,7 +24,7 @@ async function sendOutboundMessage(
 ) {
   const adapter = await resolveWhatsappAdapter(tenantId);
 
-  return withTenant(tenantId, async (tx) => {
+  const sent = await withTenant(tenantId, async (tx) => {
     const convo = await tx.conversation.findUniqueOrThrow({
       where: { id: conversationId, tenantId },
       include: { contact: true },
@@ -53,6 +54,15 @@ async function sendOutboundMessage(
 
     return { message, success: result.success, waMessageId: result.externalMessageId };
   });
+
+  // عقل البوت يتعلّم من رد الفريق على سؤال لم يعرفه (مقترح بانتظار موافقة صاحب الحساب) — معاملة مستقلة
+  // بعد نجاح الإرسال، فلا يُفسد أي خطأ فيها حفظ الرسالة نفسها.
+  if (sent.success && !templateId) {
+    await withTenant(tenantId, (tx) => suggestFromAgentReply(tx, tenantId, conversationId, body)).catch((err) =>
+      console.error("⚠️ تعذّر حفظ مقترح عقل البوت:", err instanceof Error ? err.message : err)
+    );
+  }
+  return sent;
 }
 
 export async function sendReply(conversationId: string, formData: FormData) {

@@ -4,6 +4,7 @@ import { requireTenantSession } from "@/lib/session";
 import { withTenant } from "@/lib/db";
 import { hasEffectivePermission } from "@/lib/rbac";
 import { RateButtons } from "./RateButtons";
+import { TeachBrain } from "./TeachBrain";
 
 const LOW_CONFIDENCE_THRESHOLD = 40;
 
@@ -46,6 +47,7 @@ export default async function AiAgentReviewsPage() {
                     </span>
                   )}
                   {log.usedTool && <span className="badge bg-accent-500/10 text-accent-400" dir="ltr">{log.usedTool}</span>}
+                  {log.answerSource === "brain" && <span className="badge bg-success-500/10 text-success-500">⚡ من عقل البوت</span>}
                 </div>
               </div>
               <p className="mb-1 text-sm text-slate-400">👤 {log.userMessage}</p>
@@ -55,9 +57,12 @@ export default async function AiAgentReviewsPage() {
                 <p className="text-sm italic text-slate-500">لم يُرسَل رد — حُوِّلت المحادثة مباشرة. السبب: {log.handoffReason}</p>
               )}
               <div className="mt-2 flex items-center justify-between">
-                <span className="text-xs text-slate-600" dir="ltr">{log.totalTokens} tokens · {log.model}</span>
+                <span className="text-xs text-slate-600" dir="ltr">{log.totalTokens} tokens · {log.model}{log.knowledgeUsed ? ` · ${log.knowledgeUsed} knowledge` : ""}</span>
                 {log.aiReply && <RateButtons logId={log.id} currentRating={log.rating} />}
               </div>
+              {log.answerSource !== "brain" && (
+                <TeachBrain logId={log.id} hasReply={!!log.aiReply && !log.handoffTriggered} needsFix={needsAttention || log.rating === "INACCURATE"} />
+              )}
             </div>
           );
         })}

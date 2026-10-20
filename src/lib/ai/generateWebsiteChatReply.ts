@@ -1,14 +1,13 @@
 import type { Prisma } from "@prisma/client";
 import type OpenAI from "openai";
-import { getOpenAiClient } from "@/lib/ai/openaiClient";
-import { AI_TOOLS, executeAiTool } from "@/lib/ai/tools";
+import { AI_TOOLS } from "@/lib/ai/tools";
 import { checkDeterministicHandoff } from "@/lib/ai/handoffRules";
 import { buildSystemPrompt, getOrCreateAiAgentConfig } from "@/lib/ai/aiAgentConfig";
 import { parseChatbotLimits } from "@/lib/planLimits";
 import { checkTenantRateLimit, checkIpRateLimit } from "@/lib/rateLimit";
-import { RESPOND_TOOL, type AiReplyResult, type TokenUsage, type ChatHistoryMessage } from "@/lib/ai/generateReply";
+import { brainReply, runAgentLoop, type AiReplyResult, type ChatHistoryMessage } from "@/lib/ai/generateReply";
+import { consultBrain } from "@/lib/ai/brain/context";
 
-const MAX_TOOL_ITERATIONS = 6; // نفس حد generateAiEmployeeReply/generatePlatformChatReply بالحرف
 const SESSION_RATE_LIMIT = 15; // نفس حد الجلسة الواحدة في generatePlatformChatReply.ts
 const SESSION_RATE_WINDOW_SECONDS = 60;
 const TENANT_RATE_LIMIT = 20; // نفس AI_REPLY_RATE_LIMIT في generateReply.ts — نفس ميزانية الرد الذكي لكل تاجر
@@ -70,92 +69,25 @@ export async function generateWebsiteChatReply(params: {
     return { kind: "handoff", reason: "تجاوز الحد الأقصى المؤقت لعدد ردود الذكاء الاصطناعي — تحويل مؤقت لفريق المتجر" };
   }
 
-  // 4) حد توكنز الباقة الشهري — نفس حصة الموظف الذكي على واتساب بالضبط (ميزانية LLM واحدة للتاجر).
+  // 4) عقل البوت: إجابة معتمدة جاهزة ⇒ بلا نموذج ولا توكنز.
+  const brain = await consultBrain(tx, tenantId, lastUserText, { allowDirect: config.directAnswers });
+  if (brain.direct) return brainReply(brain.direct.answer);
+
+  // 5) حد توكنز الباقة الشهري — نفس حصة الموظف الذكي على واتساب بالضبط (ميزانية LLM واحدة للتاجر).
   if (subscription) {
     if (limits.maxAiTokensPerMonth >= 0 && subscription.aiTokensUsedThisPeriod >= limits.maxAiTokensPerMonth) {
       return { kind: "handoff", reason: "تم استهلاك كامل حصة توكنز الذكاء الاصطناعي لهذا الشهر — تحويل لفريق المتجر" };
     }
   }
 
-  // 5) مزوّد الذكاء الاصطناعي نفسه.
-  const openai = await getOpenAiClient();
-  if (!openai) {
-    return { kind: "handoff", reason: "لم يُضبَط مزوّد الذكاء الاصطناعي بعد من إعدادات المنصة" };
-  }
-
-  const systemPrompt = buildSystemPrompt(config, tenantName, "موقع المتجر الإلكتروني");
-
-  const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
-    { role: "system", content: systemPrompt },
-    ...history.map((m): OpenAI.Chat.Completions.ChatCompletionMessageParam => ({ role: m.role, content: m.content })),
-  ];
-
-  const tools = [...WEBSITE_TOOLS, RESPOND_TOOL];
-  const usage: TokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
-  let usedTool: string | null = null;
-
-  for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration++) {
-    const completion = await openai.client.chat.completions.create({
-      model: openai.model,
-      messages,
-      tools,
-      tool_choice: "auto",
-    });
-
-    if (completion.usage) {
-      usage.promptTokens += completion.usage.prompt_tokens;
-      usage.completionTokens += completion.usage.completion_tokens;
-      usage.totalTokens += completion.usage.total_tokens;
-    }
-
-    const choice = completion.choices[0];
-    if (!choice) {
-      return { kind: "handoff", reason: "لم يصل أي رد من مزوّد الذكاء الاصطناعي", model: openai.model, usage };
-    }
-    const message = choice.message;
-    const toolCalls = message.tool_calls?.filter(
-      (t): t is OpenAI.Chat.Completions.ChatCompletionMessageFunctionToolCall => t.type === "function"
-    );
-
-    if (!toolCalls || toolCalls.length === 0) {
-      return {
-        kind: "reply", text: message.content?.trim() || "عذراً، لم أفهم طلبك تماماً — هل يمكنك التوضيح أكثر؟",
-        confidence: 50, model: openai.model, usage, usedTool,
-      };
-    }
-
-    messages.push(message);
-
-    let finalAnswer: AiReplyResult | null = null;
-    for (const toolCall of toolCalls) {
-      if (toolCall.function.name === "respond_to_customer") {
-        let args: { reply?: string; confidence?: number; needsHuman?: boolean; handoffReason?: string } = {};
-        try {
-          args = JSON.parse(toolCall.function.arguments || "{}");
-        } catch {
-          // مخرجات غير صالحة من النموذج — تُعامَل كتحويل آمن بدل محاولة تخمين نية النموذج
-        }
-        if (args.needsHuman) {
-          finalAnswer = { kind: "handoff", reason: args.handoffReason || "قرّر الموظف الذكي أن الاستفسار يحتاج تدخّل بشري", model: openai.model, usage };
-        } else {
-          finalAnswer = {
-            kind: "reply", text: (args.reply || "").trim() || "عذراً، هل يمكنك توضيح طلبك أكثر؟",
-            confidence: Math.max(0, Math.min(100, Math.round(args.confidence ?? 50))),
-            model: openai.model, usage, usedTool,
-          };
-        }
-        messages.push({ role: "tool", tool_call_id: toolCall.id, content: "تم إرسال الرد للزائر." });
-      } else {
-        usedTool = toolCall.function.name;
-        // contactId فارغ عمداً — لا هوية حقيقية لزائر موقع التاجر في هذه القناة، وWEBSITE_TOOLS
-        // تستبعد الأداة الوحيدة (get_order_status) التي كانت لتحتاج contactId فعلياً.
-        const result = await executeAiTool(tx, tenantId, "", toolCall.function.name, toolCall.function.arguments);
-        messages.push({ role: "tool", tool_call_id: toolCall.id, content: result });
-      }
-    }
-
-    if (finalAnswer) return finalAnswer;
-  }
-
-  return { kind: "handoff", reason: "تعذّر التوصل لرد نهائي بعد عدة محاولات استدعاء أدوات", model: openai.model, usage };
+  // 6) النموذج — contactId فارغ عمداً: لا هوية حقيقية لزائر موقع التاجر، وWEBSITE_TOOLS تستبعد get_order_status.
+  return runAgentLoop({
+    tx, tenantId, contactId: "",
+    systemPrompt: buildSystemPrompt(config, tenantName, "موقع المتجر الإلكتروني"),
+    history,
+    contextMessage: brain.contextMessage,
+    tools: WEBSITE_TOOLS,
+    knowledgeUsed: brain.knowledgeUsed,
+    respondedNote: "تم إرسال الرد للزائر.",
+  });
 }

@@ -25,7 +25,8 @@ DECLARE
     'ApprovalRequest', 'MerchantNote', 'ImpersonationSession', 'AnnouncementDismissal', 'AnnouncementView',
     'QuickReply', 'InternalNote', 'ContactImportBatch', 'PaymentMethod', 'CreditNote',
     'AiAgentConfig', 'AiReplyLog', 'TenantChatSession', 'TenantChatMessage',
-    'WalletBalance', 'WalletTransaction', 'MessageUsage'
+    'WalletBalance', 'WalletTransaction', 'MessageUsage',
+    'KnowledgeSource', 'KnowledgeChunk', 'KnowledgeQa', 'ContactMemory'
   ];
 BEGIN
   FOREACH t IN ARRAY tenant_tables LOOP

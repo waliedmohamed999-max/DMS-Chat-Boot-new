@@ -323,3 +323,12 @@ export async function undoImportBatch(batchId: string) {
   revalidatePath("/dashboard/contacts");
   return { deletedCount: count };
 }
+
+/** حذف معلومة حفظها الموظف الذكي عن العميل (خصوصية/تصحيح). RLS يضمن أنها لهذا التاجر. */
+export async function deleteContactMemory(contactId: string, memoryId: string) {
+  const session = await requireTenantSession();
+  requireEffectivePermission(session.user.permissions, "contacts.manage");
+  const tenantId = session.user.tenantId;
+  await withTenant(tenantId, (tx) => tx.contactMemory.deleteMany({ where: { id: memoryId, contactId, tenantId } }));
+  revalidatePath(`/dashboard/contacts/${contactId}`);
+}

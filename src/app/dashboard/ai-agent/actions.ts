@@ -8,22 +8,9 @@ import { writeAuditLog } from "@/lib/audit";
 import { generateAiEmployeeReply, type ChatHistoryMessage } from "@/lib/ai/generateReply";
 import { getTenantChatbotLimits, isNodeTypeAllowed } from "@/lib/planLimits";
 import type { AiTone } from "@prisma/client";
+import { addQa, BrainError } from "@/lib/ai/brain/ingest";
 
 const VALID_TONES: AiTone[] = ["FORMAL", "FRIENDLY", "FUN"];
-
-/** يفكّك textarea بسطر واحد لكل سؤال شائع، بصيغة "السؤال | الجواب" — نفس نمط parseDelimitedLines
- * المستخدَم في admin/content/actions.ts. */
-function parseFaqItems(raw: string): { question: string; answer: string }[] {
-  return raw
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => {
-      const [question, ...rest] = line.split("|");
-      return { question: (question ?? "").trim(), answer: rest.join("|").trim() };
-    })
-    .filter((f) => f.question && f.answer);
-}
 
 export async function updateAiAgentConfig(formData: FormData) {
   const session = await requireTenantSession();
@@ -46,26 +33,25 @@ export async function updateAiAgentConfig(formData: FormData) {
   const shippingPolicy = String(formData.get("shippingPolicy") ?? "").trim() || null;
   const returnPolicy = String(formData.get("returnPolicy") ?? "").trim() || null;
   const workingHours = String(formData.get("workingHours") ?? "").trim() || null;
-  const faqItems = parseFaqItems(String(formData.get("faqItems") ?? ""));
 
   await withTenant(tenantId, (tx) =>
     tx.aiAgentConfig.upsert({
       where: { tenantId },
-      update: { enabled, agentName, tone, boundariesText, shippingPolicy, returnPolicy, workingHours, faqItems },
-      create: { tenantId, enabled, agentName, tone, boundariesText, shippingPolicy, returnPolicy, workingHours, faqItems },
+      update: { enabled, agentName, tone, boundariesText, shippingPolicy, returnPolicy, workingHours },
+      create: { tenantId, enabled, agentName, tone, boundariesText, shippingPolicy, returnPolicy, workingHours },
     })
   );
 
   await writeAuditLog({
     tenantId, userId: session.user.id, action: "ai_agent.config_update", targetType: "AiAgentConfig",
-    metaJson: { enabled, agentName, tone, faqCount: faqItems.length },
+    metaJson: { enabled, agentName, tone },
   });
 
   revalidatePath("/dashboard/ai-agent");
 }
 
 export type TestMessageResult =
-  | { kind: "reply"; text: string; confidence: number }
+  | { kind: "reply"; text: string; confidence: number; answerSource: "llm" | "brain"; tokens: number; knowledgeUsed: number }
   | { kind: "handoff"; reason: string }
   | { kind: "error"; message: string };
 
@@ -89,16 +75,32 @@ export async function sendTestMessage(history: ChatHistoryMessage[], message: st
   }
 
   const tenant = await withTenant(tenantId, (tx) => tx.tenant.findUniqueOrThrow({ where: { id: tenantId } }));
+  // السجل يأتي من المتصفح: يُقصّ (عدداً وطولاً) ويُلحق به السؤال الحالي — كان يُرسَل للنموذج بدونه فيرد على السؤال السابق.
+  const text = String(message ?? "").trim().slice(0, 2000);
+  if (!text) return { kind: "error", message: "اكتب رسالة" };
+  const fullHistory: ChatHistoryMessage[] = [
+    ...(Array.isArray(history) ? history : [])
+      .filter((m) => (m?.role === "user" || m?.role === "assistant") && typeof m.content === "string")
+      .slice(-12)
+      .map((m) => ({ role: m.role, content: m.content.slice(0, 2000) })),
+    { role: "user", content: text },
+  ];
 
   try {
     const result = await withTenant(tenantId, (tx) =>
       generateAiEmployeeReply({
         tx, tenantId, conversationId: "preview-test-mode", contactId: "preview-test-mode-no-contact",
-        tenantName: tenant.name, history, lastUserText: message,
+        tenantName: tenant.name, history: fullHistory, lastUserText: text, realContact: false,
       })
     );
+    if (result.usage?.totalTokens) {
+      await withTenant(tenantId, (tx) => tx.subscription.updateMany({ where: { tenantId }, data: { aiTokensUsedThisPeriod: { increment: result.usage!.totalTokens } } }));
+    }
     if (result.kind === "handoff") return { kind: "handoff", reason: result.reason };
-    return { kind: "reply", text: result.text, confidence: result.confidence };
+    return {
+      kind: "reply", text: result.text, confidence: result.confidence,
+      answerSource: result.answerSource ?? "llm", tokens: result.usage.totalTokens, knowledgeUsed: result.knowledgeUsed ?? 0,
+    };
   } catch (err) {
     return { kind: "error", message: err instanceof Error ? err.message : "خطأ غير متوقع أثناء الاختبار" };
   }
@@ -114,4 +116,28 @@ export async function rateAiReplyLog(logId: string, rating: "HELPFUL" | "INACCUR
   await withTenant(tenantId, (tx) => tx.aiReplyLog.update({ where: { id: logId }, data: { rating } }));
 
   revalidatePath("/dashboard/ai-agent/reviews");
+}
+
+export type TeachResult = { ok: boolean; message: string };
+
+/**
+ * تعليم البوت من مراجعة الجودة: سؤال العميل في هذا السجل + الجواب الصحيح ⇒ إجابة معتمدة في عقل البوت.
+ * بلا answer: يُعتمد رد الموظف الذكي نفسه كما هو (رد جيد يُحفظ ليُعاد بلا توكنز).
+ */
+export async function teachFromReview(logId: string, answer?: string): Promise<TeachResult> {
+  const session = await requireTenantSession();
+  requireEffectivePermission(session.user.permissions, "chatbot.edit");
+  const tenantId = session.user.tenantId;
+  const log = await withTenant(tenantId, (tx) => tx.aiReplyLog.findUnique({ where: { id: logId }, select: { userMessage: true, aiReply: true } }));
+  if (!log) return { ok: false, message: "السجل غير موجود" };
+  const finalAnswer = (answer ?? log.aiReply ?? "").trim();
+  try {
+    await addQa(tenantId, { question: log.userMessage, answer: finalAnswer, origin: "FROM_REVIEW" });
+  } catch (err) {
+    return { ok: false, message: err instanceof BrainError ? err.message : "تعذّر الحفظ" };
+  }
+  if (answer === undefined) await withTenant(tenantId, (tx) => tx.aiReplyLog.update({ where: { id: logId }, data: { rating: "HELPFUL" } }));
+  await writeAuditLog({ tenantId, userId: session.user.id, action: "ai_brain.taught_from_review", targetType: "AiReplyLog", targetId: logId });
+  revalidatePath("/dashboard/ai-agent/reviews");
+  return { ok: true, message: "حُفظت في عقل البوت — سيجيب بها من الآن" };
 }

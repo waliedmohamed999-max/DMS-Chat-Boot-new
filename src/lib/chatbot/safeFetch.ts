@@ -76,7 +76,9 @@ export async function assertUrlSafeForOutboundFetch(rawUrl: string): Promise<Url
   return { safe: true, ip: firstAddress };
 }
 
-type PinnedRequestResult = { success: true; status: number; buffer: Buffer } | { success: false; error: string };
+type PinnedRequestResult =
+  | { success: true; status: number; buffer: Buffer; headers: Record<string, string | string[] | undefined> }
+  | { success: false; error: string };
 
 /**
  * ينفّذ الاتصال الفعلي بعنوان IP مُتحقَّق منه مسبقاً (بلا إعادة حلّ اسم النطاق — يمنع DNS rebinding،
@@ -84,7 +86,7 @@ type PinnedRequestResult = { success: true; status: number; buffer: Buffer } | {
  * النصية (استدعاء API — راجع fetchWithSsrfProtection) ونسخة الوسائط الثنائية (تنزيل صورة/فيديو/ملف
  * لإعادة رفعه عبر Baileys — راجع fetchMediaWithSsrfProtection) لتفادي ازدواج منطق الاتصال المُحصَّن.
  */
-function requestPinned(url: URL, pinnedIp: string, maxBytes: number, bodyString?: string): Promise<PinnedRequestResult> {
+function requestPinned(url: URL, pinnedIp: string, maxBytes: number, bodyString?: string, extraHeaders?: Record<string, string>): Promise<PinnedRequestResult> {
   const pinnedFamily = net.isIP(pinnedIp);
 
   return new Promise<PinnedRequestResult>((resolve) => {
@@ -97,13 +99,17 @@ function requestPinned(url: URL, pinnedIp: string, maxBytes: number, bodyString?
         method: bodyString ? "POST" : "GET",
         headers: {
           Host: url.hostname,
+          ...extraHeaders,
           ...(bodyString ? { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(bodyString) } : {}),
         },
         timeout: REQUEST_TIMEOUT_MS,
-        // لا يُعاد حلّ اسم النطاق هنا — يُعاد دائماً نفس عنوان IP المتحقَّق منه أعلاه فقط.
-        lookup: (_hostname, _options, callback) => {
-          callback(null, pinnedIp, pinnedFamily);
-        },
+        // لا يُعاد حلّ اسم النطاق هنا — يُعاد دائماً نفس عنوان IP المتحقَّق منه أعلاه فقط. Node الحديث يستدعي
+        // lookup بـ{ all: true } (اختيار العائلة التلقائي) ويتوقع مصفوفة عناوين — إرجاع عنوان مفرد حينها كان
+        // يُفشل كل اتصال بخطأ "Invalid IP address: undefined".
+        lookup: ((_hostname: string, options: { all?: boolean }, callback: (...args: unknown[]) => void) => {
+          if (options?.all) callback(null, [{ address: pinnedIp, family: pinnedFamily }]);
+          else callback(null, pinnedIp, pinnedFamily);
+        }) as never,
       },
       (res) => {
         // لا تتبّع أي إعادة توجيه تلقائياً — قد يُعاد التوجيه لعنوان داخلي.
@@ -115,7 +121,7 @@ function requestPinned(url: URL, pinnedIp: string, maxBytes: number, bodyString?
           chunks.push(chunk);
         });
         res.on("end", () => {
-          resolve({ success: true, status: res.statusCode ?? 0, buffer: Buffer.concat(chunks).subarray(0, maxBytes) });
+          resolve({ success: true, status: res.statusCode ?? 0, buffer: Buffer.concat(chunks).subarray(0, maxBytes), headers: res.headers });
         });
         res.on("error", (err) => {
           resolve({ success: false, error: err.message || "فشل الاتصال بالرابط الخارجي." });
@@ -140,7 +146,7 @@ export async function fetchWithSsrfProtection(rawUrl: string, body?: unknown): P
   const bodyString = body ? JSON.stringify(body) : undefined;
 
   const result = await requestPinned(url, safety.ip, MAX_RESPONSE_BYTES, bodyString);
-  if (!result.success) return result;
+  if (!result.success) return { success: false, error: result.error };
   return { success: true, status: result.status, body: result.buffer.toString("utf8") };
 }
 
@@ -155,5 +161,34 @@ export async function fetchMediaWithSsrfProtection(rawUrl: string): Promise<Safe
   const safety = await assertUrlSafeForOutboundFetch(rawUrl);
   if (!safety.safe) return { success: false, error: safety.error };
   const url = new URL(rawUrl);
-  return requestPinned(url, safety.ip, MAX_MEDIA_BYTES);
+  const result = await requestPinned(url, safety.ip, MAX_MEDIA_BYTES);
+  return result.success ? { success: true, status: result.status, buffer: result.buffer } : result;
+}
+
+export type SafePageFetchResult = { success: true; status: number; buffer: Buffer; contentType: string; finalUrl: string } | { success: false; error: string };
+
+/**
+ * يجلب صفحة ويب لقاعدة معرفة عقل البوت: نفس التحصين (HTTPS، IP عام مثبّت)، مع تتبّع حتى 3 إعادات توجيه
+ * يُعاد فحص كل واحدة منها بالكامل (لا تتبّع تلقائي قد يقود لعنوان داخلي).
+ */
+export async function fetchPageWithSsrfProtection(rawUrl: string, maxBytes: number): Promise<SafePageFetchResult> {
+  let current = rawUrl;
+  for (let hop = 0; hop <= 3; hop++) {
+    const safety = await assertUrlSafeForOutboundFetch(current);
+    if (!safety.safe) return { success: false, error: safety.error };
+    const url = new URL(current);
+    const result = await requestPinned(url, safety.ip, maxBytes, undefined, {
+      "User-Agent": "Mozilla/5.0 (compatible; DMS-Tech-KnowledgeBot/1.0)",
+      Accept: "text/html,text/plain;q=0.9",
+    });
+    if (!result.success) return result;
+    const location = result.headers.location;
+    if (result.status >= 300 && result.status < 400 && typeof location === "string") {
+      current = new URL(location, url).toString();
+      continue;
+    }
+    const type = result.headers["content-type"];
+    return { success: true, status: result.status, buffer: result.buffer, contentType: typeof type === "string" ? type : "", finalUrl: current };
+  }
+  return { success: false, error: "إعادات توجيه كثيرة من الرابط." };
 }

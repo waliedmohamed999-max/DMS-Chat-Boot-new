@@ -43,7 +43,7 @@ export function Sidebar({
       ]
     : [
         { title: "مساحة العمل", keys: ["dashboard", "inbox", "contacts", "orders"] },
-        { title: "التواصل والأتمتة", keys: ["chatbot", "ai-agent", "website-chat", "campaigns", "templates"] },
+        { title: "التواصل والأتمتة", keys: ["chatbot", "ai-agent", "brain", "website-chat", "campaigns", "templates"] },
         { title: "إدارة المتجر", keys: [] },
       ];
   const assigned = sections.flatMap((section) => section.keys);

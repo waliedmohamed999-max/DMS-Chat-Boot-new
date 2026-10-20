@@ -7,7 +7,8 @@ import { findOutgoingEdge, matchesConditionKeywords, parseMenuBranches, matchMen
 import { START_NODE_ID, type FlowGraph } from "@/lib/chatbot/types";
 import { fetchWithSsrfProtection } from "@/lib/chatbot/safeFetch";
 import type { MessageAttachment } from "@/lib/integrations/types";
-import { generateAiEmployeeReply, type ChatHistoryMessage } from "@/lib/ai/generateReply";
+import { generateAiEmployeeReply } from "@/lib/ai/generateReply";
+import { compactConversation } from "@/lib/ai/brain/memory";
 
 /** ثقة أقل من هذا الحد (من 100) تُعامَل كتحويل فوري لموظف بشري بصرف النظر عمّا قرّره النموذج نفسه
  * بشأن needsHuman — تحقُّق مستقل في الكود، وليس ثقة عمياء بتقييم النموذج لنفسه (بند 4 في القواعد
@@ -130,27 +131,23 @@ export async function runChatbotEngine(tenantId: string, conversationId: string)
         }
 
         const tenant = await tx.tenant.findUnique({ where: { id: tenantId }, select: { name: true } });
-        // آخر 15 رسالة حقيقية (الأقدم أولاً) لبناء سياق محادثة متماسك عبر عدة رسائل — وليس رداً
-        // منعزلاً لكل رسالة بمفردها (بند ب في البرومنت).
-        const recentMessages = await tx.message.findMany({
-          where: { tenantId, conversationId, senderType: { in: ["CONTACT", "BOT", "AGENT"] } },
-          orderBy: { createdAt: "desc" }, take: 15,
-        });
-        const history: ChatHistoryMessage[] = recentMessages
-          .slice()
-          .reverse()
-          .map((m) => ({ role: (m.direction === "INBOUND" ? "user" : "assistant") as "user" | "assistant", content: m.body ?? "" }))
-          .filter((m) => m.content.trim().length > 0);
+        // ذاكرة المحادثة: آخر الرسائل كاملة + ملخص للأقدم (بدل إعادة إرسال 15 رسالة كاملة في كل رد) — سياق
+        // متماسك عبر عدة رسائل (بند ب في البرومنت) بتكلفة توكنز أقل في المحادثات الطويلة.
+        const compacted = await compactConversation(tx, tenantId, conversationId);
+        if (compacted.usage?.totalTokens) {
+          await tx.subscription.updateMany({ where: { tenantId }, data: { aiTokensUsedThisPeriod: { increment: compacted.usage.totalTokens } } });
+        }
 
         const aiResult = await generateAiEmployeeReply({
           tx, tenantId, conversationId, contactId: convo.contactId,
-          tenantName: tenant?.name ?? "المتجر", history, lastUserText,
+          tenantName: tenant?.name ?? "المتجر", history: compacted.history, lastUserText,
+          conversationSummary: compacted.summary,
         });
 
         // ثقة منخفضة (بصرف النظر عن قرار النموذج نفسه) = تحويل فوري — تحقُّق مستقل في الكود.
         const effectiveResult =
           aiResult.kind === "reply" && aiResult.confidence < LOW_CONFIDENCE_HANDOFF_THRESHOLD
-            ? { kind: "handoff" as const, reason: `ثقة منخفضة في فهم الاستفسار (${aiResult.confidence}%)`, model: aiResult.model, usage: aiResult.usage, draftedReply: aiResult.text }
+            ? { kind: "handoff" as const, reason: `ثقة منخفضة في فهم الاستفسار (${aiResult.confidence}%)`, model: aiResult.model, usage: aiResult.usage, draftedReply: aiResult.text, knowledgeUsed: aiResult.knowledgeUsed }
             : aiResult;
 
         const usage = effectiveResult.kind === "handoff" ? effectiveResult.usage : effectiveResult.usage;
@@ -178,7 +175,7 @@ export async function runChatbotEngine(tenantId: string, conversationId: string)
               confidenceScore: "draftedReply" in effectiveResult ? LOW_CONFIDENCE_HANDOFF_THRESHOLD - 1 : 0,
               handoffTriggered: true, handoffReason: effectiveResult.reason,
               promptTokens: usage?.promptTokens ?? 0, completionTokens: usage?.completionTokens ?? 0, totalTokens: usage?.totalTokens ?? 0,
-              model: effectiveResult.model ?? "n/a",
+              model: effectiveResult.model ?? "n/a", knowledgeUsed: effectiveResult.knowledgeUsed ?? 0,
             },
           });
 
@@ -219,6 +216,7 @@ export async function runChatbotEngine(tenantId: string, conversationId: string)
             confidenceScore: effectiveResult.confidence, handoffTriggered: false, usedTool: effectiveResult.usedTool,
             promptTokens: effectiveResult.usage.promptTokens, completionTokens: effectiveResult.usage.completionTokens,
             totalTokens: effectiveResult.usage.totalTokens, model: effectiveResult.model,
+            answerSource: effectiveResult.answerSource ?? "llm", knowledgeUsed: effectiveResult.knowledgeUsed ?? 0,
           },
         });
 

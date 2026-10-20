@@ -106,7 +106,7 @@ const nextConfig = {
   // pdfkit يحمّل ملفات خط .afm ديناميكياً عبر path.join(__dirname, ...) وقت التشغيل — تجميع
   // webpack العادي يكسر هذا المسار، فيُستثنى هنا (نفس السبب والنمط لـbullmq/ioredis أعلاه).
   // baileys: مكتبة خادم فقط بتبعيات اختيارية (jimp/sharp/link-preview-js) يفشل Turbopack في حلّها وقت التجميع.
-  serverExternalPackages: ["bullmq", "ioredis", "pdfkit", "@whiskeysockets/baileys"],
+  serverExternalPackages: ["bullmq", "ioredis", "pdfkit", "@whiskeysockets/baileys", "unpdf"],
   experimental: {
     // الافتراضي 1MB غير كافٍ لملف Excel حقيقي — هذا أيضاً حد أمني أول ضد رفع ملفات ضخمة كوسيلة
     // استنزاف موارد، بالإضافة لتحقق صريح من file.size داخل كل Server Action نفسها (دفاع مزدوج).
