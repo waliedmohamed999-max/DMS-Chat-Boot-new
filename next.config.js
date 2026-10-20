@@ -1,7 +1,12 @@
 /** @type {import('next').NextConfig} */
 
 // 'unsafe-eval' لازم لوضع التطوير فقط (إعادة التحميل السريع) — بناء الإنتاج لا يحتاجه، وإزالته تضيّق أثر أي XSS.
-const SCRIPT_SRC = process.env.NODE_ENV === "production" ? "script-src 'self' 'unsafe-inline'" : "script-src 'self' 'unsafe-inline' 'unsafe-eval'";
+// حدود خيوط المكتبات الأصلية أثناء البناء (SWC/Rayon وlibuv) — تُورَّث لعمليات البناء الفرعية. نفس سبب
+// experimental.cpus أدناه: البقاء ضمن حد العمليات/الخيوط في الاستضافة المشتركة.
+process.env.RAYON_NUM_THREADS ||= "2";
+process.env.UV_THREADPOOL_SIZE ||= "4";
+
+const SCRIPT_SRC =process.env.NODE_ENV === "production" ? "script-src 'self' 'unsafe-inline'" : "script-src 'self' 'unsafe-inline' 'unsafe-eval'";
 
 // CSP بلا nonce (Next.js App Router بلا middleware مخصّص لهذا) يتطلب 'unsafe-inline'/'unsafe-eval'
 // لسكربتات Next.js نفسها (hydration + HMR في التطوير) — نفس التوصية الرسمية لـNext.js لإعداد CSP
@@ -98,6 +103,11 @@ const nextConfig = {
     // الافتراضي 1MB غير كافٍ لملف Excel حقيقي — هذا أيضاً حد أمني أول ضد رفع ملفات ضخمة كوسيلة
     // استنزاف موارد، بالإضافة لتحقق صريح من file.size داخل كل Server Action نفسها (دفاع مزدوج).
     serverActions: { bodySizeLimit: "5mb" },
+    // الاستضافة المشتركة (Hostinger) تحدّ عدد العمليات/الخيوط لكل حساب: 11 عامل بناء متوازٍ، كلٌّ يحمّل
+    // مكتبات أصلية (Rust) تُنشئ خيوطها عند التحميل، تجاوزت الحد فانهار البناء (SIGABRT داخل dlopen).
+    // عامل واحد افتراضياً — أبطأ قليلاً لكنه مستقر؛ NEXT_BUILD_CPUS يرفعه على خادم بلا قيود.
+    cpus: Number(process.env.NEXT_BUILD_CPUS) || 1,
+    staticGenerationMaxConcurrency: 4,
   },
   async headers() {
     return [
