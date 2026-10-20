@@ -3,10 +3,11 @@ import { requireTenantSession } from "@/lib/session";
 import { withTenant } from "@/lib/db";
 import { hasEffectivePermission } from "@/lib/rbac";
 import { resubmitTemplateRedirect, deleteSupersededTemplate } from "./actions";
+import { SyncTemplatesButton } from "./SyncTemplatesButton";
 
 const STATUS_LABELS: Record<string, { label: string; className: string }> = {
   DRAFT: { label: "مسودة", className: "bg-slate-500/10 text-slate-400" },
-  PENDING: { label: "بانتظار موافقة Meta", className: "bg-warning-500/10 text-warning-500" },
+  PENDING: { label: "بانتظار موافقة واتساب", className: "bg-warning-500/10 text-warning-500" },
   APPROVED: { label: "معتمد", className: "bg-success-500/10 text-success-500" },
   REJECTED: { label: "مرفوض", className: "bg-danger-500/10 text-danger-500" },
   PAUSED: { label: "معلَّق (جودة منخفضة)", className: "bg-warning-500/10 text-warning-500" },
@@ -45,13 +46,16 @@ export default async function TemplatesPage() {
         <div>
           <h1 className="text-xl font-bold text-white">قوالب الرسائل</h1>
           <p className="text-sm text-slate-400">
-            كل قالب جديد يُرسَل فعلياً لمراجعة Meta، وتتحدث حالته تلقائياً عبر webhook دون أي تدخل يدوي.
+            كل قالب جديد يُرسَل فعلياً لمراجعة واتساب عبر قناتك، وتتحدث حالته تلقائياً (إشعار فوري + فحص دوري كل 15 دقيقة).
           </p>
         </div>
         {canManage && (
-          <Link href="/dashboard/templates/new" className="btn-primary">
-            + قالب جديد
-          </Link>
+          <div className="flex items-start gap-2">
+            <SyncTemplatesButton />
+            <Link href="/dashboard/templates/new" className="btn-primary">
+              + قالب جديد
+            </Link>
+          </div>
         )}
       </div>
 

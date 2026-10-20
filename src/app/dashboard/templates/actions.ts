@@ -7,6 +7,8 @@ import { withTenant } from "@/lib/db";
 import { requireEffectivePermission } from "@/lib/rbac";
 import { writeAuditLog } from "@/lib/audit";
 import { submitTemplateForApproval, type TemplateButtonInput } from "@/lib/integrations/meta/templates";
+import { syncTemplatesFromChannel } from "@/lib/integrations/templateChannel";
+import { checkTenantRateLimit } from "@/lib/rateLimit";
 import { z } from "zod";
 
 const templateSchema = z.object({
@@ -129,4 +131,26 @@ export async function deleteSupersededTemplate(templateId: string) {
   });
 
   revalidatePath("/dashboard/templates");
+}
+
+/**
+ * مزامنة القوالب مع حساب واتساب: يستورد القوالب المعتمدة مسبقاً في الحساب (تاجر نُقل من Meta إلى 360dialog
+ * أو أنشأ قوالب من مكان آخر) ويحدّث حالة القوالب قيد المراجعة.
+ */
+export async function syncTemplatesAction(): Promise<{ ok: boolean; message: string }> {
+  const session = await requireTenantSession();
+  requireEffectivePermission(session.user.permissions, "campaigns.manage");
+  const tenantId = session.user.tenantId;
+  if (!(await checkTenantRateLimit(tenantId, "templates-sync", 10, 3600)).allowed) {
+    return { ok: false, message: "تمت المزامنة عدة مرات خلال الساعة الأخيرة — حاول لاحقاً" };
+  }
+  try {
+    const r = await syncTemplatesFromChannel(tenantId);
+    revalidatePath("/dashboard/templates");
+    if (r.channel === "sandbox") return { ok: true, message: "الحساب في الوضع التجريبي — لا قوالب حقيقية للمزامنة" };
+    await writeAuditLog({ tenantId, userId: session.user.id, action: "template.sync", targetType: "MessageTemplate", metaJson: r });
+    return { ok: true, message: `تمت المزامنة: ${r.imported} قالب جديد، ${r.updated} تحديث حالة (من ${r.total} في الحساب)` };
+  } catch (err) {
+    return { ok: false, message: err instanceof Error ? err.message : "تعذّرت المزامنة" };
+  }
 }

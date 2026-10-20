@@ -123,3 +123,35 @@ export function verifyD360PartnerSignature(rawBody: string, signature: string | 
   const b = Buffer.from(signature.replace(/^sha256=/, "").trim());
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
+
+/** حد أعلى لحجم الوسائط المنزَّلة في الذاكرة (الرسائل الصوتية عادةً أقل من 1MB). */
+const MAX_MEDIA_BYTES = 16 * 1024 * 1024;
+
+/**
+ * تنزيل وسائط واردة عبر 360dialog (docs.360dialog.com — Retrieve Media): GET /{media-id} يعيد رابط
+ * lookaside.fbsbx.com يُستبدل مضيفه بـ waba-v2.360dialog.io ويُطلب بنفس مفتاح القناة. الرابط سري وصالح
+ * 5 دقائق — لا يُخزَّن، والملف يبقى في الذاكرة فقط (يُمرَّر للتفريغ الصوتي ثم يُهمَل).
+ */
+export async function downloadD360Media(mediaId: string, apiKey: string): Promise<{ buffer: Buffer; mimeType: string } | null> {
+  const base = d360Config().messagingUrl;
+  try {
+    const metaRes = await fetch(`${base}/${encodeURIComponent(mediaId)}`, { headers: { "D360-API-KEY": apiKey }, signal: AbortSignal.timeout(15_000) });
+    if (!metaRes.ok) return null;
+    const meta = await metaRes.json();
+    if (typeof meta?.url !== "string") return null;
+    const original = new URL(meta.url.split(String.fromCharCode(92)).join("")); // إزالة الشرطات المائلة العكسية من الرابط
+    // لا نتبع أي مضيف آخر غير خادم 360dialog نفسه (منع SSRF عبر رابط معدَّل في الرد).
+    const downloadUrl = new URL(original.pathname + original.search, base);
+    if (downloadUrl.origin !== new URL(base).origin) return null;
+    const fileRes = await fetch(downloadUrl, { headers: { "D360-API-KEY": apiKey }, redirect: "follow", signal: AbortSignal.timeout(30_000) });
+    if (!fileRes.ok) return null;
+    const size = Number(fileRes.headers.get("content-length") ?? 0);
+    if (size > MAX_MEDIA_BYTES) return null;
+    const buffer = Buffer.from(await fileRes.arrayBuffer());
+    if (buffer.length > MAX_MEDIA_BYTES) return null;
+    return { buffer, mimeType: meta.mime_type ?? fileRes.headers.get("content-type") ?? "audio/ogg" };
+  } catch (err) {
+    console.error("❌ فشل تنزيل وسائط 360dialog:", err instanceof Error ? err.message : err);
+    return null;
+  }
+}

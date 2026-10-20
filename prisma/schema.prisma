@@ -385,6 +385,10 @@ model Invoice {
   periodStart          DateTime
   periodEnd            DateTime
   paidAt               DateTime?
+  // دفع إلكتروني عبر صفحة Moyasar: معرّف فاتورة Moyasar (لا يُطبَّق الدفع إلا بعد التحقق منها لدى Moyasar)
+  // وتفاصيل التغيير المعلّق تنفيذه بعد الدفع: { kind: "change"|"renew", planId, periodStart, periodEnd }.
+  providerInvoiceId    String?       @unique
+  checkoutJson         Json?
   createdAt            DateTime      @default(now())
 
   creditNotes CreditNote[]

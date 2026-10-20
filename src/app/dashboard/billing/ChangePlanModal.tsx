@@ -18,6 +18,11 @@ export function ChangePlanModal({ plan, currency, onClose }: { plan: ComparisonP
   function handleConfirm() {
     startTransition(async () => {
       const res = await changePlan(plan.id);
+      if (res.success && res.redirectUrl) {
+        // صفحة الدفع الآمنة لدى Moyasar — تُفعَّل الباقة بعد التحقق من الدفع عند العودة.
+        window.location.href = res.redirectUrl;
+        return;
+      }
       setConfirmResult(res);
       if (res.success) setTimeout(onClose, 1200);
     });
@@ -61,7 +66,7 @@ export function ChangePlanModal({ plan, currency, onClose }: { plan: ComparisonP
 
             <div className="flex gap-2">
               <button onClick={handleConfirm} disabled={isPending || confirmResult?.success} className="btn-primary flex-1 text-sm disabled:opacity-50">
-                {isPending ? "جارٍ التنفيذ..." : "تأكيد"}
+                {isPending ? "جارٍ التنفيذ..." : preview.dueNow > 0 ? "متابعة للدفع" : "تأكيد"}
               </button>
               <button onClick={onClose} className="btn-secondary text-sm">إلغاء</button>
             </div>

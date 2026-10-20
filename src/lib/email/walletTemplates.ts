@@ -39,3 +39,27 @@ export function migrationInviteEmail(input: { to: string; name: string }): Email
     html: `<p>مرحباً ${escapeHtml(input.name)}،</p><p>نقلنا ربط واتساب في DMS Tech إلى شريك واتساب الرسمي <strong>360dialog</strong>: لا حاجة لبطاقة دفع في Meta، والرسائل تُدفع من <strong>محفظة مسبقة الدفع</strong> داخل لوحتك بسعر واضح لكل رسالة.</p><p>نفس رقمك ونفس محادثاتك وقوالبك — النقل يتم بخطوات قليلة من صفحة التكاملات، ويبقى ربطك الحالي يعمل حتى تكتمل.</p><p><a href="${url}" style="display:inline-block;background:#6d5ef8;color:#ffffff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:bold">ابدأ النقل</a></p>`,
   };
 }
+
+/** إيصال دفع اشتراك عبر بوابة الدفع (اشتراك جديد/تجديد/ترقية). */
+export function subscriptionReceiptEmail(input: { to: string; name: string; planName: string; amount: number; periodEnd: Date; invoiceNumber: number; reference: string }): EmailInput {
+  const url = `${baseUrl()}/dashboard/billing`;
+  const until = input.periodEnd.toLocaleDateString("ar-SA");
+  return {
+    to: input.to,
+    subject: `تم دفع اشتراك DMS Tech — باقة ${input.planName}`,
+    text: `مرحباً ${input.name}،\n\nاستلمنا دفعة اشتراكك في باقة ${input.planName} بمبلغ ${input.amount} ر.س (شامل الضريبة). اشتراكك فعّال حتى ${until}.\nرقم الفاتورة: ${input.invoiceNumber} — مرجع الدفع: ${input.reference}\n\nالفاتورة الضريبية متاحة من: ${url}`,
+    html: `<p>مرحباً ${escapeHtml(input.name)}،</p><p>استلمنا دفعة اشتراكك في باقة <strong>${escapeHtml(input.planName)}</strong> بمبلغ <strong>${input.amount} ر.س</strong> (شامل الضريبة). اشتراكك فعّال حتى <strong>${until}</strong>.</p><p style="font-size:12px;color:#64748b">رقم الفاتورة: ${input.invoiceNumber} — مرجع الدفع: <span dir="ltr">${escapeHtml(input.reference)}</span></p><p><a href="${url}">الفاتورة الضريبية والفوترة</a></p>`,
+  };
+}
+
+/** تذكير قبل انتهاء الاشتراك بأيام — لا تحصيل تلقائي من بطاقات محفوظة، فالتجديد بضغطة من صفحة الفوترة. */
+export function subscriptionRenewalReminderEmail(input: { to: string; name: string; planName: string; periodEnd: Date }): EmailInput {
+  const url = `${baseUrl()}/dashboard/billing`;
+  const until = input.periodEnd.toLocaleDateString("ar-SA");
+  return {
+    to: input.to,
+    subject: `اشتراكك في DMS Tech ينتهي ${until} — جدّده الآن`,
+    text: `مرحباً ${input.name}،\n\nاشتراكك في باقة ${input.planName} ينتهي بتاريخ ${until}. جدّده قبلها لضمان استمرار الحملات والرسائل التلقائية بلا انقطاع.\n\nالتجديد من: ${url}`,
+    html: `<p>مرحباً ${escapeHtml(input.name)}،</p><p>اشتراكك في باقة <strong>${escapeHtml(input.planName)}</strong> ينتهي بتاريخ <strong>${until}</strong>. جدّده قبلها لضمان استمرار الحملات والرسائل التلقائية بلا انقطاع.</p><p><a href="${url}" style="display:inline-block;background:#6d5ef8;color:#ffffff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:bold">جدّد الاشتراك</a></p>`,
+  };
+}

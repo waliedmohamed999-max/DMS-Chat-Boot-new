@@ -64,6 +64,18 @@ export const mockPaymentProvider: PaymentProvider = {
   },
 };
 
+/**
+ * المزوّد الوهمي يوافق على أي تحصيل — مسموح في التطوير فقط (أو بقرار صريح ALLOW_MOCK_PAYMENTS=1 لبيئة
+ * عرض). في الإنتاج كان يتيح لأي تاجر ترقية نفسه لأي باقة مجاناً؛ الدفع الحقيقي الآن عبر صفحة Moyasar
+ * (lib/billing/subscriptionCheckout.ts).
+ */
+export function isMockPaymentsAllowed(): boolean {
+  return process.env.NODE_ENV !== "production" || process.env.ALLOW_MOCK_PAYMENTS === "1";
+}
+
 export function getPaymentProvider(): PaymentProvider {
-  return mockPaymentProvider; // PAYMENT_PROVIDER env سيحدد لاحقاً provider حقيقي عند التفعيل
+  if (!isMockPaymentsAllowed()) {
+    throw new Error("التحصيل المباشر غير متاح — يتم الدفع عبر صفحة الدفع الآمنة (Moyasar).");
+  }
+  return mockPaymentProvider;
 }

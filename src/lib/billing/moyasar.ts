@@ -67,6 +67,25 @@ export async function createRechargeInvoice(input: {
   });
 }
 
+/** فاتورة Moyasar عامة (صفحة دفع مستضافة) — يستخدمها شحن المحفظة ودفع الاشتراكات. المبلغ بالهللات. */
+export async function createMoyasarInvoice(input: {
+  amountHalalas: number; description: string; successUrl: string; backUrl: string; callbackUrl: string; metadata: Record<string, string>;
+}): Promise<MoyasarInvoice> {
+  return moyasarFetch<MoyasarInvoice>("/invoices", {
+    method: "POST",
+    body: JSON.stringify({
+      amount: Math.round(input.amountHalalas), currency: "SAR", description: input.description,
+      success_url: input.successUrl, back_url: input.backUrl, callback_url: input.callbackUrl, metadata: input.metadata,
+    }),
+  });
+}
+
+/** قراءة فاتورة من Moyasar نفسها بالمفتاح السري — المصدر الوحيد الموثوق لحالة الدفع. */
+export async function fetchMoyasarInvoice(invoiceId: string): Promise<MoyasarInvoice> {
+  if (!/^[\w-]{6,80}$/.test(invoiceId)) throw new Error("معرّف فاتورة غير صالح");
+  return moyasarFetch<MoyasarInvoice>(`/invoices/${encodeURIComponent(invoiceId)}`);
+}
+
 export type ApplyResult =
   | { status: "credited" | "already_credited"; tenantId: string; amountSar: number; balance: number }
   | { status: "not_paid"; invoiceStatus: string }

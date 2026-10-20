@@ -8,11 +8,17 @@ export function RetryPaymentButton({ invoiceId }: { invoiceId: string }) {
 
   return (
     <button
-      onClick={() => startTransition(async () => { await retryFailedPayment(invoiceId); })}
+      onClick={() =>
+        startTransition(async () => {
+          const res = await retryFailedPayment(invoiceId);
+          if (res.success && res.redirectUrl) window.location.href = res.redirectUrl;
+          else if (!res.success) alert(res.error);
+        })
+      }
       disabled={isPending}
       className="btn-secondary text-xs disabled:opacity-50"
     >
-      {isPending ? "جارٍ إعادة المحاولة..." : "إعادة المحاولة الآن"}
+      {isPending ? "جارٍ التجهيز..." : "ادفع الآن"}
     </button>
   );
 }

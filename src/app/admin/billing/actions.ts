@@ -5,7 +5,7 @@ import { requireSuperAdminSession } from "@/lib/session";
 import { requirePermission } from "@/lib/rbac";
 import { superAdminDb } from "@/lib/db";
 import { postRefundEntry, postInvoicePaymentEntry } from "@/lib/accounting/postings";
-import { getPaymentProvider } from "@/lib/billing/payment-provider";
+import { getPaymentProvider, isMockPaymentsAllowed } from "@/lib/billing/payment-provider";
 import { ensureChartOfAccounts } from "@/lib/accounting/chartOfAccounts";
 
 export type IssueRefundResult = { success: true; creditNoteNumber: number } | { success: false; error: string };
@@ -61,6 +61,9 @@ export async function retryFailedPaymentAsAdmin(invoiceId: string): Promise<Retr
 
   const invoice = await superAdminDb.invoice.findUnique({ where: { id: invoiceId } });
   if (!invoice || invoice.status !== "FAILED") return { success: false, error: "لا توجد فاتورة فاشلة بهذا المعرّف" };
+  if (!isMockPaymentsAllowed()) {
+    return { success: false, error: "لا تحصيل تلقائي من بطاقات محفوظة — التاجر يجدّد من صفحة الفوترة عبر صفحة الدفع الآمنة (Moyasar)." };
+  }
 
   const charge = await getPaymentProvider().chargeSubscription(invoice.tenantId, invoice.amountSar, invoice.currency);
 

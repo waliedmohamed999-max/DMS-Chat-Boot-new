@@ -8,7 +8,9 @@ import { withTenant, rawDb } from "@/lib/db";
 // استدعائها بهذا الملف — NON_CUSTOMIZABLE_PERMISSIONS (راجع lib/rbac.ts). billing.view وحدها
 // قابلة للتخصيص فتستخدم requireEffectivePermission.
 import { requirePermission, requireEffectivePermission } from "@/lib/rbac";
-import { getPaymentProvider, type MockCardInput } from "@/lib/billing/payment-provider";
+import { getPaymentProvider, isMockPaymentsAllowed, type MockCardInput } from "@/lib/billing/payment-provider";
+import { isMoyasarConfigured } from "@/lib/billing/moyasar";
+import { needsNewPeriod, PERIOD_DAYS, startSubscriptionCheckout } from "@/lib/billing/subscriptionCheckout";
 import { calculateProration, type ProrationPreview } from "@/lib/billing/proration";
 import { checkDowngradeAllowed } from "@/lib/billing/downgradeCheck";
 import { getVatRateBps, computeVatAmount } from "@/lib/billing/vat";
@@ -47,11 +49,49 @@ export async function previewPlanChange(planId: string): Promise<PlanChangePrevi
     if (!blockCheck.allowed) return { success: true, blocked: true, reasons: blockCheck.reasons };
   }
 
+  // اشتراك تجريبي/منتهٍ/متأخر: لا رصيد متبقٍ يُحتسب — المستحق سعر دورة جديدة كاملة (نفس ما يُحصَّل فعلياً
+  // في subscriptionCheckout)، وليس صفراً من حساب نسبي على دورة منتهية.
+  if (useHostedCheckout() && needsNewPeriod(subscription)) {
+    const nextBillingDate = new Date(Date.now() + PERIOD_DAYS * 24 * 3600 * 1000);
+    return {
+      success: true, blocked: false, isUpgrade: targetPrice > currentPrice, isDowngrade: targetPrice < currentPrice,
+      daysRemaining: PERIOD_DAYS, totalDaysInPeriod: PERIOD_DAYS, dueNow: targetPrice, creditApplied: 0, nextBillingDate, nextBillingAmount: targetPrice,
+    };
+  }
   const proration = calculateProration(currentPrice, targetPrice, subscription.currentPeriodStart, subscription.currentPeriodEnd);
   return { success: true, blocked: false, ...proration };
 }
 
-export type ChangePlanResult = { success: true } | { success: false; error: string };
+export type ChangePlanResult = { success: true; redirectUrl?: string } | { success: false; error: string };
+
+/** الدفع الحقيقي عبر صفحة Moyasar هو المسار الافتراضي؛ المزوّد الوهمي للتطوير فقط بلا Moyasar مضبوط. */
+function useHostedCheckout(): boolean {
+  return isMoyasarConfigured() || !isMockPaymentsAllowed();
+}
+
+async function checkoutResult(tenantId: string, userId: string, planId: string, forceRenew = false): Promise<ChangePlanResult> {
+  const r = await startSubscriptionCheckout({ tenantId, userId, planId, forceRenew });
+  revalidatePath("/dashboard/billing");
+  if (!r.ok) return { success: false, error: r.error };
+  if ("redirectUrl" in r) return { success: true, redirectUrl: r.redirectUrl };
+  await writeAuditLog({ tenantId, userId, action: "subscription.change_plan", targetType: "Subscription", targetId: planId, metaJson: { appliedWithoutPayment: true } });
+  return { success: true };
+}
+
+/**
+ * اشتراك/تجديد لدورة جديدة كاملة (فترة تجريبية، أو اشتراك منتهٍ/متأخر السداد) — بالباقة الحالية أو باقة يختارها.
+ * يعيد رابط صفحة الدفع الآمنة.
+ */
+export async function renewSubscription(planId?: string): Promise<ChangePlanResult> {
+  const session = await requireTenantSession();
+  requirePermission(session.user.role, "billing.manage");
+  const tenantId = session.user.tenantId;
+  const marketplaceBilling = await getMarketplaceBilling(tenantId);
+  if (marketplaceBilling) return { success: false, error: marketplaceBilledMessage(marketplaceBilling) };
+  const sub = await withTenant(tenantId, (tx) => tx.subscription.findUnique({ where: { tenantId } }));
+  if (!sub) return { success: false, error: "لا يوجد اشتراك لهذا الحساب" };
+  return checkoutResult(tenantId, session.user.id, planId || sub.planId, true);
+}
 
 export async function changePlan(planId: string): Promise<ChangePlanResult> {
   const session = await requireTenantSession();
@@ -59,6 +99,7 @@ export async function changePlan(planId: string): Promise<ChangePlanResult> {
   const tenantId = session.user.tenantId;
   const marketplaceBilling = await getMarketplaceBilling(tenantId);
   if (marketplaceBilling) return { success: false, error: marketplaceBilledMessage(marketplaceBilling) };
+  if (useHostedCheckout()) return checkoutResult(tenantId, session.user.id, planId);
 
   const tenant = await rawDb.tenant.findUniqueOrThrow({ where: { id: tenantId }, select: { country: true } });
   const currency = COUNTRY_TO_CURRENCY[tenant.country];
@@ -223,6 +264,9 @@ export async function updatePaymentMethod(card: MockCardInput): Promise<UpdatePa
   requirePermission(session.user.role, "billing.manage");
   const tenantId = session.user.tenantId;
 
+  if (!isMockPaymentsAllowed()) {
+    return { success: false, error: "لا نخزّن بيانات البطاقات — تُدخل بطاقتك في صفحة الدفع الآمنة لدى Moyasar عند كل دفعة." };
+  }
   const tokenized = await getPaymentProvider().tokenizePaymentMethod(card);
   if (!tokenized.success) return { success: false, error: tokenized.error };
 
@@ -246,6 +290,14 @@ export async function retryFailedPayment(invoiceId: string): Promise<ChangePlanR
 
   const invoice = await withTenant(tenantId, (tx) => tx.invoice.findUnique({ where: { id: invoiceId, tenantId } }));
   if (!invoice || invoice.status !== "FAILED") return { success: false, error: "لا توجد فاتورة فاشلة بهذا المعرّف" };
+  if (useHostedCheckout()) {
+    // لا بطاقات محفوظة للتحصيل التلقائي — "إعادة المحاولة" = تجديد الاشتراك عبر صفحة الدفع الآمنة.
+    const marketplaceBilling = await getMarketplaceBilling(tenantId);
+    if (marketplaceBilling) return { success: false, error: marketplaceBilledMessage(marketplaceBilling) };
+    const plan = invoice.planKey ? await rawDb.plan.findUnique({ where: { key: invoice.planKey } }) : null;
+    const sub = await withTenant(tenantId, (tx) => tx.subscription.findUniqueOrThrow({ where: { tenantId } }));
+    return checkoutResult(tenantId, session.user.id, plan?.id ?? sub.planId, true);
+  }
 
   const charge = await getPaymentProvider().chargeSubscription(tenantId, invoice.amountSar, invoice.currency);
 
@@ -281,6 +333,7 @@ export async function retryFailedPayment(invoiceId: string): Promise<ChangePlanR
 export async function devSimulatePaymentFailure() {
   const session = await requireTenantSession();
   requirePermission(session.user.role, "billing.manage");
+  if (!isMockPaymentsAllowed()) throw new Error("أداة المحاكاة غير متاحة في الإنتاج");
   const tenantId = session.user.tenantId;
 
   const tenant = await rawDb.tenant.findUniqueOrThrow({ where: { id: tenantId }, select: { country: true } });

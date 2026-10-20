@@ -49,6 +49,10 @@ export async function connectD360Channel(tenantId: string, channelId: string) {
   // تاجر قديم على Meta المباشر ربط رقمه عبر 360dialog — تُسجَّل خطوة النقل (استيراد متأخر لتفادي حلقة استيراد مع registry).
   const { markMigrationD360Connected } = await import("@/lib/integrations/migration");
   await markMigrationD360Connected(tenantId).catch((err) => console.error("⚠️ تعذّر تحديث حالة النقل:", err instanceof Error ? err.message : err));
+  // قوالب الحساب المعتمدة مسبقاً (رقم منقول من Meta أو WABA قائم) تُستورد بالخلفية فتصبح متاحة للحملات فوراً.
+  void import("@/lib/integrations/templateChannel")
+    .then(({ syncTemplatesFromChannel }) => syncTemplatesFromChannel(tenantId))
+    .catch((err) => console.error("⚠️ تعذّر استيراد قوالب 360dialog:", err instanceof Error ? err.message : err));
   return channel;
 }
 

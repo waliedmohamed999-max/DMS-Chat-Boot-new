@@ -18,11 +18,22 @@ import { PlanComparison, type ComparisonPlan } from "./PlanComparison";
 import { CancelSubscriptionFlow } from "./CancelSubscriptionFlow";
 import { RetryPaymentButton } from "./RetryPaymentButton";
 import { DevSimulateFailureButton } from "./DevSimulateFailureButton";
+import { RenewButton } from "./RenewButton";
+import { isMockPaymentsAllowed } from "@/lib/billing/payment-provider";
 import { resolvePlanPrice } from "@/lib/planPricing";
 import { COUNTRY_TO_CURRENCY, formatMoney } from "@/lib/currency";
 import { getCountryConfig } from "@/lib/billing/countryConfig";
 
-export default async function BillingPage() {
+const PAYMENT_NOTICES: Record<string, { tone: string; text: string }> = {
+  success: { tone: "border-success-500/30 bg-success-500/10 text-success-500", text: "✅ تم الدفع وتفعيل اشتراكك. أُرسل الإيصال لبريدك." },
+  pending: { tone: "border-warning-500/30 bg-warning-500/10 text-warning-500", text: "⏳ لم يكتمل تأكيد الدفع بعد — سيُفعَّل الاشتراك تلقائياً فور تأكيد بوابة الدفع." },
+  failed: { tone: "border-danger-500/30 bg-danger-500/10 text-danger-500", text: "❌ تعذّر التحقق من الدفعة. لم يُخصم شيء؟ حاول مرة أخرى أو تواصل معنا." },
+  unknown: { tone: "border-danger-500/30 bg-danger-500/10 text-danger-500", text: "رابط دفع غير معروف لهذا الحساب." },
+};
+
+export default async function BillingPage(props: { searchParams?: Promise<{ payment?: string }> }) {
+  const paymentNotice = PAYMENT_NOTICES[(await props.searchParams)?.payment ?? ""];
+  const mockPayments = isMockPaymentsAllowed();
   const session = await requireTenantSession();
   if (!hasEffectivePermission(session.user.permissions, "billing.view")) notFound();
   const canManage = hasPermission(session.user.role, "billing.manage");
@@ -80,6 +91,8 @@ export default async function BillingPage() {
         <p className="text-sm text-slate-400">إدارة باقتك واستخدامك وفواتيرك</p>
       </div>
 
+      {paymentNotice && <div className={`rounded-lg border px-4 py-3 text-sm ${paymentNotice.tone}`}>{paymentNotice.text}</div>}
+
       <Link href="/dashboard/billing/wallet" className="card flex items-center justify-between p-4 transition hover:border-accent-500/40">
         <div>
           <p className="font-semibold text-white">👛 محفظة رسائل واتساب</p>
@@ -104,16 +117,17 @@ export default async function BillingPage() {
             🎁 فترتك التجريبية تنتهي خلال {daysRemaining > 0 ? `${daysRemaining} يوم` : "اليوم"}
           </p>
           <p className="mt-1 text-sm text-slate-400">اشترك الآن لضمان استمرار الخدمة بلا انقطاع.</p>
+          {canManage && !sallaBilling && <div className="mt-3"><RenewButton label="اشترك الآن" /></div>}
         </div>
       )}
 
       {subscription?.status === "PAST_DUE" && (
         <div className="card border border-danger-500/30 bg-danger-500/5 p-5">
-          <p className="font-bold text-danger-500">⚠️ فشل آخر تحصيل دفع لاشتراكك</p>
+          <p className="font-bold text-danger-500">⚠️ اشتراكك منتهٍ أو متأخر السداد</p>
           {latestFailedInvoice?.failureReason && <p className="mt-1 text-sm text-slate-400">السبب: {latestFailedInvoice.failureReason}</p>}
-          {canManage && latestFailedInvoice && (
+          {canManage && !sallaBilling && (
             <div className="mt-3">
-              <RetryPaymentButton invoiceId={latestFailedInvoice.id} />
+              <RenewButton label="جدّد الاشتراك الآن" />
             </div>
           )}
         </div>
@@ -161,10 +175,10 @@ export default async function BillingPage() {
         </div>
       )}
 
-      <PaymentMethodSection
+      {mockPayments && <PaymentMethodSection
         paymentMethod={paymentMethod ? { brand: paymentMethod.brand, last4: paymentMethod.last4, expiryMonth: paymentMethod.expiryMonth, expiryYear: paymentMethod.expiryYear } : null}
         canManage={canManage}
-      />
+      />}
 
       <PlanComparison plans={comparisonPlans} currentPlanId={subscription?.planId ?? null} canManage={canManage} currency={tenantCurrency} />
 
@@ -197,7 +211,7 @@ export default async function BillingPage() {
       <div className="card overflow-hidden">
         <div className="flex items-center justify-between border-b border-white/5 p-4">
           <h2 className="font-semibold text-white">الفواتير السابقة</h2>
-          {canManage && <DevSimulateFailureButton />}
+          {canManage && mockPayments && <DevSimulateFailureButton />}
         </div>
         <table className="w-full text-sm">
           <thead>

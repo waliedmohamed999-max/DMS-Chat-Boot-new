@@ -5,6 +5,10 @@ import { superAdminDb, withTenant } from "@/lib/db";
 import { checkIpRateLimit, checkTenantRateLimit, clientIp } from "@/lib/rateLimit";
 import { parseMetaWebhookPayload, applyParsedMetaWebhook } from "@/lib/integrations/meta/webhookHandler";
 import { runChatbotEngine } from "@/lib/chatbot/engine";
+import { decryptSecret } from "@/lib/crypto";
+import { downloadD360Media } from "@/lib/integrations/d360/client";
+import { transcribeVoiceMessage } from "@/lib/ai/transcribeVoiceMessage";
+import { getTenantChatbotLimits } from "@/lib/planLimits";
 
 /**
  * webhook رسائل قناة 360dialog (رسائل واردة + حالات التسليم + حالة القوالب) — 360dialog يمرّر حمولة
@@ -26,6 +30,21 @@ export async function POST(req: NextRequest, props: { params: Promise<{ token: s
   const payload = await req.json().catch(() => null);
   if (!payload) return new NextResponse("Invalid JSON", { status: 400 });
   const parsed = parseMetaWebhookPayload(payload);
+  // الرسائل الصوتية ⇒ نص (Whisper) قبل التخزين، فيفهمها الشات بوت والموظف الذكي — نفس سلوك قناة Meta.
+  // أي فشل (تنزيل/تفريغ) يترك الرسالة كما وصلت؛ لا تُفقد رسالة أبداً.
+  if (!integration.isSandbox && integration.encryptedAccessToken) {
+    const audio = parsed.messages.filter((m) => m.type === "AUDIO" && m.metaMediaId);
+    if (audio.length > 0 && (await getTenantChatbotLimits(tenantId)).voiceMessagesEnabled) {
+      const apiKey = decryptSecret(integration.encryptedAccessToken);
+      for (const msg of audio) {
+        const media = await downloadD360Media(msg.metaMediaId!, apiKey);
+        if (!media) continue;
+        const transcript = await transcribeVoiceMessage(media.buffer, media.mimeType);
+        if (transcript) msg.body = transcript;
+      }
+    }
+  }
+
   const affectedConversationIds = await applyParsedMetaWebhook(tenantId, parsed);
 
   // محرك الشات بوت بعد التزام المعاملة (نفس ترتيب webhook Meta) — قد يرسل رداً عبر نفس القناة.
