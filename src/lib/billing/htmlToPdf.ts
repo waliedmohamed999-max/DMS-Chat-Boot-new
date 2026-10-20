@@ -1,5 +1,5 @@
 import { existsSync } from "fs";
-import puppeteer, { type Browser } from "puppeteer";
+import type { Browser } from "puppeteer";
 
 /**
  * محرك عرض متصفح حقيقي (Puppeteer/Headless Chrome) بدل مكتبة رسم PDF منخفضة المستوى — هذا هو
@@ -23,6 +23,9 @@ const SYSTEM_BROWSERS = [
 
 async function getBrowser(): Promise<Browser> {
   if (global.__pdfBrowser?.connected) return global.__pdfBrowser;
+  // تحميل كسول: لو فشل تحميل Puppeteer نفسه على الخادم (استضافة مشتركة) يصبح خطأً قابلاً للالتقاط هنا
+  // فتعمل نسخة HTML الاحتياطية — بدل انهيار مسار التنزيل كله عند الاستيراد (500 لكل الطلبات).
+  const { default: puppeteer } = await import("puppeteer");
   // في صورة الإنتاج (Dockerfile) نستخدم Chromium النظامي عبر PUPPETEER_EXECUTABLE_PATH؛ بدونه نجرّب المُدمَج ثم متصفحات النظام.
   const candidates = [process.env.PUPPETEER_EXECUTABLE_PATH || undefined, undefined, ...SYSTEM_BROWSERS.filter((p) => existsSync(p))];
   let lastError: unknown;

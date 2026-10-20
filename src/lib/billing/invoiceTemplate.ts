@@ -35,10 +35,16 @@ function loadFontFaces(): string {
     { file: "Cairo-Bold.ttf", weight: 700 },
     { file: "Cairo-ExtraBold.ttf", weight: 800 },
   ];
+  // ملف خط مفقود (مجلد عمل مختلف على الاستضافة) لا يُسقط الفاتورة — تُعرض بخط النظام بدلاً منه.
   cachedFontFaces = weights
-    .map(({ file, weight }) => {
-      const base64 = fs.readFileSync(path.join(fontsDir, file)).toString("base64");
-      return `@font-face { font-family: 'Cairo'; font-weight: ${weight}; font-style: normal; src: url(data:font/ttf;base64,${base64}) format('truetype'); }`;
+    .flatMap(({ file, weight }) => {
+      try {
+        const base64 = fs.readFileSync(path.join(fontsDir, file)).toString("base64");
+        return [`@font-face { font-family: 'Cairo'; font-weight: ${weight}; font-style: normal; src: url(data:font/ttf;base64,${base64}) format('truetype'); }`];
+      } catch {
+        console.error(`⚠️ خط الفاتورة غير موجود: ${file}`);
+        return [];
+      }
     })
     .join("\n");
   return cachedFontFaces;
