@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { requireTenantSession } from "@/lib/session";
 import { withTenant, rawDb } from "@/lib/db";
 import { getPlatformSettings } from "@/lib/platformSettings";
-import { generateInvoicePdfBuffer } from "@/lib/billing/invoicePdf";
+import { invoiceDownloadResponse } from "@/lib/billing/invoicePdf";
 
 export async function GET(_req: Request, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
@@ -19,20 +19,14 @@ export async function GET(_req: Request, props: { params: Promise<{ id: string }
     invoice.planKey ? rawDb.plan.findUnique({ where: { key: invoice.planKey }, select: { name: true } }) : null,
   ]);
 
-  const buffer = await generateInvoicePdfBuffer({
+  return invoiceDownloadResponse({
     invoice,
-    tenantName: tenant.name,
+    tenantName: tenant.billingLegalName || tenant.name,
+    tenantVatNumber: tenant.billingVatNumber,
     tenantEmail: owner?.email ?? null,
     planName: plan?.name ?? null,
     seller: { sellerLegalName: settings.sellerLegalName, sellerVatNumber: settings.sellerVatNumber, sellerAddress: settings.sellerAddress },
     supportEmail: settings.supportEmail,
     supportPhone: settings.supportPhone,
-  });
-
-  return new NextResponse(new Uint8Array(buffer), {
-    headers: {
-      "Content-Type": "application/pdf",
-      "Content-Disposition": `attachment; filename="invoice-${invoice.invoiceNumber}.pdf"`,
-    },
   });
 }

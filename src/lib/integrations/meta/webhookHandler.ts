@@ -67,9 +67,9 @@ function mapMessageType(metaType: string): MessageType {
  * ملاحظة سياق الوسائط: Meta الفعلي يرسل `id` وسيط فقط (يتطلب استدعاء Media API لجلب رابط مؤقت) —
  * هذه الدالة نفسها (محلّل خالص) لا تُنزِّل أي شيء، فقط تلتقط `id` في الحقل الجديد `metaMediaId` أعلاه.
  * التنزيل الفعلي عبر Media API **مُنفَّذ الآن لرسائل AUDIO تحديداً** (`lib/integrations/meta/mediaDownload.ts`،
- * يُستدعى من `api/webhooks/meta/route.ts` لتفريغها عبر Whisper — راجع DECISIONS.md قرار 258) — **لا
- * يزال غير مُنفَّذ لـ IMAGE/DOCUMENT** (لا حاجة فعلية له بعد؛ الالتقاط الحالي لـ caption/filename فقط
- * يكفي). في Sandbox، يُدرَج `sandbox_media_url` مباشرة في الحمولة نفسها ليمر عبر نفس الحقل `mediaUrl`
+ * يُستدعى من `api/webhooks/meta/route.ts` لتفريغها عبر Whisper — راجع DECISIONS.md قرار 258). الصور
+ * والمستندات: يُحفظ معرّفها في `Message.providerMediaId` وتُجلب عند العرض فقط عبر `api/inbox/media/[messageId]`
+ * (مقيّدة بالمستأجر). في Sandbox، يُدرَج `sandbox_media_url` مباشرة في الحمولة نفسها ليمر عبر نفس الحقل `mediaUrl`
  * بلا فرع كود إضافي، لكل أنواع الوسائط.
  */
 export function parseMetaWebhookPayload(payload: unknown): ParsedMetaWebhook {

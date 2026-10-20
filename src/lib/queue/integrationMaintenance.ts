@@ -113,3 +113,20 @@ templateSyncWorker.on("failed", (_job, err) => console.error("❌ فشلت مز�
 new Queue("template-status-sync", { connection: redisConnection })
   .add("scan", {}, { repeat: { every: TEMPLATE_SYNC_INTERVAL_MS }, jobId: "recurring-template-status-sync" })
   .catch((err) => console.error("❌ تعذّرت جدولة مزامنة حالة القوالب:", err));
+
+/**
+ * الفوترة الإلكترونية ZATCA: معالجة المستندات المستحقة كل 5 دقائق (فواتير مدفوعة لم تُبلَّغ بعد، إعادة
+ * محاولة الفاشلة شبكياً، وإشعارات الاسترداد) — الإرسال الفوري بعد الدفع يغطي الحالة العادية.
+ */
+const zatcaWorker = new Worker(
+  "zatca-queue",
+  async () => (await import("@/lib/zatca/service")).processZatcaQueue(),
+  { connection: redisConnection, concurrency: 1 }
+);
+zatcaWorker.on("completed", (_job, r) => {
+  if (r && r.processed) console.log(`🧾 ZATCA: ${r.accepted}/${r.processed} مستند مقبول`);
+});
+zatcaWorker.on("failed", (_job, err) => console.error("❌ طابور ZATCA:", err.message));
+new Queue("zatca-queue", { connection: redisConnection })
+  .add("scan", {}, { repeat: { every: 5 * 60 * 1000 }, jobId: "recurring-zatca-queue" })
+  .catch((err) => console.error("❌ تعذّرت جدولة طابور ZATCA:", err));

@@ -19,6 +19,7 @@ import { CancelSubscriptionFlow } from "./CancelSubscriptionFlow";
 import { RetryPaymentButton } from "./RetryPaymentButton";
 import { DevSimulateFailureButton } from "./DevSimulateFailureButton";
 import { RenewButton } from "./RenewButton";
+import { TaxProfileForm } from "./TaxProfileForm";
 import { isMockPaymentsAllowed } from "@/lib/billing/payment-provider";
 import { resolvePlanPrice } from "@/lib/planPricing";
 import { COUNTRY_TO_CURRENCY, formatMoney } from "@/lib/currency";
@@ -42,7 +43,13 @@ export default async function BillingPage(props: { searchParams?: Promise<{ paym
 
   const [tenant, subscription, invoices, catalogPlans, pendingCustomPlanRequest, paymentMethod, activeUserCount, connectedWhatsappCount, publishedFlowCount] =
     await Promise.all([
-      rawDb.tenant.findUniqueOrThrow({ where: { id: tenantId }, select: { country: true } }),
+      rawDb.tenant.findUniqueOrThrow({
+        where: { id: tenantId },
+        select: {
+          country: true, name: true, billingLegalName: true, billingVatNumber: true, billingStreet: true, billingBuildingNumber: true,
+          billingDistrict: true, billingCity: true, billingPostalCode: true,
+        },
+      }),
       withTenant(tenantId, (tx) => tx.subscription.findUnique({ where: { tenantId }, include: { plan: true } })),
       withTenant(tenantId, (tx) => tx.invoice.findMany({ where: { tenantId }, orderBy: { createdAt: "desc" }, take: 50 })),
       // الباقات المخصصة (isCustomForTenantId) لا تظهر أبداً في كتالوج الباقات العام لبقية التجار
@@ -54,6 +61,15 @@ export default async function BillingPage(props: { searchParams?: Promise<{ paym
       withTenant(tenantId, (tx) => tx.chatbotFlow.count({ where: { tenantId, status: "PUBLISHED" } })),
     ]);
 
+  // جدول ZatcaDocument بلا tenantId (يُربط عبر الفاتورة) — نقيّده صراحةً بفواتير هذا التاجر فقط.
+  const zatcaAccepted = new Set(
+    invoices.length
+      ? (await rawDb.zatcaDocument.findMany({
+          where: { invoiceId: { in: invoices.map((i) => i.id) }, docType: "invoice", status: { in: ["REPORTED", "CLEARED"] } },
+          select: { invoiceId: true },
+        })).map((d) => d.invoiceId)
+      : [],
+  );
   const tenantCurrency = COUNTRY_TO_CURRENCY[tenant.country];
   const tenantCountryConfig = await getCountryConfig(tenant.country);
   // كل باقة لها سعر تلقائي لكل دولة الآن (راجع lib/planPricing.ts).
@@ -182,6 +198,26 @@ export default async function BillingPage(props: { searchParams?: Promise<{ paym
 
       <PlanComparison plans={comparisonPlans} currentPlanId={subscription?.planId ?? null} canManage={canManage} currency={tenantCurrency} />
 
+      {tenant.country === "SA" && (
+        <div className="card space-y-3 p-5">
+          <div>
+            <h2 className="font-semibold text-white">🧾 البيانات الضريبية للفواتير</h2>
+            <p className="text-xs text-slate-400">
+              فواتير اشتراكك إلكترونية ومعتمدة من هيئة الزكاة والضريبة (ZATCA). أضف رقمك الضريبي وعنوانك الوطني لتحصل على فاتورة
+              ضريبية قياسية باسم منشأتك يمكنك خصم ضريبتها؛ بدونه تصدر فاتورة مبسّطة.
+            </p>
+          </div>
+          <TaxProfileForm
+            canManage={canManage}
+            values={{
+              billingLegalName: tenant.billingLegalName ?? tenant.name, billingVatNumber: tenant.billingVatNumber ?? "",
+              billingStreet: tenant.billingStreet ?? "", billingBuildingNumber: tenant.billingBuildingNumber ?? "",
+              billingDistrict: tenant.billingDistrict ?? "", billingCity: tenant.billingCity ?? "", billingPostalCode: tenant.billingPostalCode ?? "",
+            }}
+          />
+        </div>
+      )}
+
       <div className="card p-5">
         <h2 className="mb-2 font-semibold text-white">تحتاج باقة مخصصة (Enterprise)؟</h2>
         {pendingCustomPlanRequest ? (
@@ -243,6 +279,7 @@ export default async function BillingPage(props: { searchParams?: Promise<{ paym
                   >
                     {inv.status === "PAID" ? "مدفوعة" : inv.status === "FAILED" ? "فشلت" : inv.status === "REFUNDED" ? "مستردة" : "قيد الانتظار"}
                   </span>
+                  {zatcaAccepted.has(inv.id) && <span className="badge mr-1 bg-accent-500/10 text-accent-400" title="فاتورة إلكترونية موقّعة ومُبلَّغة لهيئة الزكاة والضريبة">ZATCA ✓</span>}
                   {inv.status === "FAILED" && inv.failureReason && <p className="mt-1 text-xs text-danger-500">{inv.failureReason}</p>}
                 </td>
                 <td className="p-3 text-left">

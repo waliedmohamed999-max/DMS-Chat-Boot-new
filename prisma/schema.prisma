@@ -65,6 +65,15 @@ model Tenant {
   // دولة التاجر — تحدد العملة ونسبة الضريبة الفعليتين (عبر CountryConfig) لكل فاتورة/اشتراك تابع
   // لهذا التاجر. تُلتقط وقت التسجيل الفعلي (مسارات التسجيل الثلاثة) ولا تتغيّر بعد ذلك.
   country         Country          @default(SA)
+  // بيانات الفاتورة الضريبية للتاجر (مشترٍ منشأة): وجود الرقم الضريبي والعنوان ⇒ فاتورة قياسية (اعتماد مسبق من
+  // ZATCA)، وإلا فاتورة مبسّطة (إبلاغ). يملؤها صاحب الحساب من صفحة الفوترة.
+  billingLegalName      String?
+  billingVatNumber      String?
+  billingStreet         String?
+  billingBuildingNumber String?
+  billingDistrict       String?
+  billingCity           String?
+  billingPostalCode     String?
   rejectionReason String? // سبب الرفض أو "طلب معلومات إضافية" الظاهر للتاجر
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
@@ -394,6 +403,7 @@ model Invoice {
   creditNotes CreditNote[]
   commission  Commission?
 
+  zatcaDocuments       ZatcaDocument[]
   @@index([tenantId])
 }
 
@@ -1368,6 +1378,13 @@ model PlatformSettings {
   sellerLegalName        String   @default("DMS — Digital Messaging System")
   sellerVatNumber        String?
   sellerAddress          String?
+  // بيانات البائع المفصّلة لفواتير ZATCA (المرحلة الثانية): السجل التجاري والعنوان الوطني.
+  sellerCrn              String?
+  sellerStreet           String?
+  sellerBuildingNumber   String?
+  sellerDistrict         String?
+  sellerCity             String?
+  sellerPostalCode       String?
   // مزوّد الذكاء الاصطناعي لعقدة "رد ذكي" (الموظف الذكي) — مفتاح واحد على مستوى المنصة لكل التجار
   // (وليس لكل تاجر مفتاحه الخاص، قرار موثَّق في DECISIONS.md)، بنفس نمط تشفير encryptedMetaAppSecret
   // تماماً. متغير البيئة OPENAI_API_KEY يبقى احتياطاً دفاعياً فقط إن لم يُضبَط من اللوحة بعد.
@@ -1664,4 +1681,48 @@ model MessageRate {
   updatedAt   DateTime @updatedAt
 
   @@unique([country, category])
+}
+
+// ========================= الفوترة الإلكترونية ZATCA (المرحلة الثانية) =========================
+
+/// وحدة إصدار الفواتير (EGS) للمنصة نفسها (DMS هي البائع) — صف وحيد. المفتاح الخاص وشهادات الهيئة مشفّرة.
+/// السلسلة (ICV وبصمة آخر فاتورة PIH) تتقدم فقط مع كل مستند قُبل لدى الهيئة.
+model ZatcaEgs {
+  id                         String    @id @default("singleton")
+  environment                String    @default("sandbox") // sandbox | simulation | production
+  status                     String    @default("NONE") // NONE | ACTIVE | ERROR
+  commonName                 String?
+  encryptedPrivateKey        String?
+  encryptedComplianceToken   String?
+  encryptedComplianceSecret  String?
+  complianceRequestId        String?
+  encryptedProductionToken   String?
+  encryptedProductionSecret  String?
+  icv                        Int       @default(0)
+  lastInvoiceHash            String?
+  activatedAt                DateTime?
+  lastError                  String?
+  updatedAt                  DateTime  @updatedAt
+}
+
+/// مستند ZATCA مُرسل للهيئة لفاتورة اشتراك: فاتورة ضريبية عند الدفع، وإشعار دائن عند الاسترداد.
+model ZatcaDocument {
+  id           String    @id @default(cuid())
+  invoiceId    String
+  invoice      Invoice   @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  docType      String // invoice | credit
+  kind         String // simplified | standard
+  uuid         String    @unique
+  icv          Int?
+  invoiceHash  String?
+  status       String    @default("PENDING") // PENDING | REPORTED | CLEARED | REJECTED | FAILED
+  xml          String? // الفاتورة الموقّعة (أو المعتمدة من الهيئة للقياسية) — نص XML
+  qrBase64     String?
+  messagesJson Json?
+  attempts     Int       @default(0)
+  submittedAt  DateTime?
+  createdAt    DateTime  @default(now())
+
+  @@unique([invoiceId, docType])
+  @@index([status])
 }

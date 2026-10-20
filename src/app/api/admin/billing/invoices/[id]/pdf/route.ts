@@ -3,7 +3,7 @@ import { requireSuperAdminSession } from "@/lib/session";
 import { requirePermission } from "@/lib/rbac";
 import { superAdminDb } from "@/lib/db";
 import { getPlatformSettings } from "@/lib/platformSettings";
-import { generateInvoicePdfBuffer } from "@/lib/billing/invoicePdf";
+import { invoiceDownloadResponse } from "@/lib/billing/invoicePdf";
 
 /** نفس مولّد PDF المستخدَم من جانب التاجر، لكن عبر جلسة فريق المنصة (superAdminDb، عابر للتجار). */
 export async function GET(_req: Request, props: { params: Promise<{ id: string }> }) {
@@ -24,20 +24,14 @@ export async function GET(_req: Request, props: { params: Promise<{ id: string }
     invoice.planKey ? superAdminDb.plan.findUnique({ where: { key: invoice.planKey }, select: { name: true } }) : null,
   ]);
 
-  const buffer = await generateInvoicePdfBuffer({
+  return invoiceDownloadResponse({
     invoice,
-    tenantName: invoice.tenant.name,
+    tenantName: invoice.tenant.billingLegalName || invoice.tenant.name,
+    tenantVatNumber: invoice.tenant.billingVatNumber,
     tenantEmail: owner?.email ?? null,
     planName: plan?.name ?? null,
     seller: { sellerLegalName: settings.sellerLegalName, sellerVatNumber: settings.sellerVatNumber, sellerAddress: settings.sellerAddress },
     supportEmail: settings.supportEmail,
     supportPhone: settings.supportPhone,
-  });
-
-  return new NextResponse(new Uint8Array(buffer), {
-    headers: {
-      "Content-Type": "application/pdf",
-      "Content-Disposition": `attachment; filename="invoice-${invoice.invoiceNumber}.pdf"`,
-    },
   });
 }

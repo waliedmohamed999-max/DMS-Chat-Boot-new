@@ -169,7 +169,7 @@ table.items tbody tr:last-child td { border-bottom: none; }
       <div class="brand-sub">فاتورة ضريبية</div>
     </div>
     <div class="invoice-meta">
-      <div class="invoice-title">فاتورة ضريبية</div>
+      <div class="invoice-title">${tenantVatNumber ? "فاتورة ضريبية" : "فاتورة ضريبية مبسّطة"}</div>
       <div class="invoice-number">${invoiceLabel}</div>
       <div><span class="status-badge">${statusLabel}</span></div>
     </div>

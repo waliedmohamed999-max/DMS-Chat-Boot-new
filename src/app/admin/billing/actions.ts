@@ -37,6 +37,8 @@ export async function issueRefund(invoiceId: string, reason: string): Promise<Is
   });
 
   await postRefundEntry(invoiceId, subtotal, invoice.vatAmountSar, invoice.currency);
+  // إشعار دائن لدى ZATCA للفاتورة المُبلَّغة/المعتمدة (بالخلفية).
+  void import("@/lib/zatca/service").then((m) => m.processZatcaQueue()).catch((err) => console.error("⚠️ طابور ZATCA:", err instanceof Error ? err.message : err));
 
   await superAdminDb.auditLog.create({
     data: {

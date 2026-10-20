@@ -182,6 +182,8 @@ export async function applyPaidSubscriptionInvoice(providerInvoiceId: string, ex
     await postInvoicePaymentEntry({ id: invoice.id, amountSar: invoice.amountSar, vatAmountSar: invoice.vatAmountSar, planKey: invoice.planKey, currency: invoice.currency }).catch((err) =>
       console.error("❌ فشل تسجيل قيد محاسبي لدفع الاشتراك:", err)
     );
+    // الفوترة الإلكترونية (ZATCA): إبلاغ/اعتماد الفاتورة بالخلفية (يتخطى إن لم تُفعَّل وحدة الإصدار).
+    void import("@/lib/zatca/service").then((m) => m.processZatcaQueue()).catch((err) => console.error("⚠️ طابور ZATCA:", err instanceof Error ? err.message : err));
     await superAdminDb.auditLog.create({
       data: { tenantId, action: "billing.subscription_paid", targetType: "Invoice", targetId: invoice.id, metaJson: { kind: checkout.kind, provider: "moyasar", providerInvoiceId: moyasar.id } },
     });

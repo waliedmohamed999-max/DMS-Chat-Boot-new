@@ -21,6 +21,7 @@ const ALL_NAV_ITEMS: (NavItem & { requires?: Permission })[] = [
   { href: "/admin/setup", label: "جاهزية الربط", icon: "🔌", requires: "platform.settings.manage" },
   { href: "/admin/salla", label: "تطبيق سلة", icon: "🛍️", requires: "platform.settings.manage" },
   { href: "/admin/zid", label: "تطبيق زد", icon: "🟣", requires: "platform.settings.manage" },
+  { href: "/admin/zatca", label: "الفوترة الإلكترونية ZATCA", icon: "🧾", requires: "platform.settings.manage" },
   { href: "/admin/countries", label: "الدول والعملات", icon: "🌍", requires: "platform.settings.manage" },
   { href: "/admin/affiliates", label: "التسويق بالعمولة", icon: "🤝", requires: "platform.affiliates.manage" },
   { href: "/admin/announcements", label: "إعلانات المنصة", icon: "📢", requires: "platform.announcements.send" },

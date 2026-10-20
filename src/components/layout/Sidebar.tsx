@@ -38,7 +38,7 @@ export function Sidebar({
   const sections = isAdmin
     ? [
         { title: "المتابعة والعمليات", keys: ["admin", "approvals", "tenants", "leads", "chats", "health", "monitoring"] },
-        { title: "الفوترة والتكاملات", keys: ["billing", "plans", "numbers", "wallets", "messaging", "migration", "setup", "salla", "zid"] },
+        { title: "الفوترة والتكاملات", keys: ["billing", "plans", "numbers", "wallets", "messaging", "migration", "setup", "salla", "zid", "zatca"] },
         { title: "إدارة المنصة", keys: [] },
       ]
     : [

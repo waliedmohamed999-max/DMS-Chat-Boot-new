@@ -1,3 +1,4 @@
+import { existsSync } from "fs";
 import puppeteer, { type Browser } from "puppeteer";
 
 /**
@@ -13,17 +14,31 @@ declare global {
   var __pdfBrowser: Browser | undefined;
 }
 
+// متصفحات النظام المعروفة — تُجرَّب بعد Chromium المُدمَج مع Puppeteer (قد لا يكون مُحمَّلاً على استضافة مشتركة).
+const SYSTEM_BROWSERS = [
+  "/usr/bin/chromium", "/usr/bin/chromium-browser", "/usr/bin/google-chrome", "/usr/bin/google-chrome-stable",
+  "C:/Program Files/Google/Chrome/Application/chrome.exe", "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
+  "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+];
+
 async function getBrowser(): Promise<Browser> {
   if (global.__pdfBrowser?.connected) return global.__pdfBrowser;
-  global.__pdfBrowser = await puppeteer.launch({
-    headless: true,
-    args: ["--no-sandbox", "--disable-setuid-sandbox"], // ضروري في أغلب بيئات الحاويات/الخوادم الافتراضية
-    // في صورة الإنتاج (Dockerfile) نستخدم Chromium النظامي المُثبَّت عبر apt بدل تحميل Puppeteer
-    // الداخلي (PUPPETEER_SKIP_DOWNLOAD=true) — أضمن توافقاً للمكتبات المشتركة ويوفّر حجم الصورة.
-    // بلا هذا المتغيّر (مثال: التطوير المحلي) يبقى السلوك القديم كما هو (Chromium المُدمَج مع الحزمة).
-    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
-  });
-  return global.__pdfBrowser;
+  // في صورة الإنتاج (Dockerfile) نستخدم Chromium النظامي عبر PUPPETEER_EXECUTABLE_PATH؛ بدونه نجرّب المُدمَج ثم متصفحات النظام.
+  const candidates = [process.env.PUPPETEER_EXECUTABLE_PATH || undefined, undefined, ...SYSTEM_BROWSERS.filter((p) => existsSync(p))];
+  let lastError: unknown;
+  for (const executablePath of [...new Set(candidates)]) {
+    try {
+      global.__pdfBrowser = await puppeteer.launch({
+        headless: true,
+        args: ["--no-sandbox", "--disable-setuid-sandbox"], // ضروري في أغلب بيئات الحاويات/الخوادم الافتراضية
+        executablePath,
+      });
+      return global.__pdfBrowser;
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error("لا يوجد متصفح لتوليد PDF");
 }
 
 /** يحوّل HTML/CSS كامل إلى ملف PDF حقيقي — صفحة واحدة (`page`) جديدة لكل تحويل ثم تُغلَق فوراً بعد

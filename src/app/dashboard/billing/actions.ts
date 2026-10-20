@@ -356,3 +356,43 @@ export async function devSimulatePaymentFailure() {
 
   revalidatePath("/dashboard/billing");
 }
+
+// ========================= البيانات الضريبية للتاجر (ZATCA) =========================
+
+export type TaxProfileResult = { ok: boolean; message: string } | null;
+
+const TAX_FIELDS = {
+  billingLegalName: { re: /^.{2,200}$/, label: "الاسم القانوني" },
+  billingVatNumber: { re: /^3\d{13}3$/, label: "الرقم الضريبي (15 رقماً يبدأ وينتهي بـ3)" },
+  billingStreet: { re: /^.{2,120}$/, label: "الشارع" },
+  billingBuildingNumber: { re: /^\d{4}$/, label: "رقم المبنى (4 أرقام)" },
+  billingDistrict: { re: /^.{2,120}$/, label: "الحي" },
+  billingCity: { re: /^.{2,80}$/, label: "المدينة" },
+  billingPostalCode: { re: /^\d{5}$/, label: "الرمز البريدي (5 أرقام)" },
+} as const;
+
+/**
+ * التاجر المسجّل ضريبياً يحصل على فاتورة قياسية (B2B) معتمدة من الهيئة. الرقم الضريبي اختياري — بدونه تصدر فاتورة مبسّطة
+ * باسم المنشأة فقط، ومعه تصبح كل الحقول إلزامية.
+ */
+export async function saveTaxProfile(_prev: TaxProfileResult, formData: FormData): Promise<TaxProfileResult> {
+  const session = await requireTenantSession();
+  requirePermission(session.user.role, "billing.manage");
+  const raw = Object.fromEntries(Object.keys(TAX_FIELDS).map((k) => [k, String(formData.get(k) ?? "").trim()])) as Record<keyof typeof TAX_FIELDS, string>;
+  const registered = raw.billingVatNumber !== "";
+  const data: Record<string, string | null> = {};
+  for (const [key, spec] of Object.entries(TAX_FIELDS) as [keyof typeof TAX_FIELDS, (typeof TAX_FIELDS)[keyof typeof TAX_FIELDS]][]) {
+    const value = raw[key];
+    const required = key === "billingLegalName" || registered;
+    if (!value && !required) { data[key] = null; continue; }
+    if (!spec.re.test(value)) return { ok: false, message: `${spec.label} غير صالح${registered && key !== "billingVatNumber" && !value ? " — مطلوب مع الرقم الضريبي" : ""}` };
+    data[key] = value;
+  }
+  await rawDb.tenant.update({ where: { id: session.user.tenantId }, data });
+  await writeAuditLog({
+    tenantId: session.user.tenantId, userId: session.user.id,
+    action: "billing.tax_profile_updated", targetType: "Tenant", targetId: session.user.tenantId,
+  });
+  revalidatePath("/dashboard/billing");
+  return { ok: true, message: registered ? "تم الحفظ — فواتيرك القادمة ستصدر فواتير ضريبية قياسية" : "تم الحفظ" };
+}
