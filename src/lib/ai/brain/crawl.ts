@@ -317,6 +317,8 @@ export type SiteCrawlState = {
   updated: number;
   unchanged: number;
   faqs: number;
+  failed?: number;
+  saveError?: string;
   chars?: number;
   skipped?: Partial<Record<CrawlSkipReason, number>>;
   firstError?: string;

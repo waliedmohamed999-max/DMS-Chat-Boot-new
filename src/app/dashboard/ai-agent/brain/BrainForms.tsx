@@ -261,19 +261,30 @@ type CrawlState = {
   status: "running" | "done" | "failed"; rootUrl: string; discovered: number; processed: number;
   added: number; updated: number; unchanged: number; faqs: number; stoppedReason?: string; error?: string;
   chars?: number; skipped?: Record<string, number>; firstError?: string; storePlatform?: "salla" | "zid";
+  failed?: number; saveError?: string;
 };
 
 const SKIP_LABELS: Record<string, string> = {
   robots: "يمنعها الموقع عن الزواحف", filtered: "سلة/دفع/حساب", http_error: "تعذّر فتحها", not_html: "ليست صفحات", offsite: "خارج الموقع", thin: "بلا نص كافٍ",
 };
 
-/** حالة سحب الموقع الجاري/الأخير — تتحدّث تلقائياً كل 3 ثوانٍ أثناء السحب. */
-export function CrawlStatus({ state }: { state: CrawlState | null }) {
+/**
+ * حالة سحب الموقع الجاري/الأخير — أثناء السحب تُستطلع الحالة وحدها كل 3 ثوانٍ (مسار خفيف)، وتُحدَّث الصفحة
+ * كاملة مرة واحدة عند الانتهاء (لا إعادة تحميل الصفحة الثقيلة طوال السحب).
+ */
+export function CrawlStatus({ state: initial }: { state: CrawlState | null }) {
   const router = useRouter();
+  const [state, setState] = useState(initial);
+  useEffect(() => setState(initial), [initial]);
   const running = state?.status === "running";
   useEffect(() => {
     if (!running) return;
-    const t = setInterval(() => router.refresh(), 3000);
+    const t = setInterval(async () => {
+      const next = (await fetch("/api/ai-agent/brain/crawl-status", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).catch(() => null)) as CrawlState | null;
+      if (!next) return;
+      setState(next);
+      if (next.status !== "running") router.refresh();
+    }, 3000);
     return () => clearInterval(t);
   }, [running, router]);
   if (!state) return null;
@@ -291,6 +302,7 @@ export function CrawlStatus({ state }: { state: CrawlState | null }) {
       </p>
       <p className="mt-1 text-xs text-slate-400">
         قُرئت {state.processed} صفحة{running && state.discovered ? ` من ~${state.discovered}` : ""} · جديدة {state.added} · محدَّثة {state.updated} · بلا تغيير {state.unchanged}
+        {state.failed ? ` · فشل حفظ ${state.failed}` : ""}
         {state.faqs ? ` · ${state.faqs} سؤال شائع من موقعك بانتظار اعتمادك` : ""}
       </p>
       {!running && state.skipped && Object.keys(state.skipped).length > 0 && (

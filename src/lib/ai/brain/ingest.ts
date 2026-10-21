@@ -227,6 +227,11 @@ export async function runSiteCrawl(tenantId: string, userId: string, rootUrl: st
             await writeSiteCrawlState(tenantId, state);
             return false;
           }
+          // لا يُبتلع أي خطأ حفظ بصمت — يظهر للتاجر في حالة السحب وفي سجل الخادم.
+          state.failed = (state.failed ?? 0) + 1;
+          const message = err instanceof Error ? err.message.split("\n").filter(Boolean).slice(-1)[0]?.slice(0, 240) ?? "خطأ" : String(err);
+          state.saveError ??= message;
+          console.error(`❌ تعذّر حفظ صفحة ${page.url} في عقل البوت:`, err);
         }
       }
       state.discovered = Math.max(state.discovered, state.processed);
@@ -241,7 +246,9 @@ export async function runSiteCrawl(tenantId: string, userId: string, rootUrl: st
   const platform = detectStorePlatform(result.root, firstHtml);
   if (platform && (state.chars ?? 0) < 5000) state.storePlatform = platform;
   if (!result.visited) state.error = result.firstError ? `لم نتمكن من قراءة أي صفحة: ${result.firstError}` : "لم نتمكن من قراءة أي صفحة من هذا الموقع";
-  else if (!state.added && !state.updated && !state.unchanged) state.error = "قُرئت الصفحات لكن بلا نص كافٍ (المحتوى يُحمَّل بجافاسكربت)";
+  else if (!state.added && !state.updated && !state.unchanged) {
+    state.error = state.saveError ? `تعذّر حفظ الصفحات: ${state.saveError}` : "قُرئت الصفحات لكن بلا نص كافٍ (المحتوى يُحمَّل بجافاسكربت)";
+  }
   state.status = result.visited ? "done" : "failed";
   state.finishedAt = new Date().toISOString();
   await writeSiteCrawlState(tenantId, state);
