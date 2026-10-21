@@ -33,8 +33,11 @@ export function Sidebar({
   const pathname = usePathname();
   const [mounted, setMounted] = useState(false);
   const [imgFailed, setImgFailed] = useState(false);
-  const [openSection, setOpenSection] = useState<string | null>(null);
   const isAdmin = items.some((item) => item.href === "/admin");
+  // أقسام مفتوحة (أكثر من قسم ممكن) — تُفتح وتُغلق بالنقر فقط، لا بمرور المؤشر (كان المرور يفتح كل قسم
+  // يعبره المؤشر ويغلق غيره). تُحفظ لكل لوحة في المتصفح.
+  const storageKey = isAdmin ? "dms:sidebar-open:admin" : "dms:sidebar-open:tenant";
+  const [openSections, setOpenSections] = useState<Set<string>>(() => new Set());
   const sections = isAdmin
     ? [
         { title: "المتابعة والعمليات", keys: ["admin", "approvals", "tenants", "leads", "chats", "health", "monitoring"] },
@@ -51,6 +54,39 @@ export function Sidebar({
   // لا يُعرَض <img> إلا بعد اكتمال التركيب على العميل (mount) — تفادياً لسباق حقيقي بين فشل تحميل
   // الصورة (404) واكتمال hydration React الذي قد يُفوِّت حدث onError تماماً إن حدث الفشل قبله.
   useEffect(() => setMounted(true), []);
+
+  const sectionOf = (href: string) => {
+    const key = href.split("/").at(-1)!;
+    return sections.find((section) => (section.keys.length ? section.keys.includes(key) : !assigned.includes(key)))?.title;
+  };
+  const activeSection = sectionOf(items.find((item) => isNavigationActive(pathname, item.href))?.href ?? "");
+
+  // الحالة المحفوظة عند أول تحميل، ثم قسم الصفحة الحالية مفتوح دائماً (حتى بعد التنقل لقسم آخر).
+  useEffect(() => {
+    let saved: string[] = [];
+    try {
+      saved = JSON.parse(localStorage.getItem(storageKey) ?? "[]");
+    } catch {
+      // تخزين غير متاح (وضع خاص) — يكفي القسم الحالي
+    }
+    setOpenSections((prev) => new Set([...prev, ...(Array.isArray(saved) ? saved : [])]));
+  }, [storageKey]);
+  useEffect(() => {
+    if (activeSection) setOpenSections((prev) => (prev.has(activeSection) ? prev : new Set([...prev, activeSection])));
+  }, [activeSection]);
+
+  const toggleSection = (title: string) =>
+    setOpenSections((prev) => {
+      const next = new Set(prev);
+      if (next.has(title)) next.delete(title);
+      else next.add(title);
+      try {
+        localStorage.setItem(storageKey, JSON.stringify([...next]));
+      } catch {
+        // تجاهل — التفضيل لا يُحفظ فقط
+      }
+      return next;
+    });
 
   return (
     <aside className="workspace-sidebar hidden h-full min-h-0 w-72 shrink-0 flex-col border-l border-white/5 bg-navy-950 lg:flex" aria-label={isAdmin ? "تنقل إدارة المنصة" : "تنقل المتجر"}>
@@ -84,18 +120,14 @@ export function Sidebar({
             return section.keys.length ? section.keys.includes(key) : !assigned.includes(key);
           });
           if (!sectionItems.length) return null;
-          const open = openSection === section.title;
+          const open = openSections.has(section.title);
           const currentItem = sectionItems.find((item) => isNavigationActive(pathname, item.href));
           const panelId = `sidebar-section-${index}`;
           return <div key={section.title}
-            onMouseEnter={() => setOpenSection(section.title)}
-            onFocus={(event) => {
-              if (event.target.matches(":focus-visible")) setOpenSection(section.title);
-            }}
             onKeyDown={(event) => {
-              if (event.key === "Escape") {
+              if (event.key === "Escape" && open) {
                 event.currentTarget.querySelector("button")?.focus();
-                setOpenSection(null);
+                toggleSection(section.title);
               }
             }}
           >
@@ -103,7 +135,7 @@ export function Sidebar({
               className={clsx("sidebar-section-trigger flex min-h-12 w-full items-center gap-3 rounded-xl px-3 py-3 text-right text-sm font-semibold", currentItem && "sidebar-section-current")}
               aria-expanded={open}
               aria-controls={panelId}
-              onClick={() => setOpenSection(section.title)}
+              onClick={() => toggleSection(section.title)}
             >
               <NavigationIcon href={sectionItems[0]!.href} className="h-[18px] w-[18px] shrink-0" />
               <span className="min-w-0 flex-1">
@@ -112,7 +144,12 @@ export function Sidebar({
               </span>
               <ChevronDown aria-hidden="true" className={clsx("h-4 w-4 shrink-0 transition-transform motion-reduce:transition-none", open && "rotate-180")} />
             </button>
-            <div id={panelId} hidden={!open} className="mr-3 mt-1 space-y-1 border-r border-white/10 pr-2 pb-2">
+            {/* فتح/إغلاق ناعم (grid-rows 0fr⇄1fr) — والقسم المغلق خارج تسلسل Tab وقارئات الشاشة (inert) */}
+            <div id={panelId} inert={!open} aria-hidden={!open}
+              className={clsx("grid transition-[grid-template-rows,opacity] duration-200 ease-out motion-reduce:transition-none", open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0")}
+            >
+              <div className="min-h-0 overflow-hidden">
+                <div className="mr-3 mt-1 space-y-1 border-r border-white/10 pr-2 pb-2">
         {sectionItems.map((item) => {
           const active = isNavigationActive(pathname, item.href);
           return (
@@ -123,6 +160,8 @@ export function Sidebar({
             </Link>
           );
         })}
+                </div>
+              </div>
             </div>
           </div>;
         })}
