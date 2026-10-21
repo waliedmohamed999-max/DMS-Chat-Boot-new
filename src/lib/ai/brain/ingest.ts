@@ -6,7 +6,7 @@ import { embedTexts, packVector } from "./embeddings";
 import { invalidateBrainIndex } from "./search";
 import { chunkText } from "./text";
 import {
-  acquireCrawlLock, crawlSite, getSiteCrawlState, pageToKnowledge, releaseCrawlLock, rewriteSpecialUrl, safePageFetcher, writeSiteCrawlState,
+  acquireCrawlLock, crawlSite, detectStorePlatform, getSiteCrawlState, pageToKnowledge, releaseCrawlLock, rewriteSpecialUrl, safePageFetcher, writeSiteCrawlState,
   type PageFetcher, type SiteCrawlState,
 } from "./crawl";
 
@@ -199,6 +199,9 @@ export async function runSiteCrawl(tenantId: string, userId: string, rootUrl: st
   };
   await writeSiteCrawlState(tenantId, state);
   const faqs: Array<{ question: string; answer: string }> = [];
+  let firstHtml = "";
+  const seenContent = new Set<string>();
+  state.chars = 0;
   const result = await crawlSite(root.toString(), {
     maxPages: Math.min(opts.maxPages ?? MAX_CRAWL_PAGES, MAX_CRAWL_PAGES),
     fetcher: opts.fetcher,
@@ -209,6 +212,12 @@ export async function runSiteCrawl(tenantId: string, userId: string, rootUrl: st
     onPage: async (page) => {
       faqs.push(...page.faqs);
       state.processed++;
+      state.chars = (state.chars ?? 0) + page.text.length;
+      if (!firstHtml) firstHtml = page.html ?? "";
+      // نفس المحتوى من رابطين مختلفين (/products و/products/) ⇒ يُحفظ مرة واحدة.
+      const contentKey = hashText(page.text);
+      if (seenContent.has(contentKey)) return true;
+      seenContent.add(contentKey);
       if (page.text.trim().length >= 80) {
         try {
           state[await upsertWebPage(tenantId, userId, { ...page, siteRoot })]++;
@@ -226,7 +235,13 @@ export async function runSiteCrawl(tenantId: string, userId: string, rootUrl: st
     },
   });
   state.faqs = faqs.length ? await suggestWebsiteFaqs(tenantId, faqs) : 0;
-  if (!result.visited) state.error = "لم نتمكن من قراءة أي صفحة من هذا الموقع";
+  state.skipped = result.reasons;
+  state.firstError = result.firstError;
+  // محتوى قليل من متجر سلة/زد = منتجات تُحمَّل بجافاسكربت ⇒ تلميح الربط الرسمي.
+  const platform = detectStorePlatform(result.root, firstHtml);
+  if (platform && (state.chars ?? 0) < 5000) state.storePlatform = platform;
+  if (!result.visited) state.error = result.firstError ? `لم نتمكن من قراءة أي صفحة: ${result.firstError}` : "لم نتمكن من قراءة أي صفحة من هذا الموقع";
+  else if (!state.added && !state.updated && !state.unchanged) state.error = "قُرئت الصفحات لكن بلا نص كافٍ (المحتوى يُحمَّل بجافاسكربت)";
   state.status = result.visited ? "done" : "failed";
   state.finishedAt = new Date().toISOString();
   await writeSiteCrawlState(tenantId, state);

@@ -119,7 +119,7 @@ export function pageToKnowledge(body: string, contentType: string): { title: str
 
 // ========================= اكتشاف صفحات الموقع =========================
 
-const SKIP_PATH = /\/(cart|checkout|login|signin|sign-in|register|signup|account|my-account|wishlist|compare|search|wp-admin|wp-login|admin|feed|tag|author)(\/|$)|add-to-cart|[?&](sort|filter|page)=/i;
+const SKIP_PATH = /\/cdn-cgi\/|\/(cart|checkout|login|signin|sign-in|register|signup|account|my-account|wishlist|compare|search|wp-admin|wp-login|admin|feed|tag|author)(\/|$)|add-to-cart|[?&](sort|filter|page)=/i;
 const SKIP_EXT = /\.(jpe?g|png|gif|webp|svg|ico|css|js|json|xml|pdf|zip|rar|mp4|mp3|webm|woff2?|ttf|eot|txt)$/i;
 // صفحات أهم للعقل أولاً (سياسات، أسئلة، تواصل) — تبقى ضمن الحد الأقصى حتى في المواقع الكبيرة.
 const IMPORTANT = /(faq|question|shipping|delivery|return|refund|policy|polic|privacy|terms|about|contact|warranty|payment|اسئله|شحن|توصيل|استرجاع|سياس|ضمان|تواصل|من-نحن)/i;
@@ -171,9 +171,20 @@ export function parseRobots(txt: string): Robots {
   return r;
 }
 
-const allowedByRobots = (robots: Robots, u: URL) => {
-  const path = u.pathname + u.search;
-  const longest = (rules: string[]) => Math.max(-1, ...rules.filter((p) => path.startsWith(p.replace(/\*.*$/, ""))).map((p) => p.length));
+/** قاعدة robots ⇐ تعبير منتظم: `*` أي أحرف، و`$` نهاية المسار (كان `/*?` يُقرأ `/` فيمنع الموقع كله). */
+const ruleRegex = (rule: string) =>
+  new RegExp("^" + rule.replace(/[.+?^{}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*").replace(/\\\$$|\$$/, "$"));
+
+export const allowedByRobots = (robots: Robots, u: URL) => {
+  let path = u.pathname + u.search;
+  try {
+    path = decodeURIComponent(u.pathname) + u.search;
+  } catch {
+    // ترميز مكسور في الرابط — يُطابَق بالصيغة الخام فقط
+  }
+  const rawPath = u.pathname + u.search;
+  const longest = (rules: string[]) =>
+    Math.max(-1, ...rules.filter((r) => ruleRegex(r).test(rawPath) || ruleRegex(r).test(path)).map((r) => r.length));
   return longest(robots.allow) >= longest(robots.disallow);
 };
 
@@ -199,49 +210,82 @@ async function sitemapUrls(fetcher: PageFetcher, sitemaps: string[], root: URL, 
   return out;
 }
 
-export type CrawlPage = { url: string; title: string | null; text: string; faqs: Array<{ question: string; answer: string }> };
+export type CrawlPage = { url: string; title: string | null; text: string; faqs: Array<{ question: string; answer: string }>; html?: string };
 
 /**
  * يكتشف ويجلب صفحات الموقع (حتى maxPages): الصفحة المدخلة أولاً، ثم خريطة الموقع، ثم الروابط الداخلية
  * (عمق 2). `onPage` تُستدعى لكل صفحة نصية — توقفها بإرجاع false (مثلاً امتلاء سعة المعرفة).
  */
+export type CrawlSkipReason = "robots" | "filtered" | "http_error" | "not_html" | "offsite" | "thin";
+export type CrawlResult = { visited: number; skipped: number; stopped: boolean; root: string; reasons: Partial<Record<CrawlSkipReason, number>>; firstError?: string };
+
 export async function crawlSite(
   rootUrl: string,
   opts: { maxPages: number; fetcher?: PageFetcher; onPage: (page: CrawlPage) => Promise<boolean>; onDiscovered?: (n: number) => Promise<void> }
-): Promise<{ visited: number; skipped: number; stopped: boolean }> {
+): Promise<CrawlResult> {
   const fetcher = opts.fetcher ?? safePageFetcher;
-  const root = canonical(rootUrl, new URL(rootUrl));
-  if (!root) throw new Error("الرابط يجب أن يبدأ بـ https://");
+  const entry = canonical(rootUrl, new URL(rootUrl));
+  if (!entry) throw new Error("الرابط يجب أن يبدأ بـ https://");
+
+  const reasons: Partial<Record<CrawlSkipReason, number>> = {};
+  let firstError: string | undefined;
+  const skip = (r: CrawlSkipReason, detail?: string) => {
+    reasons[r] = (reasons[r] ?? 0) + 1;
+    if (detail && !firstError) firstError = detail;
+  };
+
+  // الصفحة المدخلة أولاً: إعادة توجيهها تحدد جذر الموقع الحقيقي (salla.sa ⇐ salla.com، النطاق ⇐ www، لغة ⇐ /ar)
+  // — قبلها كانت الصفحة الأولى تُعدّ "موقعاً آخر" فلا يُحفظ شيء ويتوقف السحب.
+  const first = await fetcher(entry.toString()).catch((err) => ({ ok: false as const, error: String(err) }));
+  if (!first.ok) throw new Error(`تعذّر فتح الرابط: ${first.error}`);
+  if (first.status !== 200) throw new Error(first.status === 403 || first.status === 429 ? "الموقع يمنع القراءة الآلية (حماية ضد الروبوتات) — جرّب صفحات بعينها أو الصق المحتوى" : `الموقع ردّ بالحالة ${first.status}`);
+  const root = canonical(first.finalUrl, entry) ?? entry;
 
   const robotsRes = await fetcher(`${root.origin}/robots.txt`).catch(() => null);
   const robots = robotsRes?.ok && robotsRes.status === 200 && !/html/.test(robotsRes.contentType) ? parseRobots(robotsRes.body) : parseRobots("");
   const fromSitemap = await sitemapUrls(fetcher, robots.sitemaps.length ? robots.sitemaps : [`${root.origin}/sitemap.xml`], root, opts.maxPages);
 
-  const seen = new Set<string>();
-  const queue: Array<{ url: URL; depth: number }> = [{ url: root, depth: 0 }];
+  const seen = new Set<string>([entry.toString()]);
+  const queue: Array<{ url: URL; depth: number; prefetched?: FetchedPage }> = [{ url: root, depth: 0, prefetched: first }];
   const sorted = [...fromSitemap].sort((a, b) => Number(IMPORTANT.test(decodeURIComponent(b.pathname))) - Number(IMPORTANT.test(decodeURIComponent(a.pathname))));
   for (const u of sorted) queue.push({ url: u, depth: 1 });
   await opts.onDiscovered?.(Math.min(opts.maxPages, new Set(queue.map((q) => q.url.toString())).size));
 
   let visited = 0;
-  let skipped = 0;
-  while (queue.length && visited < opts.maxPages) {
-    const { url, depth } = queue.shift()!;
+  // حد للمحاولات الفاشلة المتتالية — موقع يحجب الزواحف لا يستهلك مئات الطلبات بلا فائدة.
+  let consecutiveFailures = 0;
+  while (queue.length && visited < opts.maxPages && consecutiveFailures < 15) {
+    const { url, depth, prefetched } = queue.shift()!;
     const key = url.toString();
-    if (seen.has(key)) continue;
+    if (seen.has(key) && !prefetched) continue;
     seen.add(key);
-    if (url !== root && (SKIP_PATH.test(url.pathname + url.search) || SKIP_EXT.test(url.pathname) || !allowedByRobots(robots, url))) {
-      skipped++;
+    if (!prefetched) {
+      if (SKIP_PATH.test(url.pathname + url.search) || SKIP_EXT.test(url.pathname)) {
+        skip("filtered");
+        continue;
+      }
+      if (!allowedByRobots(robots, url)) {
+        skip("robots");
+        continue;
+      }
+    }
+    const res = prefetched ?? (await fetcher(key).catch((err) => ({ ok: false as const, error: String(err) })));
+    if (!res.ok || res.status !== 200) {
+      skip("http_error", res.ok ? `HTTP ${res.status} — ${key}` : res.error);
+      consecutiveFailures++;
       continue;
     }
-    const res = await fetcher(key).catch((err) => ({ ok: false as const, error: String(err) }));
-    if (!res.ok || res.status !== 200 || !/text\/html|xhtml/.test(res.contentType)) {
-      skipped++;
+    if (!/text\/html|xhtml/.test(res.contentType)) {
+      skip("not_html");
       continue;
     }
+    consecutiveFailures = 0;
     visited++;
     const finalUrl = canonical(res.finalUrl, url) ?? url;
-    if (!sameSite(finalUrl, root)) continue; // إعادة توجيه لموقع آخر — لا يُحفظ
+    if (!sameSite(finalUrl, root)) {
+      skip("offsite");
+      continue;
+    }
     const page = pageToKnowledge(res.body, res.contentType);
     if (depth < 2) {
       const links = linksOf(res.body, finalUrl).filter((l) => sameSite(l, root) && !seen.has(l.toString()));
@@ -249,14 +293,16 @@ export async function crawlSite(
       for (const l of links.slice(0, 200)) queue.push({ url: l, depth: depth + 1 });
     }
     if (page.text.trim().length < 80 && !page.faqs.length) {
-      skipped++;
+      skip("thin");
       continue;
     }
-    const keepGoing = await opts.onPage({ url: finalUrl.toString(), title: page.title, text: page.text, faqs: page.faqs });
-    if (!keepGoing) return { visited, skipped, stopped: true };
+    const keepGoing = await opts.onPage({ url: finalUrl.toString(), title: page.title, text: page.text, faqs: page.faqs, html: depth === 0 ? res.body : undefined });
+    if (!keepGoing) return { visited, skipped: total(reasons), stopped: true, root: root.toString(), reasons, firstError };
   }
-  return { visited, skipped, stopped: false };
+  return { visited, skipped: total(reasons), stopped: false, root: root.toString(), reasons, firstError };
 }
+
+const total = (r: Partial<Record<CrawlSkipReason, number>>) => Object.values(r).reduce((n, v) => n + (v ?? 0), 0);
 
 // ========================= حالة السحب بالخلفية =========================
 
@@ -271,9 +317,28 @@ export type SiteCrawlState = {
   updated: number;
   unchanged: number;
   faqs: number;
+  chars?: number;
+  skipped?: Partial<Record<CrawlSkipReason, number>>;
+  firstError?: string;
+  /** متجر سلة/زد بمحتوى قليل (منتجاته تُحمَّل بجافاسكربت) ⇐ تلميح لربط المتجر بدل السحب. */
+  storePlatform?: "salla" | "zid";
   stoppedReason?: string;
   error?: string;
 };
+
+/** متاجر سلة/زد تُحمّل منتجاتها في المتصفح — الربط الرسمي يزامنها كاملة بأسعارها ومخزونها. */
+export function detectStorePlatform(url: string, html = ""): "salla" | "zid" | undefined {
+  const host = (() => {
+    try {
+      return new URL(url).hostname;
+    } catch {
+      return "";
+    }
+  })();
+  if (/\.zid\.store$/.test(host) || /__vitrinStoreSettings|static\.zid\.store/.test(html)) return "zid";
+  if (/\.salla\.sa$/.test(host) || /cdn\.salla\.(sa|network)|salla\.sa\/s\//.test(html)) return "salla";
+  return undefined;
+}
 
 const STATE_TTL = 7 * 24 * 3600;
 const LOCK_TTL = 20 * 60;

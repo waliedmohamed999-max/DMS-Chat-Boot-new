@@ -1,5 +1,4 @@
-import { Worker, Queue } from "bullmq";
-import { redisConnection } from "@/lib/queue/connection";
+import { schedulePeriodic } from "@/lib/queue/periodic";
 import { superAdminDb } from "@/lib/db";
 import { getValidSallaAccessToken } from "@/lib/integrations/salla/api";
 import { getValidZidBundle, zidTokensIssuedAt } from "@/lib/integrations/zid/api";
@@ -52,8 +51,9 @@ export async function runIntegrationTokenMaintenance(): Promise<{ salla: number;
   return { salla, zid, failed };
 }
 
-const worker = new Worker(
+schedulePeriodic(
   "integration-token-maintenance",
+  INTERVAL_MS,
   async () => {
     const r = await runIntegrationTokenMaintenance();
     // نفس الدورة اليومية: تذكير التجار بتجديد الاشتراك قبل انتهائه بـ3 أيام.
@@ -63,17 +63,13 @@ const worker = new Worker(
     });
     return { ...r, reminders };
   },
-  { connection: redisConnection, concurrency: 1 }
+  {
+    onDone: (r) => {
+      const x = r as { salla: number; zid: number; failed: number } | undefined;
+      if (x && (x.salla || x.zid || x.failed)) console.log(`🔑 صيانة رموز المتاجر: سلة ${x.salla}، زد ${x.zid}، فشل ${x.failed}`);
+    },
+  }
 );
-worker.on("completed", (_job, r) => {
-  if (r && (r.salla || r.zid || r.failed)) console.log(`🔑 صيانة رموز المتاجر: سلة ${r.salla}، زد ${r.zid}، فشل ${r.failed}`);
-});
-worker.on("failed", (_job, err) => console.error("❌ فشلت صيانة رموز المتاجر:", err.message));
-
-const queue = new Queue("integration-token-maintenance", { connection: redisConnection });
-queue
-  .add("scan", {}, { repeat: { every: INTERVAL_MS }, jobId: "recurring-integration-token-maintenance" })
-  .catch((err) => console.error("❌ تعذّرت جدولة صيانة رموز المتاجر:", err));
 
 /**
  * فحص دوري لحالة القوالب قيد المراجعة لدى المزوّد الحقيقي (كل 15 دقيقة) — إشعار قرار المراجعة من 360dialog/
@@ -105,45 +101,31 @@ export async function runPendingTemplateSync(): Promise<{ tenants: number; updat
   return { tenants: rows.length, updated, failed };
 }
 
-const templateSyncWorker = new Worker("template-status-sync", async () => runPendingTemplateSync(), { connection: redisConnection, concurrency: 1 });
-templateSyncWorker.on("completed", (_job, r) => {
-  if (r && (r.updated || r.failed)) console.log(`📝 مزامنة حالة القوالب: ${r.updated} تحديث، ${r.failed} فشل (${r.tenants} تاجر)`);
+schedulePeriodic("template-status-sync", TEMPLATE_SYNC_INTERVAL_MS, () => runPendingTemplateSync(), {
+  onDone: (r) => {
+    const x = r as { tenants: number; updated: number; failed: number } | undefined;
+    if (x && (x.updated || x.failed)) console.log(`📝 مزامنة حالة القوالب: ${x.updated} تحديث، ${x.failed} فشل (${x.tenants} تاجر)`);
+  },
 });
-templateSyncWorker.on("failed", (_job, err) => console.error("❌ فشلت مزامنة حالة القوالب:", err.message));
-new Queue("template-status-sync", { connection: redisConnection })
-  .add("scan", {}, { repeat: { every: TEMPLATE_SYNC_INTERVAL_MS }, jobId: "recurring-template-status-sync" })
-  .catch((err) => console.error("❌ تعذّرت جدولة مزامنة حالة القوالب:", err));
 
 /**
  * الفوترة الإلكترونية ZATCA: معالجة المستندات المستحقة كل 5 دقائق (فواتير مدفوعة لم تُبلَّغ بعد، إعادة
  * محاولة الفاشلة شبكياً، وإشعارات الاسترداد) — الإرسال الفوري بعد الدفع يغطي الحالة العادية.
  */
-const zatcaWorker = new Worker(
-  "zatca-queue",
-  async () => (await import("@/lib/zatca/service")).processZatcaQueue(),
-  { connection: redisConnection, concurrency: 1 }
-);
-zatcaWorker.on("completed", (_job, r) => {
-  if (r && r.processed) console.log(`🧾 ZATCA: ${r.accepted}/${r.processed} مستند مقبول`);
+schedulePeriodic("zatca-queue", 5 * 60 * 1000, async () => (await import("@/lib/zatca/service")).processZatcaQueue(), {
+  onDone: (r) => {
+    const x = r as { processed: number; accepted: number } | undefined;
+    if (x?.processed) console.log(`🧾 ZATCA: ${x.accepted}/${x.processed} مستند مقبول`);
+  },
 });
-zatcaWorker.on("failed", (_job, err) => console.error("❌ طابور ZATCA:", err.message));
-new Queue("zatca-queue", { connection: redisConnection })
-  .add("scan", {}, { repeat: { every: 5 * 60 * 1000 }, jobId: "recurring-zatca-queue" })
-  .catch((err) => console.error("❌ تعذّرت جدولة طابور ZATCA:", err));
 
 /**
  * عقل البوت: تحديث صفحات الروابط في قواعد معرفة التجار أسبوعياً (يُفحص المستحق كل 6 ساعات، 30 مصدراً لكل
  * دورة). المحتوى غير المتغيّر لا يُعاد فهرسته.
  */
-const brainRefreshWorker = new Worker(
-  "brain-url-refresh",
-  async () => (await import("@/lib/ai/brain/ingest")).refreshStaleUrlSources(),
-  { connection: redisConnection, concurrency: 1 }
-);
-brainRefreshWorker.on("completed", (_job, r) => {
-  if (r && (r.updated || r.failed)) console.log(`🧠 تحديث روابط المعرفة: ${r.updated} تغيّر، ${r.unchanged} كما هو، ${r.failed} فشل`);
+schedulePeriodic("brain-url-refresh", 6 * 3600 * 1000, async () => (await import("@/lib/ai/brain/ingest")).refreshStaleUrlSources(), {
+  onDone: (r) => {
+    const x = r as { updated: number; unchanged: number; failed: number } | undefined;
+    if (x && (x.updated || x.failed)) console.log(`🧠 تحديث روابط المعرفة: ${x.updated} تغيّر، ${x.unchanged} كما هو، ${x.failed} فشل`);
+  },
 });
-brainRefreshWorker.on("failed", (_job, err) => console.error("❌ تحديث روابط المعرفة:", err.message));
-new Queue("brain-url-refresh", { connection: redisConnection })
-  .add("scan", {}, { repeat: { every: 6 * 3600 * 1000 }, jobId: "recurring-brain-url-refresh" })
-  .catch((err) => console.error("❌ تعذّرت جدولة تحديث روابط المعرفة:", err));

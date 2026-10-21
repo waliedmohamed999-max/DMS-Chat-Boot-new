@@ -1,5 +1,6 @@
-import { Worker, Queue, type Job } from "bullmq";
+import { Worker, type Job } from "bullmq";
 import { redisConnection } from "@/lib/queue/connection";
+import { IDLE_FRIENDLY_WORKER_OPTS, schedulePeriodic } from "@/lib/queue/periodic";
 import "@/lib/queue/integrationMaintenance"; // صيانة يومية لرموز متاجر سلة وزد
 import { withTenant, superAdminDb } from "@/lib/db";
 import { resolveWhatsappAdapter } from "@/lib/integrations/registry";
@@ -169,28 +170,11 @@ function toTemplateCategory(category: string): "MARKETING" | "UTILITY" | "AUTHEN
 export const campaignWorker = new Worker<CampaignSendJob>(
   "campaign-send",
   async (job) => processCampaign(job),
-  { connection: redisConnection, concurrency: 2 }
+  { connection: redisConnection, concurrency: 2, ...IDLE_FRIENDLY_WORKER_OPTS }
 );
 
 campaignWorker.on("completed", (job) => console.log(`✅ اكتملت مهمة إرسال الحملة ${job.data.campaignId}`));
 campaignWorker.on("failed", (job, err) => console.error(`❌ فشلت مهمة إرسال الحملة ${job?.data.campaignId}:`, err.message));
-
-// مهمة متكررة لفحص الحملات الآلية عبر كل المستأجرين — تعمل داخل نفس عملية العامل (`npm run worker`).
-const triggerScanWorker = new Worker(
-  "campaign-trigger-scan",
-  async () => scanAllTenantsTriggeredCampaigns(),
-  { connection: redisConnection, concurrency: 1 }
-);
-triggerScanWorker.on("failed", (job, err) => console.error("❌ فشل فحص الحملات الآلية:", err.message));
-
-const triggerScanQueue = new Queue("campaign-trigger-scan", { connection: redisConnection });
-async function scheduleTriggerScan() {
-  await triggerScanQueue.add("scan", {}, {
-    repeat: { every: TRIGGER_SCAN_INTERVAL_MS },
-    jobId: "recurring-trigger-scan",
-  });
-}
-scheduleTriggerScan().catch((err) => console.error("❌ تعذّرت جدولة فحص الحملات الآلية:", err));
 
 // محاكاة تقدُّم حالة الرسائل الصادرة في وضع Sandbox (SENT → DELIVERED → READ) — انظر
 // lib/queue/messageStatusQueue.ts. يُستخدم نفس منطق تحديث الحالة الذي يستخدمه webhook حقيقي وارد.
@@ -200,7 +184,7 @@ const messageStatusWorker = new Worker<MessageStatusSimJob>(
     const { tenantId, waMessageId, status, failureReason } = job.data;
     await withTenant(tenantId, (tx) => applyStatusUpdate(tx, tenantId, { waMessageId, status, timestamp: new Date(), failureReason }));
   },
-  { connection: redisConnection, concurrency: 5 }
+  { connection: redisConnection, concurrency: 5, ...IDLE_FRIENDLY_WORKER_OPTS }
 );
 messageStatusWorker.on("failed", (job, err) => console.error("❌ فشل تحديث حالة رسالة محاكاة:", err.message));
 
@@ -213,99 +197,24 @@ const templateStatusWorker = new Worker<TemplateStatusSimJob>(
     const decision = simulateTemplateDecision();
     await applyTemplateDecision(tenantId, templateId, decision.event, decision.reason);
   },
-  { connection: redisConnection, concurrency: 5 }
+  { connection: redisConnection, concurrency: 5, ...IDLE_FRIENDLY_WORKER_OPTS }
 );
 templateStatusWorker.on("failed", (job, err) => console.error("❌ فشل تحديث حالة قالب محاكاة:", err.message));
 
-const CHATBOT_TIMEOUT_SCAN_INTERVAL_MS = 10 * 60 * 1000;
-const chatbotTimeoutWorker = new Worker("chatbot-session-timeout-scan", async () => scanAndResetStuckChatbotSessions(), {
-  connection: redisConnection,
-  concurrency: 1,
-});
-chatbotTimeoutWorker.on("failed", (job, err) => console.error("❌ فشل فحص جلسات الشات بوت العالقة:", err.message));
+// ========================= الفحوص الدورية (مُجدوِل داخل العملية — لا عمّال BullMQ خاملين) =========================
 
-const chatbotTimeoutQueue = new Queue("chatbot-session-timeout-scan", { connection: redisConnection });
-async function scheduleChatbotTimeoutScan() {
-  await chatbotTimeoutQueue.add("scan", {}, {
-    repeat: { every: CHATBOT_TIMEOUT_SCAN_INTERVAL_MS },
-    jobId: "recurring-chatbot-timeout-scan",
-  });
-}
-scheduleChatbotTimeoutScan().catch((err) => console.error("❌ تعذّرت جدولة فحص جلسات الشات بوت العالقة:", err));
-
-// فحص دوري (كل ساعة) لتحويل أي اشتراك تجاوز currentPeriodEnd دون تجديد لحالة PAST_DUE —
-// بنفس نمط triggerScanQueue/scheduleTriggerScan أعلاه حرفياً. ساعة كافية هنا (وليس كل 10 دقائق
-// كمهام أخرى أعلاه) لأن دورة الفوترة شهرية، لا حاجة لدقة زمنية عالية.
-const SUBSCRIPTION_EXPIRY_SCAN_INTERVAL_MS = 60 * 60 * 1000;
-const subscriptionExpiryWorker = new Worker("subscription-expiry-scan", async () => scanAndExpireSubscriptions(), {
-  connection: redisConnection,
-  concurrency: 1,
-});
-subscriptionExpiryWorker.on("failed", (job, err) => console.error("❌ فشل فحص انتهاء الاشتراكات:", err.message));
-
-const subscriptionExpiryQueue = new Queue("subscription-expiry-scan", { connection: redisConnection });
-async function scheduleSubscriptionExpiryScan() {
-  await subscriptionExpiryQueue.add("scan", {}, {
-    repeat: { every: SUBSCRIPTION_EXPIRY_SCAN_INTERVAL_MS },
-    jobId: "recurring-subscription-expiry-scan",
-  });
-}
-scheduleSubscriptionExpiryScan().catch((err) => console.error("❌ تعذّرت جدولة فحص انتهاء الاشتراكات:", err));
-
-// اعتراف تدريجي بالإيراد المؤجل (كل 6 ساعات — دقة كافية لدورة فوترة شهرية/سنوية، لا حاجة لتشغيل
-// أدق) — بنفس نمط triggerScanQueue/scheduleTriggerScan أعلاه حرفياً.
-const REVENUE_RECOGNITION_INTERVAL_MS = 6 * 60 * 60 * 1000;
-const revenueRecognitionWorker = new Worker("revenue-recognition-scan", async () => recognizeRevenueForActiveInvoices(), {
-  connection: redisConnection,
-  concurrency: 1,
-});
-revenueRecognitionWorker.on("failed", (job, err) => console.error("❌ فشل الاعتراف الدوري بالإيراد:", err.message));
-
-const revenueRecognitionQueue = new Queue("revenue-recognition-scan", { connection: redisConnection });
-async function scheduleRevenueRecognitionScan() {
-  await revenueRecognitionQueue.add("scan", {}, {
-    repeat: { every: REVENUE_RECOGNITION_INTERVAL_MS },
-    jobId: "recurring-revenue-recognition-scan",
-  });
-}
-scheduleRevenueRecognitionScan().catch((err) => console.error("❌ تعذّرت جدولة الاعتراف بالإيراد:", err));
-
-// مصالحة دورية لعمولات برنامج التسويق بالعمولة (إنشاء عمولات جديدة لفواتير مدفوعة حديثاً لتجّار
-// مُحالين، ترقية العمولات المستحقة بعد Net 30، وترقية مستويات المسوّقين) — كل ساعة (أدق من الاعتراف
-// بالإيراد عمداً: المسوّق يتابع لوحته وينتظر ترقية حالة "قيد الانتظار" لعمولاته أسرع من دورة محاسبية).
-const AFFILIATE_COMMISSION_SYNC_INTERVAL_MS = 60 * 60 * 1000;
-const affiliateCommissionSyncWorker = new Worker("affiliate-commission-sync", async () => syncAffiliateCommissions(), {
-  connection: redisConnection,
-  concurrency: 1,
-});
-affiliateCommissionSyncWorker.on("failed", (job, err) => console.error("❌ فشلت مزامنة عمولات المسوّقين:", err.message));
-
-const affiliateCommissionSyncQueue = new Queue("affiliate-commission-sync", { connection: redisConnection });
-async function scheduleAffiliateCommissionSync() {
-  await affiliateCommissionSyncQueue.add("scan", {}, {
-    repeat: { every: AFFILIATE_COMMISSION_SYNC_INTERVAL_MS },
-    jobId: "recurring-affiliate-commission-sync",
-  });
-}
-scheduleAffiliateCommissionSync().catch((err) => console.error("❌ تعذّرت جدولة مزامنة عمولات المسوّقين:", err));
-
-// فحص دوري لدورة حياة إعلانات المنصة (تفعيل المجدوَل + إنهاء صلاحية المنتهي) — كل 5 دقائق، نفس تردد
-// TRIGGER_SCAN_INTERVAL_MS للحملات الآلية، بنفس نمط triggerScanQueue/scheduleTriggerScan أعلاه حرفياً.
-const ANNOUNCEMENT_LIFECYCLE_INTERVAL_MS = 5 * 60 * 1000;
-const announcementLifecycleWorker = new Worker("announcement-lifecycle-scan", async () => scanAnnouncementLifecycle(), {
-  connection: redisConnection,
-  concurrency: 1,
-});
-announcementLifecycleWorker.on("failed", (job, err) => console.error("❌ فشل فحص دورة حياة الإعلانات:", err.message));
-
-const announcementLifecycleQueue = new Queue("announcement-lifecycle-scan", { connection: redisConnection });
-async function scheduleAnnouncementLifecycleScan() {
-  await announcementLifecycleQueue.add("scan", {}, {
-    repeat: { every: ANNOUNCEMENT_LIFECYCLE_INTERVAL_MS },
-    jobId: "recurring-announcement-lifecycle-scan",
-  });
-}
-scheduleAnnouncementLifecycleScan().catch((err) => console.error("❌ تعذّرت جدولة فحص دورة حياة الإعلانات:", err));
+// الحملات الآلية عبر كل المستأجرين.
+schedulePeriodic("campaign-trigger-scan", TRIGGER_SCAN_INTERVAL_MS, () => scanAllTenantsTriggeredCampaigns());
+// جلسات الشات بوت العالقة.
+schedulePeriodic("chatbot-session-timeout-scan", 10 * 60 * 1000, () => scanAndResetStuckChatbotSessions());
+// تحويل أي اشتراك تجاوز currentPeriodEnd دون تجديد لحالة PAST_DUE — ساعة كافية لدورة فوترة شهرية.
+schedulePeriodic("subscription-expiry-scan", 60 * 60 * 1000, () => scanAndExpireSubscriptions());
+// اعتراف تدريجي بالإيراد المؤجل.
+schedulePeriodic("revenue-recognition-scan", 6 * 60 * 60 * 1000, () => recognizeRevenueForActiveInvoices());
+// مصالحة عمولات برنامج التسويق بالعمولة (المسوّق يتابع لوحته فساعة لا دورة محاسبية).
+schedulePeriodic("affiliate-commission-sync", 60 * 60 * 1000, () => syncAffiliateCommissions());
+// دورة حياة إعلانات المنصة (تفعيل المجدوَل + إنهاء صلاحية المنتهي).
+schedulePeriodic("announcement-lifecycle-scan", 5 * 60 * 1000, () => scanAnnouncementLifecycle());
 
 console.log("🚀 عامل إرسال الحملات يعمل الآن، بانتظار المهام...");
 console.log(`⏱️  فحص الحملات الآلية مجدوَل كل ${TRIGGER_SCAN_INTERVAL_MS / 60000} دقائق`);
