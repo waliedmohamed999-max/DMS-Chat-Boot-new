@@ -260,6 +260,11 @@ export function SuggestionItem({ qa }: { qa: { id: string; question: string; ans
 type CrawlState = {
   status: "running" | "done" | "failed"; rootUrl: string; discovered: number; processed: number;
   added: number; updated: number; unchanged: number; faqs: number; stoppedReason?: string; error?: string;
+  chars?: number; skipped?: Record<string, number>; firstError?: string; storePlatform?: "salla" | "zid";
+};
+
+const SKIP_LABELS: Record<string, string> = {
+  robots: "يمنعها الموقع عن الزواحف", filtered: "سلة/دفع/حساب", http_error: "تعذّر فتحها", not_html: "ليست صفحات", offsite: "خارج الموقع", thin: "بلا نص كافٍ",
 };
 
 /** حالة سحب الموقع الجاري/الأخير — تتحدّث تلقائياً كل 3 ثوانٍ أثناء السحب. */
@@ -288,6 +293,18 @@ export function CrawlStatus({ state }: { state: CrawlState | null }) {
         قُرئت {state.processed} صفحة{running && state.discovered ? ` من ~${state.discovered}` : ""} · جديدة {state.added} · محدَّثة {state.updated} · بلا تغيير {state.unchanged}
         {state.faqs ? ` · ${state.faqs} سؤال شائع من موقعك بانتظار اعتمادك` : ""}
       </p>
+      {!running && state.skipped && Object.keys(state.skipped).length > 0 && (
+        <p className="mt-1 text-xs text-slate-500">
+          تُخطّيت: {Object.entries(state.skipped).map(([k, n]) => `${n} ${SKIP_LABELS[k] ?? k}`).join(" · ")}
+        </p>
+      )}
+      {!running && state.chars !== undefined && <p className="mt-1 text-xs text-slate-500" dir="rtl">حجم ما سُحب: {state.chars.toLocaleString("en")} حرف</p>}
+      {state.storePlatform && (
+        <p className="mt-2 rounded-lg bg-accent-500/10 p-2 text-xs text-accent-300">
+          💡 متجر {state.storePlatform === "zid" ? "زد" : "سلة"} يحمّل منتجاته داخل المتصفح فلا تظهر للسحب. لمنتجاتك بأسعارها ومخزونها:{" "}
+          <a href={`/dashboard/integrations/${state.storePlatform}`} className="underline">اربط متجرك من التكاملات</a> — تُزامَن تلقائياً ويبحث فيها البوت مباشرة.
+        </p>
+      )}
       {state.stoppedReason && <p className="mt-1 text-xs text-warning-500">توقف: {state.stoppedReason}</p>}
       {state.error && <p className="mt-1 text-xs text-danger-500">{state.error}</p>}
       {running && <div className="mt-2 h-1.5 overflow-hidden rounded bg-white/5"><div className="h-full animate-pulse bg-accent-500/60" style={{ width: `${Math.min(100, Math.round((state.processed / Math.max(1, state.discovered)) * 100))}%` }} /></div>}
